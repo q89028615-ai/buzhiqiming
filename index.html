@@ -7,7 +7,7 @@
     
     <!-- PWA 配置 -->
     <meta name="theme-color" content="#ffffff">
-    <meta name="description" content="一个漂亮的手机界面PWA应用">
+    <meta name="description" content="不知其名PWA">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/jpeg" href="https://i.postimg.cc/ZKRRp1Yg/IMG-20260124-144817.jpg">
     <link rel="apple-touch-icon" href="https://i.postimg.cc/ZKRRp1Yg/IMG-20260124-144817.jpg">
@@ -22,6 +22,9 @@
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 </head>
 <body>
+    <!-- 消息通知弹窗容器 -->
+    <div class="msg-notif-container" id="msgNotifContainer"></div>
+
     <!-- 锁屏界面 -->
     <div class="lock-screen" id="lockScreen">
         <div class="lock-screen-content">
@@ -1364,6 +1367,106 @@
             <button class="btn-primary" onclick="fetchModels()">获取模型列表</button>
             <button class="btn-primary btn-save" onclick="saveSettings()">保存设置</button>
 
+            <!-- 模型参数调节 -->
+            <div style="margin-top: 50px;">
+                <div class="section-title">
+                    <span class="section-title-text">模型参数</span>
+                </div>
+
+                <!-- Temperature -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="form-label" style="margin-bottom: 0;">Temperature（温度）</label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="temperatureValue" style="font-size: 15px; font-weight: 600; color: #007bff; min-width: 36px; text-align: right;">0.9</span>
+                            <button class="param-reset-btn" onclick="document.getElementById('temperatureSlider').value=0.9;document.getElementById('temperatureValue').textContent='0.9';">重置</button>
+                        </div>
+                    </div>
+                    <input type="range" class="param-slider" id="temperatureSlider" min="0" max="2" step="0.1" value="0.9" oninput="document.getElementById('temperatureValue').textContent = this.value">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-top: 4px;">
+                        <span>精确 0</span>
+                        <span>2 创意</span>
+                    </div>
+                </div>
+
+                <!-- Top P -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="form-label" style="margin-bottom: 0;">Top P</label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span id="topPValue" style="font-size: 15px; font-weight: 600; color: #007bff; min-width: 36px; text-align: right;">0.95</span>
+                            <button class="param-reset-btn" onclick="document.getElementById('topPSlider').value=0.95;document.getElementById('topPValue').textContent='0.95';">重置</button>
+                        </div>
+                    </div>
+                    <input type="range" class="param-slider" id="topPSlider" min="0" max="1" step="0.05" value="0.95" oninput="document.getElementById('topPValue').textContent = this.value">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-top: 4px;">
+                        <span>保守 0</span>
+                        <span>1 多样</span>
+                    </div>
+                </div>
+
+                <!-- Max Tokens -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="form-label" style="margin-bottom: 0;">Max Tokens（最大输出长度）</label>
+                        <button class="param-reset-btn" onclick="document.getElementById('maxTokensInput').value=2048;">重置</button>
+                    </div>
+                    <input type="number" class="form-input" id="maxTokensInput" placeholder="最大输出token数" value="2048" min="1" max="1000000">
+                    <div style="margin-top: 8px; font-size: 12px; color: #999;">
+                        控制AI单次回复的最大长度，建议 512~8192
+                    </div>
+                </div>
+            </div>
+
+            <!-- API预设保存 -->
+            <div style="margin-top: 50px;">
+                <div class="section-title">
+                    <span class="section-title-text">副API连接</span>
+                </div>
+                <div style="margin-bottom: 16px; font-size: 12px; color: #999;">
+                    副API用于长期记忆总结和精简功能。未配置时自动使用主API。
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">选择API</label>
+                    <select class="form-select" id="secApiProvider" onchange="handleSecProviderChange()">
+                        <option value="hakimi">Gemini</option>
+                        <option value="claude">Claude</option>
+                        <option value="ds">DeepSeek</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">API地址</label>
+                    <input type="text" class="form-input" id="secApiUrl" placeholder="输入API地址">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">API密钥</label>
+                    <input type="password" class="form-input" id="secApiKey" placeholder="输入API密钥">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">模型选择</label>
+                    <div class="model-input-group">
+                        <div class="model-input-wrapper">
+                            <input type="text" class="form-input" id="secModelInput" placeholder="手写模型名称">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <select class="form-select" id="secModelSelect">
+                        <option value="">从列表选择模型</option>
+                    </select>
+                </div>
+
+                <button class="btn-primary" onclick="fetchSecModels()">获取模型列表</button>
+                <button class="btn-primary btn-save" onclick="saveSecSettings()">保存副API设置</button>
+                <button class="btn-primary" onclick="clearSecSettings()" style="background: #dc3545; color: white; border: none;">清除副API设置</button>
+            </div>
+
             <!-- API预设保存 -->
             <div style="margin-top: 50px;">
                 <div class="section-title">
@@ -1726,6 +1829,40 @@
 
                     <button class="btn-primary" onclick="resetAllAppNames()" style="width: 100%; margin-top: 20px; background: #ff3b30; color: white; border: none;">重置所有名称</button>
                 </div>
+
+                <!-- 消息通知弹窗设置 -->
+                <div style="margin-top: 20px; border-top: 1px solid #f0f0f0; padding-top: 20px;">
+                    <label class="form-label" style="margin-bottom: 4px;">消息通知弹窗</label>
+                    <div style="font-size: 12px; color: #999; margin-bottom: 16px;">角色发消息时在顶部弹出通知</div>
+
+                    <!-- 多条堆叠开关 -->
+                    <div class="form-group" style="margin-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 4px;">多条堆叠</label>
+                                <div style="font-size: 12px; color: #999;">同时显示多条通知，关闭则新通知替换旧通知</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="notifStackToggle" onchange="toggleNotifStack()">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 仅非当前聊天角色弹窗开关 -->
+                    <div class="form-group" style="margin-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 4px;">仅非当前聊天角色弹窗</label>
+                                <div style="font-size: 12px; color: #999;">开启后正在聊天的角色不弹窗</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="notifOnlyOtherToggle" onchange="toggleNotifOnlyOther()" checked>
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
             </div>
 
@@ -2050,14 +2187,15 @@
         .profile-left {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
             flex-shrink: 0;
         }
 
+        /* 头像框：9:16竖长方形 */
         .profile-avatar-box {
-            width: 65px;
-            height: 65px;
+            width: 56px;
+            height: 100px;
             background-color: #d0d0d0;
             border-radius: 6px;
             display: flex;
@@ -2069,21 +2207,9 @@
             overflow: hidden;
         }
 
-        .profile-qrcode {
-            width: 100px;
-            height: 45px;
-            background-color: #f0f0f0;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid #d0d0d0;
-            flex-shrink: 0;
-        }
-
         .profile-barcode {
-            width: 100px;
-            height: 40px;
+            width: 56px;
+            height: 25px;
             background-color: transparent;
             flex-shrink: 0;
         }
@@ -2095,7 +2221,7 @@
             gap: 0;
             align-items: flex-start;
             justify-content: space-between;
-            height: 115px;
+            height: 130px;
         }
 
         .profile-info-row {
@@ -2719,6 +2845,29 @@
             align-self: flex-start;
         }
 
+        .chat-list-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            flex-shrink: 0;
+            align-self: center;
+        }
+
+        .chat-list-badge {
+            background: #FF3B30;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 18px;
+            height: 18px;
+            line-height: 18px;
+            text-align: center;
+            border-radius: 9px;
+            padding: 0 5px;
+            box-sizing: border-box;
+        }
+
         /* 聊天详情界面样式 */
         .chat-detail-page {
             background: #f5f5f5;
@@ -2726,6 +2875,7 @@
             background-position: center;
             background-repeat: no-repeat;
             z-index: 10000;
+            overflow-x: hidden;
         }
 
         .chat-detail-container {
@@ -2733,6 +2883,7 @@
             height: 100%;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
         }
 
         .chat-detail-header {
@@ -3014,6 +3165,491 @@
             color: rgba(0,0,0,0.55);
         }
 
+        /* 语音转文字展开区域 */
+        .voice-text-reveal {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            font-size: 13px;
+            color: #333;
+            padding: 0 4px;
+            line-height: 1.5;
+            transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+        }
+        .voice-text-reveal.show {
+            max-height: 200px;
+            opacity: 1;
+            padding: 6px 4px;
+        }
+        .chat-message-user .voice-text-reveal {
+            text-align: right;
+        }
+
+        /* 聊天图片消息 */
+        .chat-image-bubble {
+            max-width: 200px;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .chat-image-msg {
+            width: 100%;
+            display: block;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+        /* 图片全屏预览 */
+        .chat-image-preview-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.25s;
+        }
+        .chat-image-preview-overlay.show {
+            opacity: 1;
+        }
+        .chat-image-preview-img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        /* 图文消息气泡（手动描述图片） */
+        .chat-text-image-bubble {
+            width: 180px;
+            height: 180px;
+            border-radius: 12px;
+            background: #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        .chat-text-image-bubble:active {
+            background: #dcdcdc;
+        }
+        .chat-message-user .chat-text-image-bubble {
+            border-bottom-right-radius: 2px;
+        }
+        .chat-message-char .chat-text-image-bubble {
+            border-bottom-left-radius: 2px;
+        }
+        .text-image-desc {
+            padding: 16px;
+            font-size: 13px;
+            color: #666;
+            text-align: center;
+            line-height: 1.5;
+            word-break: break-word;
+            opacity: 0;
+            transform: scale(0.9);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            max-height: 100%;
+            overflow-y: auto;
+        }
+        .text-image-desc.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* 转账消息气泡 */
+        .chat-transfer-bubble {
+            width: 240px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+        .chat-message-user .chat-transfer-bubble {
+            border-bottom-right-radius: 2px;
+        }
+        .chat-message-char .chat-transfer-bubble {
+            border-bottom-left-radius: 2px;
+        }
+        .chat-transfer-header {
+            background: #f09b37;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chat-transfer-icon {
+            width: 36px;
+            height: 36px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .chat-transfer-icon svg {
+            color: #fff;
+        }
+        .chat-transfer-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .chat-transfer-amount {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+        .chat-transfer-remark {
+            font-size: 12px;
+            color: rgba(255,255,255,0.85);
+            margin-top: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chat-transfer-footer {
+            background: #faf5ef;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chat-transfer-label {
+            font-size: 11px;
+            color: #c08a3e;
+        }
+        .chat-transfer-status {
+            font-size: 11px;
+            color: #999;
+        }
+
+        /* 转账已处理状态（接收/拒绝后变浅橙色） */
+        .chat-transfer-bubble.transfer-done .chat-transfer-header {
+            background: #f0c68a;
+        }
+        .chat-transfer-bubble.transfer-done .chat-transfer-icon {
+            background: rgba(255,255,255,0.18);
+        }
+        .chat-transfer-bubble.transfer-done .chat-transfer-footer {
+            background: #faf2e6;
+        }
+        .chat-transfer-bubble.transfer-done .chat-transfer-label {
+            color: #c9a46a;
+        }
+
+        /* ========== 长按消息菜单 ========== */
+        .msg-context-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10020;
+            background: rgba(0,0,0,0.25);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        .msg-context-overlay.show {
+            opacity: 1;
+        }
+        .msg-context-menu {
+            position: fixed;
+            z-index: 10021;
+            background: #fff;
+            border-radius: 14px;
+            padding: 4px;
+            min-width: 160px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+            transform: scale(0.6);
+            opacity: 0;
+            transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s ease;
+            transform-origin: center top;
+            overflow: hidden;
+        }
+        .msg-context-menu.show {
+            transform: scale(1);
+            opacity: 1;
+        }
+        .msg-context-menu.from-bottom {
+            transform-origin: center bottom;
+        }
+        .msg-context-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            font-size: 15px;
+            color: #333;
+            cursor: pointer;
+            transition: background 0.12s;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            border-radius: 10px;
+        }
+        .msg-context-item:active {
+            background: #f2f2f7;
+        }
+        .msg-context-icon {
+            width: 22px;
+            height: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .msg-context-icon svg {
+            width: 18px;
+            height: 18px;
+        }
+        .msg-context-item.destructive {
+            color: #ff3b30;
+        }
+        .msg-context-item.destructive .msg-context-icon svg {
+            stroke: #ff3b30;
+        }
+        /* 长按时消息高亮 */
+        .chat-message.msg-highlight .chat-message-bubble,
+        .chat-message.msg-highlight .chat-voice-bubble,
+        .chat-message.msg-highlight .chat-image-bubble,
+        .chat-message.msg-highlight .chat-text-image-bubble,
+        .chat-message.msg-highlight .chat-transfer-bubble,
+        .chat-message.msg-highlight .chat-sticker-bubble {
+            box-shadow: 0 0 0 2px rgba(0,122,255,0.4);
+        }
+
+        /* ========== 多选删除模式 ========== */
+        .msg-multiselect-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 600;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .msg-multiselect-bar .ms-cancel {
+            font-size: 15px;
+            color: #007AFF;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .msg-multiselect-bar .ms-cancel:active {
+            background: #f0f0f0;
+        }
+        .msg-multiselect-bar .ms-title {
+            font-size: 16px;
+            font-weight: 500;
+            color: #333;
+        }
+        .msg-multiselect-bar .ms-select-all {
+            font-size: 15px;
+            color: #007AFF;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .msg-multiselect-bar .ms-select-all:active {
+            background: #f0f0f0;
+        }
+        .msg-multiselect-bottom {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 600;
+            background: #fff;
+            padding: 12px 20px;
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .msg-multiselect-bottom .ms-forward-btn {
+            flex: 1;
+            max-width: 160px;
+            padding: 14px 0;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            color: #fff;
+            background: #007aff;
+            cursor: pointer;
+            transition: opacity 0.15s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .msg-multiselect-bottom .ms-forward-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .msg-multiselect-bottom .ms-forward-btn:active:not(:disabled) {
+            opacity: 0.85;
+            transform: scale(0.98);
+        }
+        .msg-multiselect-bottom .ms-delete-btn {
+            flex: 1;
+            max-width: 160px;
+            padding: 14px 0;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            color: #fff;
+            background: #ff3b30;
+            cursor: pointer;
+            transition: opacity 0.15s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .msg-multiselect-bottom .ms-delete-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .msg-multiselect-bottom .ms-delete-btn:active:not(:disabled) {
+            opacity: 0.85;
+            transform: scale(0.98);
+        }
+        /* 多选模式下消息的勾选框 */
+        .chat-message .msg-checkbox {
+            display: none;
+        }
+        .multiselect-mode .chat-message .msg-checkbox {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #d1d1d6;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin: 0 4px;
+            cursor: pointer;
+            transition: all 0.15s;
+            align-self: center;
+        }
+        .multiselect-mode .chat-message .msg-checkbox.checked {
+            background: #007AFF;
+            border-color: #007AFF;
+        }
+        .multiselect-mode .chat-message .msg-checkbox.checked::after {
+            content: '';
+            width: 6px;
+            height: 10px;
+            border: solid #fff;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+            margin-top: -2px;
+        }
+        /* 多选模式下隐藏输入栏，显示底部删除栏 */
+        .multiselect-mode .chat-input-bar {
+            display: none !important;
+        }
+        /* 多选模式下隐藏原始header */
+        .multiselect-mode .chat-detail-header {
+            display: none !important;
+        }
+
+        /* 转账弹窗 */
+        .transfer-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease;
+        }
+        .transfer-modal {
+            background: #fff;
+            border-radius: 16px;
+            width: 85%;
+            max-width: 340px;
+            overflow: hidden;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+            animation: slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        .transfer-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 18px 10px;
+        }
+        .transfer-modal-title {
+            font-size: 17px;
+            font-weight: 600;
+            color: #333;
+        }
+        .transfer-modal-close {
+            font-size: 18px;
+            color: #999;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        .transfer-modal-body {
+            padding: 0 18px 10px;
+        }
+        .transfer-amount-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .transfer-amount-btn {
+            padding: 10px 0;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 10px;
+            background: #fff;
+            font-size: 15px;
+            font-weight: 500;
+            color: #333;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .transfer-amount-btn.active {
+            border-color: #f09b37;
+            background: #fef7ed;
+            color: #e08a20;
+        }
+        .transfer-amount-btn:active {
+            transform: scale(0.95);
+        }
+        .transfer-custom-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            color: #333;
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .transfer-custom-input:focus {
+            border-color: #f09b37;
+        }
+        .transfer-modal-footer {
+            display: flex;
+            gap: 10px;
+            padding: 10px 18px 18px;
+        }
+
         /* 语音消息弹窗 */
         .voice-msg-overlay {
             position: absolute;
@@ -3129,6 +3765,9 @@
             align-items: center;
             gap: 10px;
             border-top: 0.5px solid #e5e5e5;
+            width: 100%;
+            box-sizing: border-box;
+            overflow: hidden;
         }
 
         .chat-input-voice,
@@ -3157,6 +3796,7 @@
 
         .chat-input-wrapper {
             flex: 1;
+            min-width: 0;
             position: relative;
             display: flex;
             align-items: center;
@@ -3164,6 +3804,7 @@
             border: 1px solid #e5e5e5;
             border-radius: 20px;
             padding-right: 6px;
+            overflow: hidden;
         }
 
         .chat-input-wrapper:focus-within {
@@ -3173,6 +3814,7 @@
 
         .chat-input-field {
             flex: 1;
+            min-width: 0;
             padding: 10px 12px;
             border: none;
             background: transparent;
@@ -4070,14 +4712,21 @@
                     </div>
                 </div>
 
-                <!-- 世界书内容 -->
-                <div class="form-group">
-                    <label class="form-label">世界书内容</label>
-                    <textarea class="form-input" id="worldBookContentInput" placeholder="请输入世界书内容" rows="6" style="resize: vertical; min-height: 120px;"></textarea>
-                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                        输入世界书的详细内容
+                <!-- 世界书内容（条目管理） -->
+                <div class="form-group" id="worldBookEntriesSection">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <label class="form-label" style="margin-bottom: 0;">世界书条目</label>
+                        <button class="param-reset-btn" onclick="addWorldBookEntry()" style="color: #28a745; background: rgba(40,167,69,0.08); border-color: rgba(40,167,69,0.2);">+ 添加条目</button>
+                    </div>
+                    <div id="worldBookEntriesContainer">
+                        <div style="text-align: center; color: #999; padding: 30px 0; font-size: 13px;">
+                            暂无条目，点击上方"添加条目"开始创建
+                        </div>
                     </div>
                 </div>
+
+                <!-- 隐藏的旧文本框，用于兼容 -->
+                <textarea class="form-input" id="worldBookContentInput" style="display:none;" rows="6"></textarea>
 
                 <!-- 全局世界书开关 -->
                 <div class="section-title" style="margin-top: 30px;">
@@ -4216,6 +4865,7 @@
                 <div class="world-book-back" onclick="closeWorldBook()">←</div>
                 <div class="world-book-title">世界书</div>
                 <div class="world-book-buttons">
+                    <div class="world-book-delete" onclick="openWorldBookDeleteModal()">删除</div>
                     <div class="world-book-add" onclick="addWorldBookItem()">+</div>
                 </div>
             </div>
@@ -4708,6 +5358,27 @@
             <!-- 高级标签页 -->
             <div class="chat-settings-tab-content" id="advancedTab">
             <div class="settings-card">
+                <!-- 时间感知 -->
+                <div class="section-title">
+                    <span class="section-title-text">时间感知</span>
+                </div>
+
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 15px; color: #333;">启用时间感知</div>
+                            <div style="font-size: 12px; color: #999; margin-top: 4px;">角色将感知当前时间与对话间隔的流逝</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="timeAwarenessToggle" checked>
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 分割线 -->
+                <div style="height: 1px; background: #e5e5e5; margin: 30px 0;"></div>
+
                 <!-- 绑定角色世界书 -->
                 <div class="section-title">
                     <span class="section-title-text">绑定角色世界书</span>
@@ -4738,9 +5409,150 @@
                         设置AI能看到的最近聊天记录条数，建议 10-1000 条。数值越大，AI能记住更多上下文，但会消耗更多tokens。留空则使用默认值（10条）。
                     </div>
                 </div>
+
+                <!-- 分割线 -->
+                <div style="height: 1px; background: #e5e5e5; margin: 30px 0;"></div>
+
+                <!-- 长期记忆设置 -->
+                <div class="section-title">
+                    <span class="section-title-text">长期记忆</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">自动总结间隔（条）</label>
+                    <input type="number" id="longTermMemoryIntervalInput" class="form-input" placeholder="输入间隔条数（如：5）" min="2" step="1">
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        每隔多少条消息自动总结一次。例如设置5，则每5条消息后会自动总结这段对话并存入长期记忆库。设为0或留空则关闭自动总结。
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">长期记忆提示词格式</label>
+                    <select id="longTermMemoryFormatSelect" class="form-input" onchange="onLongTermMemoryFormatChange()">
+                        <option value="timeline">时间线式</option>
+                        <option value="timeline_emotion">时间线+情感标记</option>
+                        <option value="category">分类式</option>
+                        <option value="custom">自定义格式</option>
+                    </select>
+                    <div id="longTermMemoryFormatPreview" style="margin-top: 8px; font-size: 12px; color: #666; white-space: pre-wrap;"></div>
+                </div>
+
+                <div class="form-group" id="longTermMemoryCustomPromptGroup" style="display: none;">
+                    <label class="form-label">自定义总结提示词</label>
+                    <textarea id="longTermMemoryCustomPromptInput" class="form-input" rows="4" placeholder="输入自定义的总结提示词...&#10;可用变量：{charName}=角色真名 {userName}=用户真名 {messages}=对话内容"></textarea>
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        自定义总结提示词。可用变量：{charName} 角色真名、{userName} 用户真名、{messages} 对话内容。留空则使用默认时间线格式。
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">精简总结提示词</label>
+                    <textarea id="ltmCondensePromptInput" class="form-input" rows="4" placeholder="输入精简总结的提示词...&#10;可用变量：{memories}=选中的记忆内容"></textarea>
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        精简功能使用的提示词，用于将多条记忆合并总结为一条。可用变量：{memories} 选中的记忆内容。留空则使用默认提示词。
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <button class="data-action-btn secondary-btn" onclick="openLongTermMemoryManager()" style="margin-top: 4px;">
+                        长期记忆管理库
+                    </button>
+                    <button class="data-action-btn secondary-btn" onclick="openManualSummaryModal()" style="margin-top: 8px;">
+                        手动总结对话
+                    </button>
+                </div>
+
+                <!-- 分割线 -->
+                <div style="height: 1px; background: #e5e5e5; margin: 30px 0;"></div>
+
+                <!-- 挂载聊天记录 -->
+                <div class="section-title">
+                    <span class="section-title-text">挂载聊天记录</span>
+                </div>
+
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 15px; color: #333;">启用挂载</div>
+                            <div style="font-size: 12px; color: #999; margin-top: 4px;">让角色看到其他聊天中的对话记录</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="mountChatToggle" onchange="onMountChatToggleChange()">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 挂载详细设置（总开关开启后显示） -->
+                <div id="mountChatSettings" style="display: none;">
+                    <div class="form-group">
+                        <label class="form-label">选择要挂载的聊天</label>
+                        <div id="mountChatList" style="min-height: 40px; max-height: 240px; overflow-y: auto; background: #f8f8f8; border-radius: 12px; padding: 8px;">
+                            <div style="text-align: center; color: #999; font-size: 13px; padding: 12px 0;">暂无其他聊天</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">挂载条数设置</label>
+                        <div id="mountChatCountSettings" style="min-height: 20px;">
+                            <div style="font-size: 13px; color: #999;">请先勾选要挂载的聊天</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分割线 -->
+                <div style="height: 1px; background: #e5e5e5; margin: 30px 0;"></div>
+
+                <!-- 对话统计 -->
+                <div class="section-title">
+                    <span class="section-title-text">对话统计</span>
+                </div>
+
+                <div id="chatStatsArea" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 120px; background: #f8f8f8; border-radius: 12px; padding: 16px; text-align: center;">
+                        <div style="font-size: 28px; font-weight: 600; color: #333;" id="statTotalMessages">0</div>
+                        <div style="font-size: 12px; color: #999; margin-top: 4px;">总消息条数</div>
+                    </div>
+                    <div style="flex: 1; min-width: 120px; background: #f8f8f8; border-radius: 12px; padding: 16px; text-align: center;">
+                        <div style="font-size: 28px; font-weight: 600; color: #333;" id="statUserMessages">0</div>
+                        <div style="font-size: 12px; color: #999; margin-top: 4px;">用户消息</div>
+                    </div>
+                    <div style="flex: 1; min-width: 120px; background: #f8f8f8; border-radius: 12px; padding: 16px; text-align: center;">
+                        <div style="font-size: 28px; font-weight: 600; color: #333;" id="statCharMessages">0</div>
+                        <div style="font-size: 12px; color: #999; margin-top: 4px;">角色消息</div>
+                    </div>
+                    <div style="flex: 1; min-width: 120px; background: #f8f8f8; border-radius: 12px; padding: 16px; text-align: center;">
+                        <div style="font-size: 28px; font-weight: 600; color: #007bff;" id="statEstTokens">0</div>
+                        <div style="font-size: 12px; color: #999; margin-top: 4px;">预估Token数</div>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: #aaa; text-align: center;">
+                    Token数为粗略估算（中文≈1.5token/字，英文≈0.25token/词），实时更新
+                </div>
             </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- 长期记忆管理库界面 -->
+    <div class="settings-page" id="longTermMemoryPage" style="display: none; z-index: 10002;">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="settings-back" onclick="closeLongTermMemoryManager()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 18L9 12L15 6" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="settings-title">长期记忆管理库</div>
+                <div style="display: flex; gap: 16px; align-items: center;">
+                    <div class="settings-action" onclick="startCondenseMode()" id="ltmCondenseBtn" style="font-size: 14px; color: #007aff; cursor: pointer;">精简</div>
+                    <div class="settings-action" onclick="addLongTermMemoryManual()" style="font-size: 14px; color: #007aff; cursor: pointer;">添加</div>
+                </div>
+            </div>
+            <div class="settings-card" id="longTermMemoryListContainer">
+                <div id="longTermMemoryList" style="min-height: 100px;">
+                    <div style="text-align: center; color: #999; font-size: 14px; padding: 40px 0;">暂无长期记忆</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -4921,6 +5733,38 @@
                     <div class="voice-msg-footer">
                         <button class="btn-primary" onclick="closeVoiceMessageModal()" style="flex:1;background:#f0f0f0;color:#333;border:none;">取消</button>
                         <button class="btn-primary btn-save" onclick="sendVoiceMessage()" style="flex:1;">发送</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 转账弹窗 -->
+            <div class="transfer-overlay" id="transferOverlay" style="display:none;">
+                <div class="transfer-modal">
+                    <div class="transfer-modal-header">
+                        <span class="transfer-modal-title">转账</span>
+                        <span class="transfer-modal-close" onclick="closeTransferModal()">✕</span>
+                    </div>
+                    <div class="transfer-modal-body">
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:14px;color:#333;">转账金额</label>
+                            <div class="transfer-amount-grid" id="transferAmountGrid">
+                                <div class="transfer-amount-btn" onclick="selectTransferAmount(this, 52.0)">¥52.0</div>
+                                <div class="transfer-amount-btn" onclick="selectTransferAmount(this, 131.4)">¥131.4</div>
+                                <div class="transfer-amount-btn" onclick="selectTransferAmount(this, 520)">¥520</div>
+                                <div class="transfer-amount-btn" onclick="selectTransferAmount(this, 999)">¥999</div>
+                                <div class="transfer-amount-btn" onclick="selectTransferAmount(this, 1314)">¥1314</div>
+                                <div class="transfer-amount-btn" onclick="selectTransferAmount(this, 5200)">¥5200</div>
+                            </div>
+                            <input type="number" class="transfer-custom-input" id="transferCustomAmount" placeholder="自定义金额" step="0.01" min="0.01" oninput="clearTransferAmountSelection()">
+                        </div>
+                        <div class="form-group" style="margin-top:12px;">
+                            <label class="form-label" style="font-size:14px;color:#333;">转账备注 <span style="color:#999;font-size:12px;margin-left:4px;">选填</span></label>
+                            <input type="text" class="transfer-custom-input" id="transferRemark" placeholder="输入转账备注..." maxlength="30">
+                        </div>
+                    </div>
+                    <div class="transfer-modal-footer">
+                        <button class="btn-primary" onclick="closeTransferModal()" style="flex:1;background:#f0f0f0;color:#333;border:none;">取消</button>
+                        <button class="btn-primary btn-save" onclick="sendTransferMessage()" style="flex:1;background:#f09b37;">转账</button>
                     </div>
                 </div>
             </div>
@@ -5827,6 +6671,7 @@
     <audio id="audioPlayer" style="display: none;"></audio>
 
     <script src="script.js"></script>
+    <script src="script2.js"></script>
     
     <!-- PWA Service Worker 注册和安装提示 -->
     <script>

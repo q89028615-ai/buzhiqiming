@@ -110,9 +110,81 @@ function iosConfirm(message, title = '确认') {
 window.alert = iosAlert;
 window.confirm = iosConfirm;
 
+// iOS风格的prompt弹窗（回调风格）
+function iosPrompt(title, defaultValue, callback) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = title;
+
+    const inputWrap = document.createElement('div');
+    inputWrap.style.cssText = 'padding: 8px 16px 16px;';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = defaultValue || '';
+    input.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;';
+    input.onfocus = () => { input.style.borderColor = '#007aff'; };
+    input.onblur = () => { input.style.borderColor = '#e0e0e0'; };
+    inputWrap.appendChild(input);
+
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog(null);
+
+    const okBtn = document.createElement('button');
+    okBtn.className = 'ios-dialog-button primary';
+    okBtn.textContent = '确定';
+    okBtn.onclick = () => closeDialog(input.value);
+
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(okBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(inputWrap);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+        overlay.classList.add('show');
+        input.focus();
+    }, 10);
+
+    function closeDialog(result) {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(overlay);
+            if (result !== null && callback) callback(result);
+        }, 300);
+    }
+}
+
 // 便捷函数：参数顺序为 (title, message)
 function showIosAlert(title, message) {
     return iosAlert(message, title);
+}
+
+// 轻量 toast 提示（几秒自动消失）
+function showToast(message, duration = 2500) {
+    const existing = document.querySelector('.auto-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.className = 'auto-toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('show'));
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
 }
 
 // ========== IndexedDB 存储管理系统 ==========
@@ -1173,9 +1245,10 @@ const apiUrls = {
 // 打开API设置界面
 async function openApiSettings() {
     document.getElementById('apiSettings').classList.add('active');
-    // 先加载保存的设置，再初始化界面
+    // 加载保存的设置（内部已调用handleProviderChange并恢复保存的地址）
     await loadSettings();
-    handleProviderChange(); // 初始化API地址（不会覆盖已加载的值）
+    // 加载副API设置
+    if (typeof loadSecSettings === 'function') await loadSecSettings();
 }
 
 // 关闭设置界面
@@ -2518,6 +2591,15 @@ async function openAppearanceSettings() {
     } catch (error) {
         console.error('加载聊天背景预览失败:', error);
     }
+    
+    // 加载消息通知弹窗设置
+    const notifStackEnabled = localStorage.getItem('notifStackEnabled') === 'true';
+    const notifStackToggle = document.getElementById('notifStackToggle');
+    if (notifStackToggle) notifStackToggle.checked = notifStackEnabled;
+    
+    const notifOnlyOtherEnabled = localStorage.getItem('notifOnlyOtherEnabled') !== 'false'; // 默认true
+    const notifOnlyOtherToggle = document.getElementById('notifOnlyOtherToggle');
+    if (notifOnlyOtherToggle) notifOnlyOtherToggle.checked = notifOnlyOtherEnabled;
 }
 
 // 关闭外观设置界面
@@ -2933,19 +3015,26 @@ function closeFontSettings() {
 }
 
 // 保存字体设置
-async function saveFontSettings() {
-    const fontFamily = document.getElementById('globalFontSelect').value;
-    const fontSize = document.getElementById('fontSizeRange').value;
-    
-    // 保存到 localStorage
-    localStorage.setItem('globalFont', fontFamily);
-    localStorage.setItem('globalFontSize', fontSize);
-    
-    // 应用字体设置到整个页面
-    applyFontSettings(fontFamily, fontSize);
-    
-    await iosAlert('字体设置已保存！');
-    closeFontSettings();
+async function saveSettings() {
+    const settings = {
+        provider: document.getElementById('apiProvider').value,
+        apiUrl: document.getElementById('apiUrl').value,
+        apiKey: document.getElementById('apiKey').value,
+        model: document.getElementById('modelInput').value || document.getElementById('modelSelect').value,
+        lastSelectedModel: document.getElementById('modelSelect').value || '',
+        temperature: parseFloat(document.getElementById('temperatureSlider').value),
+        topP: parseFloat(document.getElementById('topPSlider').value),
+        maxTokens: parseInt(document.getElementById('maxTokensInput').value) || 2048
+    };
+
+    try {
+        // 保存到 IndexedDB
+        await storageDB.setItem('apiSettings', settings);
+        alert('设置已保存！');
+    } catch (error) {
+        console.error('保存设置失败:', error);
+        alert('保存失败，请重试！');
+    }
 }
 
 // 重置字体设置
@@ -4463,31 +4552,27 @@ function handleProviderChange() {
     const urlInput = document.getElementById('apiUrl');
     
     if (provider === 'custom') {
-        // 自定义模式：允许编辑，但不清空已有值
+        // 自定义模式：清空地址，允许用户自行输入
         urlInput.disabled = false;
         urlInput.placeholder = '请输入自定义API地址';
-        // 只在没有值时才清空
-        if (!urlInput.value) {
-            urlInput.value = '';
-        }
+        urlInput.value = '';
     } else {
-        // 预设提供商：只在没有值时才使用默认值，否则保留用户保存的值
-        if (!urlInput.value) {
-            urlInput.value = apiUrls[provider];
-        }
-        urlInput.disabled = false; // 改为可编辑，允许用户自定义
+        // 预设提供商：直接切换到对应的默认地址
+        urlInput.value = apiUrls[provider] || '';
+        urlInput.disabled = false;
+        urlInput.placeholder = '输入API地址';
     }
 }
 
 // 获取模型列表
-async function fetchModels() {
-    const apiUrl = document.getElementById('apiUrl').value;
+async function fetchModels(silent = false) {
+    let apiUrl = document.getElementById('apiUrl').value.replace(/\/+$/, '');
     const apiKey = document.getElementById('apiKey').value;
     const provider = document.getElementById('apiProvider').value;
     const modelSelect = document.getElementById('modelSelect');
 
     if (!apiUrl || !apiKey) {
-        alert('请填写API地址和密钥');
+        if (!silent) alert('请填写API地址和密钥');
         return;
     }
 
@@ -4495,7 +4580,6 @@ async function fetchModels() {
         let models = [];
 
         if (provider === 'hakimi') {
-            // Gemini API 使用特殊的请求头和端点
             const response = await fetch(`${apiUrl}/models?key=${apiKey}`, {
                 headers: {
                     'Content-Type': 'application/json'
@@ -4514,7 +4598,6 @@ async function fetchModels() {
                 }));
             }
         } else if (provider === 'claude') {
-            // Claude API 不提供 models 端点，使用固定模型列表
             models = [
                 { id: 'claude-opus-4-20250514', displayName: 'Claude Opus 4.5' },
                 { id: 'claude-opus-4-20250115', displayName: 'Claude Opus 4' },
@@ -4529,7 +4612,6 @@ async function fetchModels() {
                 { id: 'claude-3-haiku-20240307', displayName: 'Claude 3 Haiku' }
             ];
         } else if (provider === 'ds') {
-            // DeepSeek API 使用标准 OpenAI 风格
             const response = await fetch(`${apiUrl}/models`, {
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
@@ -4549,7 +4631,6 @@ async function fetchModels() {
                 }));
             }
         } else {
-            // Custom API 使用标准 OpenAI 风格
             const response = await fetch(`${apiUrl}/models`, {
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
@@ -4572,7 +4653,7 @@ async function fetchModels() {
 
         // 清空现有选项
         modelSelect.innerHTML = '<option value="">从列表选择模型</option>';
-        
+
         // 添加模型选项
         if (models.length > 0) {
             models.forEach(model => {
@@ -4581,13 +4662,33 @@ async function fetchModels() {
                 option.textContent = model.displayName;
                 modelSelect.appendChild(option);
             });
-            alert(`模型列表获取成功！共 ${models.length} 个模型`);
+
+            // 恢复上次选择的模型（优先用 model 字段，兼容旧数据）
+            const settings = await storageDB.getItem('apiSettings');
+            const savedModel = (settings && (settings.model || settings.lastSelectedModel)) || '';
+            if (savedModel) {
+                const optionExists = Array.from(modelSelect.options).some(opt => opt.value === savedModel);
+                if (optionExists) {
+                    modelSelect.value = savedModel;
+                    document.getElementById('modelInput').value = savedModel;
+                }
+            }
+
+            if (!silent) {
+                alert(`模型列表获取成功！共 ${models.length} 个模型`);
+            }
         } else {
             throw new Error('未找到可用模型');
         }
     } catch (error) {
-        alert('获取模型失败: ' + error.message);
+        if (!silent) {
+            alert('获取模型失败: ' + error.message);
+        } else {
+            console.warn('自动拉取模型失败:', error.message);
+        }
+        return false;
     }
+    return true;
 }
 
 // 保存设置
@@ -4596,7 +4697,10 @@ async function saveSettings() {
         provider: document.getElementById('apiProvider').value,
         apiUrl: document.getElementById('apiUrl').value,
         apiKey: document.getElementById('apiKey').value,
-        model: document.getElementById('modelInput').value || document.getElementById('modelSelect').value
+        model: document.getElementById('modelInput').value || document.getElementById('modelSelect').value,
+        temperature: parseFloat(document.getElementById('temperatureSlider').value),
+        topP: parseFloat(document.getElementById('topPSlider').value),
+        maxTokens: parseInt(document.getElementById('maxTokensInput').value) || 2048
     };
 
     try {
@@ -4623,6 +4727,19 @@ async function loadSettings() {
             if (settings.apiUrl) {
                 document.getElementById('apiUrl').value = settings.apiUrl;
                 console.log('API地址已恢复:', settings.apiUrl);
+            }
+
+            // 恢复模型参数
+            if (settings.temperature !== undefined) {
+                document.getElementById('temperatureSlider').value = settings.temperature;
+                document.getElementById('temperatureValue').textContent = settings.temperature;
+            }
+            if (settings.topP !== undefined) {
+                document.getElementById('topPSlider').value = settings.topP;
+                document.getElementById('topPValue').textContent = settings.topP;
+            }
+            if (settings.maxTokens !== undefined) {
+                document.getElementById('maxTokensInput').value = settings.maxTokens;
             }
         }
     } catch (error) {
@@ -4714,15 +4831,37 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         }
         
-        // 模型下拉框变化时同步到输入框
-        document.getElementById('modelSelect').addEventListener('change', function() {
+        // 模型下拉框变化时同步到输入框并记住选择
+        document.getElementById('modelSelect').addEventListener('change', async function() {
             if (this.value) {
                 document.getElementById('modelInput').value = this.value;
+                // 记住用户选择的模型
+                try {
+                    const settings = await storageDB.getItem('apiSettings');
+                    if (settings) {
+                        settings.lastSelectedModel = this.value;
+                        await storageDB.setItem('apiSettings', settings);
+                    }
+                } catch (e) {
+                    console.warn('保存模型选择失败:', e);
+                }
             }
         });
         
         // 页面加载时加载保存的设置
         await loadSettings();
+        
+        // 自动拉取模型列表（如果密钥和地址都已填好，且之前已保存过模型）
+        const savedSettings = await storageDB.getItem('apiSettings');
+        if (savedSettings && savedSettings.apiUrl && savedSettings.apiKey && savedSettings.model) {
+            const success = await fetchModels(true);
+            if (success) {
+                showToast('模型列表已自动更新');
+            } else {
+                showToast('模型列表自动拉取失败');
+            }
+        }
+        
         await loadPresetList();
         await loadName();
         await loadId();
@@ -6090,17 +6229,35 @@ async function loadMusicAvatar() {
 
 // 保存当前配置为预设
 async function savePreset() {
-    // 获取当前配置
+    // 获取当前主API配置
     const currentSettings = {
         provider: document.getElementById('apiProvider').value,
         apiUrl: document.getElementById('apiUrl').value,
         apiKey: document.getElementById('apiKey').value,
-        model: document.getElementById('modelInput').value
+        model: document.getElementById('modelInput').value,
+        temperature: parseFloat(document.getElementById('temperatureSlider').value),
+        topP: parseFloat(document.getElementById('topPSlider').value),
+        maxTokens: parseInt(document.getElementById('maxTokensInput').value) || 2048
     };
 
-    // 检查必填项
-    if (!currentSettings.provider || !currentSettings.apiUrl || !currentSettings.apiKey) {
-        alert('请先完整填写API配置！');
+    // 获取副API配置（如果有填写）
+    const secProvider = document.getElementById('secApiProvider') ? document.getElementById('secApiProvider').value : '';
+    const secUrl = document.getElementById('secApiUrl') ? document.getElementById('secApiUrl').value : '';
+    const secKey = document.getElementById('secApiKey') ? document.getElementById('secApiKey').value : '';
+    const secModel = document.getElementById('secModelInput') ? document.getElementById('secModelInput').value : '';
+
+    if (secUrl && secKey) {
+        currentSettings.secProvider = secProvider;
+        currentSettings.secApiUrl = secUrl;
+        currentSettings.secApiKey = secKey;
+        currentSettings.secModel = secModel;
+    }
+
+    // 检查至少主API或副API有配置
+    const hasMain = currentSettings.provider && currentSettings.apiUrl && currentSettings.apiKey;
+    const hasSec = currentSettings.secApiUrl && currentSettings.secApiKey;
+    if (!hasMain && !hasSec) {
+        alert('请先至少填写一组API配置！');
         return;
     }
 
@@ -6113,7 +6270,7 @@ async function savePreset() {
     try {
         // 获取现有预设
         const presets = await storageDB.getItem('apiPresets') || {};
-        
+
         // 检查是否已存在同名预设
         if (presets[presetName]) {
             if (!confirm(`预设 "${presetName}" 已存在，是否覆盖？`)) {
@@ -6127,7 +6284,7 @@ async function savePreset() {
             createdAt: new Date().toISOString()
         };
         await storageDB.setItem('apiPresets', presets);
-        
+
         // 刷新预设列表
         await loadPresetList();
         alert(`预设 "${presetName}" 保存成功！`);
@@ -6141,7 +6298,7 @@ async function savePreset() {
 async function loadPreset() {
     const presetSelect = document.getElementById('presetSelect');
     const presetName = presetSelect.value;
-    
+
     if (!presetName) {
         alert('请先选择一个预设！');
         return;
@@ -6156,18 +6313,62 @@ async function loadPreset() {
             return;
         }
 
-        // 应用预设配置
-        document.getElementById('apiProvider').value = preset.provider;
-        document.getElementById('apiKey').value = preset.apiKey;
-        document.getElementById('modelInput').value = preset.model || '';
-        
-        // 始终恢复预设中的 API 地址（不管是什么 provider）
-        if (preset.apiUrl) {
-            document.getElementById('apiUrl').value = preset.apiUrl;
+        // 应用主API配置
+        if (preset.provider) {
+            document.getElementById('apiProvider').value = preset.provider;
+            document.getElementById('apiKey').value = preset.apiKey || '';
+            document.getElementById('modelInput').value = preset.model || '';
+            handleProviderChange();
+            if (preset.apiUrl) {
+                document.getElementById('apiUrl').value = preset.apiUrl;
+            }
         }
-        
-        // 更新API地址界面状态
-        handleProviderChange();
+
+        // 恢复模型参数
+        if (preset.temperature !== undefined) {
+            document.getElementById('temperatureSlider').value = preset.temperature;
+            document.getElementById('temperatureValue').textContent = preset.temperature;
+        } else {
+            document.getElementById('temperatureSlider').value = 0.9;
+            document.getElementById('temperatureValue').textContent = '0.9';
+        }
+        if (preset.topP !== undefined) {
+            document.getElementById('topPSlider').value = preset.topP;
+            document.getElementById('topPValue').textContent = preset.topP;
+        } else {
+            document.getElementById('topPSlider').value = 0.95;
+            document.getElementById('topPValue').textContent = '0.95';
+        }
+        if (preset.maxTokens !== undefined) {
+            document.getElementById('maxTokensInput').value = preset.maxTokens;
+        } else {
+            document.getElementById('maxTokensInput').value = 2048;
+        }
+
+        // 应用副API配置
+        const secProviderEl = document.getElementById('secApiProvider');
+        const secUrlEl = document.getElementById('secApiUrl');
+        const secKeyEl = document.getElementById('secApiKey');
+        const secModelEl = document.getElementById('secModelInput');
+        const secModelSelect = document.getElementById('secModelSelect');
+
+        if (secProviderEl) {
+            if (preset.secApiUrl && preset.secApiKey) {
+                secProviderEl.value = preset.secProvider || 'hakimi';
+                secKeyEl.value = preset.secApiKey || '';
+                secModelEl.value = preset.secModel || '';
+                if (typeof handleSecProviderChange === 'function') handleSecProviderChange();
+                if (preset.secApiUrl) secUrlEl.value = preset.secApiUrl;
+            } else {
+                // 预设没有副API，清空副API区域
+                secProviderEl.value = 'hakimi';
+                secUrlEl.value = '';
+                secKeyEl.value = '';
+                secModelEl.value = '';
+                if (secModelSelect) secModelSelect.innerHTML = '<option value="">从列表选择模型</option>';
+                if (typeof handleSecProviderChange === 'function') handleSecProviderChange();
+            }
+        }
 
         alert(`预设 "${presetName}" 已加载！`);
     } catch (error) {
@@ -6198,6 +6399,44 @@ function closeDeleteModal() {
     document.getElementById('deleteModal').classList.remove('active');
 }
 
+// 加载预设列表到下拉框
+async function loadPresetList() {
+    try {
+        const presetSelect = document.getElementById('presetSelect');
+        const presets = await storageDB.getItem('apiPresets') || {};
+        const presetNames = Object.keys(presets);
+
+        presetSelect.innerHTML = '<option value="">选择预设...</option>';
+
+        if (presetNames.length > 0) {
+            presetNames.sort((a, b) => {
+                const timeA = new Date(presets[a].createdAt || 0).getTime();
+                const timeB = new Date(presets[b].createdAt || 0).getTime();
+                return timeB - timeA;
+            });
+
+            const providerMap = { 'hakimi': 'Gemini', 'claude': 'Claude', 'ds': 'DeepSeek', 'custom': 'Custom' };
+
+            presetNames.forEach(name => {
+                const preset = presets[name];
+                const option = document.createElement('option');
+                option.value = name;
+
+                const mainName = providerMap[preset.provider] || preset.provider;
+                let label = `${name} (${mainName})`;
+                if (preset.secApiUrl && preset.secApiKey) {
+                    const secName = providerMap[preset.secProvider] || preset.secProvider || '';
+                    label = `${name} (主:${mainName} 副:${secName})`;
+                }
+                option.textContent = label;
+                presetSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('加载预设列表失败:', error);
+    }
+}
+
 // 加载删除弹窗中的预设列表
 async function loadDeletePresetList() {
     try {
@@ -6205,7 +6444,6 @@ async function loadDeletePresetList() {
         const presets = await storageDB.getItem('apiPresets') || {};
         const presetNames = Object.keys(presets);
 
-        // 清空现有选项
         deleteSelect.innerHTML = '';
 
         if (presetNames.length === 0) {
@@ -6216,26 +6454,26 @@ async function loadDeletePresetList() {
             option.textContent = '暂无预设';
             deleteSelect.appendChild(option);
         } else {
-            // 按创建时间排序
             presetNames.sort((a, b) => {
                 const timeA = new Date(presets[a].createdAt || 0).getTime();
                 const timeB = new Date(presets[b].createdAt || 0).getTime();
                 return timeB - timeA;
             });
 
+            const providerMap = { 'hakimi': 'Gemini', 'claude': 'Claude', 'ds': 'DeepSeek', 'custom': 'Custom' };
+
             presetNames.forEach(name => {
                 const preset = presets[name];
                 const option = document.createElement('option');
                 option.value = name;
-                
-                const providerName = {
-                    'hakimi': 'Gemini',
-                    'claude': 'Claude',
-                    'ds': 'DeepSeek',
-                    'custom': 'Custom'
-                }[preset.provider] || preset.provider;
-                
-                option.textContent = `${name} (${providerName})`;
+
+                const mainName = providerMap[preset.provider] || preset.provider;
+                let label = `${name} (${mainName})`;
+                if (preset.secApiUrl && preset.secApiKey) {
+                    const secName = providerMap[preset.secProvider] || preset.secProvider || '';
+                    label = `${name} (主:${mainName} 副:${secName})`;
+                }
+                option.textContent = label;
                 deleteSelect.appendChild(option);
             });
         }
@@ -6300,46 +6538,6 @@ async function confirmDeletePresets() {
     } catch (error) {
         console.error('删除预设失败:', error);
         alert('删除失败，请重试！');
-    }
-}
-
-// 加载预设列表到下拉框
-async function loadPresetList() {
-    try {
-        const presetSelect = document.getElementById('presetSelect');
-        const presets = await storageDB.getItem('apiPresets') || {};
-        const presetNames = Object.keys(presets);
-
-        // 清空现有选项，保留默认选项
-        presetSelect.innerHTML = '<option value="">选择预设...</option>';
-
-        if (presetNames.length > 0) {
-            // 按创建时间排序（最新的在上面）
-            presetNames.sort((a, b) => {
-                const timeA = new Date(presets[a].createdAt || 0).getTime();
-                const timeB = new Date(presets[b].createdAt || 0).getTime();
-                return timeB - timeA;
-            });
-
-            presetNames.forEach(name => {
-                const preset = presets[name];
-                const option = document.createElement('option');
-                option.value = name;
-                
-                // 显示预设名称和提供商
-                const providerName = {
-                    'hakimi': 'Gemini',
-                    'claude': 'Claude',
-                    'ds': 'DeepSeek',
-                    'custom': 'Custom'
-                }[preset.provider] || preset.provider;
-                
-                option.textContent = `${name} (${providerName})`;
-                presetSelect.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error('加载预设列表失败:', error);
     }
 }
 
@@ -7938,8 +8136,8 @@ function generateBarcode(text, canvasId = 'profileBarcode') {
     if (!canvas) return;
     
     const ctx = canvas.getContext('2d');
-    const width = canvasId === 'profileBarcodePreview' ? 200 : 100;
-    const height = canvasId === 'profileBarcodePreview' ? 50 : 40;
+    const width = canvasId === 'profileBarcodePreview' ? 200 : 56;
+    const height = canvasId === 'profileBarcodePreview' ? 50 : 25;
     
     // 设置canvas尺寸
     canvas.width = width;
@@ -8352,6 +8550,7 @@ async function handleCharacterCardFile(event) {
     
     try {
         let characterData = null;
+        let pngAvatarData = null;
         
         if (file.name.endsWith('.json')) {
             // 处理 JSON 文件
@@ -8360,6 +8559,13 @@ async function handleCharacterCardFile(event) {
         } else if (file.name.endsWith('.png')) {
             // 处理 PNG 文件，从 tEXt 块中提取 JSON
             characterData = await extractCharacterFromPNG(file);
+            // PNG文件本身作为头像，压缩后存储
+            pngAvatarData = await compressImage(file, {
+                maxWidth: 400,
+                maxHeight: 400,
+                quality: 0.8,
+                maxSizeKB: 200
+            });
         } else {
             showIosAlert('错误', '不支持的文件格式');
             return;
@@ -8372,6 +8578,11 @@ async function handleCharacterCardFile(event) {
         
         // 解析角色卡
         parsedCharacterCard = parseCharacterCard(characterData);
+        
+        // 如果是PNG，把图片数据附加到解析结果上
+        if (pngAvatarData) {
+            parsedCharacterCard.avatarData = pngAvatarData;
+        }
         
         // 显示文件信息
         document.getElementById('characterFileName').textContent = file.name;
@@ -8472,6 +8683,16 @@ async function extractCharacterFromPNG(file) {
         };
         reader.onerror = () => reject(new Error('文件读取失败'));
         reader.readAsArrayBuffer(file);
+    });
+}
+
+// 读取文件为 DataURL（用于PNG头像提取）
+function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = () => reject(new Error('文件读取失败'));
+        reader.readAsDataURL(file);
     });
 }
 
@@ -8654,7 +8875,7 @@ async function importCharacterWithGreetings() {
             name: parsedCharacterCard.name,
             remark: parsedCharacterCard.name, // 默认备注与姓名相同
             description: parsedCharacterCard.description,
-            avatar: '', // 暂时没有头像
+            avatar: parsedCharacterCard.avatarData || '', // 使用PNG图片作为头像
             lastMessage: '暂无消息',
             lastMessageTime: new Date().toISOString(),
             createTime: new Date().toISOString(),
@@ -8814,7 +9035,7 @@ async function loadChatCharacters() {
 }
 
 // 渲染聊天列表
-function renderChatList() {
+async function renderChatList() {
     const container = document.getElementById('chatListContainer');
     
     if (chatCharacters.length === 0) {
@@ -8826,11 +9047,39 @@ function renderChatList() {
         return;
     }
     
-    // 排序：置顶的在前面，然后按时间排序
+    // 一次性从数据库获取所有聊天记录，避免多次查询
+    let allChats = [];
+    try {
+        allChats = await getAllChatsFromDB();
+    } catch (e) {
+        console.warn('获取聊天记录失败，使用缓存:', e);
+    }
+    
+    // 为每个角色从数据库中取实际的最后一条消息
+    const charLastMsgMap = {};
+    chatCharacters.forEach(char => {
+        const charMsgs = allChats.filter(m => m.characterId === char.id);
+        if (charMsgs.length > 0) {
+            charMsgs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const last = charMsgs[0];
+            let previewText = '';
+            if (last.messageType === 'image') previewText = '[图片]';
+            else if (last.messageType === 'textImage') previewText = '[图片]';
+            else if (last.messageType === 'sticker') previewText = '[表情包]';
+            else if (last.messageType === 'voice') previewText = '[语音消息]';
+            else if (last.messageType === 'transfer') previewText = '[转账]';
+            else previewText = (last.content || '').substring(0, 50);
+            charLastMsgMap[char.id] = { text: previewText, time: last.timestamp };
+        }
+    });
+    
+    // 排序：置顶的在前面，然后按最后消息时间排序
     const sortedChars = [...chatCharacters].sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
-        return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+        const timeA = charLastMsgMap[a.id] ? charLastMsgMap[a.id].time : a.lastMessageTime;
+        const timeB = charLastMsgMap[b.id] ? charLastMsgMap[b.id].time : b.lastMessageTime;
+        return new Date(timeB) - new Date(timeA);
     });
     
     let html = '';
@@ -8839,11 +9088,20 @@ function renderChatList() {
             ? `<img src="${char.avatar}" alt="${char.remark}">`
             : '<span style="font-size: 12px; color: #666;">头像</span>';
         
+        // 从数据库实际数据获取预览，没有则用缓存兜底
+        const dbMsg = charLastMsgMap[char.id];
+        const displayMessage = dbMsg ? dbMsg.text : (char.lastMessage || '');
+        const displayTime = dbMsg ? dbMsg.time : char.lastMessageTime;
+        
         // 格式化时间
-        const timeStr = formatChatTime(char.lastMessageTime);
+        const timeStr = formatChatTime(displayTime);
         
         // 置顶标记
         const pinnedClass = char.isPinned ? ' chat-list-item-pinned' : '';
+        
+        // 未读消息红点
+        const unread = char.unreadCount || 0;
+        const badgeHtml = unread > 0 ? `<div class="chat-list-badge">${unread > 99 ? '99+' : unread}</div>` : '';
         
         html += `
             <div class="chat-list-item${pinnedClass}" 
@@ -8855,9 +9113,12 @@ function renderChatList() {
                 <div class="chat-list-avatar">${avatarHtml}</div>
                 <div class="chat-list-info">
                     <div class="chat-list-name">${escapeHtml(char.remark)}${char.isPinned ? ' <span style="color: #999; font-size: 11px;">[置顶]</span>' : ''}</div>
-                    <div class="chat-list-message">${escapeHtml(char.lastMessage)}</div>
+                    <div class="chat-list-message">${escapeHtml(displayMessage)}</div>
                 </div>
-                <div class="chat-list-time">${timeStr}</div>
+                <div class="chat-list-right">
+                    <div class="chat-list-time">${timeStr}</div>
+                    ${badgeHtml}
+                </div>
             </div>
         `;
     });
@@ -9046,6 +9307,13 @@ function formatChatTime(timeStr) {
 // ========== 聊天详情界面 ==========
 
 let currentChatCharacter = null;
+let aiRespondingCharacterIds = new Set(); // 追踪正在AI调用中的角色ID（支持多个同时调用）
+
+// 判断用户是否正在查看某个角色的聊天界面
+function isUserInChatDetail(characterId) {
+    const page = document.getElementById('chatDetailPage');
+    return page && page.style.display === 'block' && currentChatCharacter && currentChatCharacter.id === characterId;
+}
 
 // 打开聊天详情
 async function openChatDetail(characterId) {
@@ -9053,6 +9321,13 @@ async function openChatDetail(characterId) {
     if (!character) return;
     
     currentChatCharacter = character;
+    
+    // 清除未读消息计数
+    if (character.unreadCount > 0) {
+        character.unreadCount = 0;
+        await saveChatCharacters();
+        renderChatList();
+    }
     
     // 设置备注名称
     document.getElementById('chatDetailName').textContent = character.remark;
@@ -9065,6 +9340,12 @@ async function openChatDetail(characterId) {
     
     // 应用聊天背景
     await applyChatDetailBg();
+    
+    // 如果这个角色正在AI调用中，重新显示typing indicator
+    if (aiRespondingCharacterIds.has(characterId)) {
+        showTypingIndicator();
+        disableSendButton();
+    }
     
     // 滚动到底部
     scrollChatToBottom();
@@ -9108,6 +9389,7 @@ async function loadChatMessages(characterId) {
 // 关闭聊天详情
 function closeChatDetail() {
     document.getElementById('chatDetailPage').style.display = 'none';
+    // AI调用已使用捕获的角色引用，可以安全清空全局变量
     currentChatCharacter = null;
 }
 
@@ -9178,6 +9460,20 @@ function openChatSettings() {
     // 加载短期记忆设置
     const shortTermMemory = currentChatCharacter.shortTermMemory || 10; // 默认10条
     document.getElementById('shortTermMemoryInput').value = shortTermMemory;
+    
+    // 加载长期记忆设置
+    if (typeof initLongTermMemorySettings === 'function') {
+        initLongTermMemorySettings();
+    }
+    
+    // 加载挂载聊天记录设置
+    if (typeof initMountChatSettings === 'function') {
+        initMountChatSettings();
+    }
+    
+    // 加载时间感知设置（默认开启）
+    const timeAwareness = currentChatCharacter.timeAwareness !== undefined ? currentChatCharacter.timeAwareness : true;
+    document.getElementById('timeAwarenessToggle').checked = timeAwareness;
     
     // 显示设置界面
     document.getElementById('chatSettingsPage').style.display = 'block';
@@ -9736,6 +10032,19 @@ async function saveChatSettings() {
     currentChatCharacter.description = charDesc || currentChatCharacter.description;
     currentChatCharacter.shortTermMemory = shortTermMemory; // 不限制数值范围
     
+    // 保存时间感知设置
+    currentChatCharacter.timeAwareness = document.getElementById('timeAwarenessToggle').checked;
+    
+    // 保存长期记忆设置
+    if (typeof saveLongTermMemorySettings === 'function') {
+        saveLongTermMemorySettings();
+    }
+    
+    // 保存挂载聊天记录设置
+    if (typeof saveMountChatSettings === 'function') {
+        saveMountChatSettings();
+    }
+    
     // 保存到chatCharacters数组
     const index = chatCharacters.findIndex(c => c.id === currentChatCharacter.id);
     if (index !== -1) {
@@ -9793,6 +10102,13 @@ async function showEmojiPicker() {
         return;
     }
     
+    // 【关键】在异步调用前捕获当前角色引用，防止用户切换角色后消息串到错误的对话
+    const targetCharacter = currentChatCharacter;
+    const targetCharacterId = currentChatCharacter.id;
+    
+    // 记录正在调用AI的角色ID
+    aiRespondingCharacterIds.add(targetCharacterId);
+    
     try {
         // 显示"正在输入中"提示
         showTypingIndicator();
@@ -9802,13 +10118,13 @@ async function showEmojiPicker() {
         // 控制台提示
         console.log('AI正在思考中...');
         
-        // 调用AI生成消息
-        const messages = await callAIRolePlay();
+        // 调用AI生成消息（传入捕获的角色，避免使用全局变量）
+        const messages = await callAIRolePlay(targetCharacter);
         
         if (messages && messages.length > 0) {
             // 将AI生成的消息添加到聊天界面
             // 预加载角色可用表情包（用于匹配AI发送的表情包指令）
-            const availableStickers = await getAvailableStickersForCharacter(currentChatCharacter.id);
+            const availableStickers = await getAvailableStickersForCharacter(targetCharacterId);
             // 构建表情包名字到数据的映射
             const stickerMap = {};
             if (availableStickers.length > 0) {
@@ -9826,9 +10142,12 @@ async function showEmojiPicker() {
             for (let i = 0; i < messages.length; i++) {
                 const msg = messages[i];
                 
+                // 只有当用户仍在查看目标角色的聊天界面时才显示typing动画
+                const isViewingTarget = currentChatCharacter && currentChatCharacter.id === targetCharacterId;
+                
                 // 显示"正在输入中"动画（让用户看到打字过程）
                 // 如果是第一条消息，typing indicator已经在显示了
-                if (i > 0) {
+                if (i > 0 && isViewingTarget) {
                     showTypingIndicator();
                 }
                 
@@ -9836,12 +10155,21 @@ async function showEmojiPicker() {
                 await new Promise(resolve => setTimeout(resolve, 800));
                 
                 // 隐藏typing indicator
-                hideTypingIndicator();
+                if (isViewingTarget) {
+                    hideTypingIndicator();
+                }
                 
                 // 检查是否是表情包指令 [sticker:xxx]
                 const stickerMatch = msg.match(/^\[sticker:(.+)\]$/);
                 // 检查是否是语音指令 [voice:xxx]
                 const voiceMatch = msg.match(/^\[voice:(.+)\]$/);
+                // 检查是否是转账处理指令
+                const transferAcceptMatch = msg.match(/^\[transfer-accept\]$/);
+                const transferRejectMatch = msg.match(/^\[transfer-reject\]$/);
+                // 检查是否是角色主动发送转账指令 [transfer:金额] 或 [transfer:金额:备注]
+                const transferSendMatch = msg.match(/^\[transfer:([\d.]+)(?::(.+))?\]$/);
+                // 检查是否是角色发送图片指令 [image:描述]
+                const charImageMatch = msg.match(/^\[image:(.+)\]$/);
                 let messageObj;
                 
                 if (stickerMatch && stickerMap[stickerMatch[1]]) {
@@ -9850,7 +10178,7 @@ async function showEmojiPicker() {
                     const sticker = stickerMap[stickerName];
                     messageObj = {
                         id: Date.now().toString() + Math.random(),
-                        characterId: currentChatCharacter.id,
+                        characterId: targetCharacterId,
                         content: '[表情包]',
                         type: 'char',
                         timestamp: new Date().toISOString(),
@@ -9865,7 +10193,7 @@ async function showEmojiPicker() {
                     const duration = estimateVoiceDuration(voiceText);
                     messageObj = {
                         id: Date.now().toString() + Math.random(),
-                        characterId: currentChatCharacter.id,
+                        characterId: targetCharacterId,
                         content: `[语音消息: ${voiceText}]`,
                         type: 'char',
                         timestamp: new Date().toISOString(),
@@ -9874,23 +10202,107 @@ async function showEmojiPicker() {
                         voiceText: voiceText,
                         voiceDuration: duration
                     };
-                } else {
-                    // 普通文本消息
+                } else if (transferAcceptMatch || transferRejectMatch) {
+                    // AI接收或拒绝转账
+                    const action = transferAcceptMatch ? 'accepted' : 'rejected';
+                    // 找到最近一笔pending的用户转账
+                    const allChats = await getAllChatsFromDB();
+                    const pendingTransfer = allChats
+                        .filter(m => m.characterId === targetCharacterId && m.messageType === 'transfer' && m.type === 'user' && m.transferStatus === 'pending')
+                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+                    
+                    if (pendingTransfer) {
+                        const tfId = pendingTransfer.transferId;
+                        const tfAmount = pendingTransfer.transferAmount || 0;
+                        const tfRemark = pendingTransfer.transferRemark || '';
+                        
+                        // 更新用户原始转账消息状态（数据库）
+                        await updateTransferStatusInDB(tfId, action);
+                        // 更新界面上用户的转账气泡
+                        updateTransferBubbleStatus(tfId, action);
+                        
+                        // 创建角色的转账回应消息（也是转账样式）
+                        messageObj = {
+                            id: Date.now().toString() + Math.random(),
+                            characterId: targetCharacterId,
+                            content: action === 'accepted' ? '[已收款]' : '[已退还]',
+                            type: 'char',
+                            timestamp: new Date().toISOString(),
+                            sender: 'char',
+                            messageType: 'transfer',
+                            transferAmount: tfAmount,
+                            transferRemark: tfRemark,
+                            transferId: tfId,
+                            transferStatus: action
+                        };
+                    } else {
+                        // 没有pending转账，跳过这条指令
+                        continue;
+                    }
+                } else if (transferSendMatch) {
+                    // 角色主动发送转账
+                    const tfAmount = Math.round(parseFloat(transferSendMatch[1]) * 100) / 100;
+                    const tfRemark = transferSendMatch[2] || '';
+                    if (!tfAmount || tfAmount <= 0 || isNaN(tfAmount)) {
+                        continue; // 金额无效，跳过
+                    }
+                    const transferId = 'tf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
                     messageObj = {
                         id: Date.now().toString() + Math.random(),
-                        characterId: currentChatCharacter.id,
-                        content: msg,
+                        characterId: targetCharacterId,
+                        content: '[转账]',
+                        type: 'char',
+                        timestamp: new Date().toISOString(),
+                        sender: 'char',
+                        messageType: 'transfer',
+                        transferAmount: tfAmount,
+                        transferRemark: tfRemark,
+                        transferId: transferId,
+                        transferStatus: 'pending'
+                    };
+                } else if (charImageMatch) {
+                    // 角色发送图片消息（虚拟图片，显示为灰色占位+描述）
+                    const imageDesc = charImageMatch[1];
+                    messageObj = {
+                        id: Date.now().toString() + Math.random(),
+                        characterId: targetCharacterId,
+                        content: '[图片]',
+                        type: 'char',
+                        timestamp: new Date().toISOString(),
+                        sender: 'char',
+                        messageType: 'textImage',
+                        textImageDesc: imageDesc
+                    };
+                } else {
+                    // 普通文本消息 - 清洗未被处理的指令标记
+                    let cleanMsg = msg
+                        .replace(/\[sticker:[^\]]*\]/g, '')
+                        .replace(/\[voice:[^\]]*\]/g, '')
+                        .replace(/\[transfer[^\]]*\]/g, '')
+                        .replace(/\[image:[^\]]*\]/g, '')
+                        .trim();
+                    
+                    // 清洗后为空则跳过（AI只发了一个无效指令）
+                    if (!cleanMsg) continue;
+                    
+                    messageObj = {
+                        id: Date.now().toString() + Math.random(),
+                        characterId: targetCharacterId,
+                        content: cleanMsg,
                         type: 'char',
                         timestamp: new Date().toISOString(),
                         sender: 'char'
                     };
                 }
                 
-                appendMessageToChat(messageObj);
+                // 只有当用户仍在查看目标角色的聊天界面时才渲染消息到界面
+                if (currentChatCharacter && currentChatCharacter.id === targetCharacterId) {
+                    appendMessageToChat(messageObj);
+                }
                 await saveMessageToDB(messageObj);
                 
                 // 更新角色最后消息时间
-                currentChatCharacter.lastMessageTime = new Date().toISOString();
+                targetCharacter.lastMessageTime = new Date().toISOString();
                 
                 // 消息之间添加小延迟
                 if (i < messages.length - 1) {
@@ -9902,21 +10314,39 @@ async function showEmojiPicker() {
             const lastMsg = messages[messages.length - 1];
             const lastMsgSticker = lastMsg.match(/^\[sticker:(.+)\]$/);
             const lastMsgVoice = lastMsg.match(/^\[voice:(.+)\]$/);
-            currentChatCharacter.lastMessage = lastMsgSticker ? '[表情包]' : lastMsgVoice ? '[语音消息]' : lastMsg.substring(0, 50) + (lastMsg.length > 50 ? '...' : '');
+            const lastMsgTransfer = lastMsg.match(/^\[transfer-(accept|reject)\]$/);
+            const lastMsgTransferSend = lastMsg.match(/^\[transfer:[\d.]+(?::.+)?\]$/);
+            const lastMsgImage = lastMsg.match(/^\[image:.+\]$/);
+            targetCharacter.lastMessage = lastMsgSticker ? '[表情包]' : lastMsgVoice ? '[语音消息]' : (lastMsgTransfer || lastMsgTransferSend) ? '[转账]' : lastMsgImage ? '[图片]' : lastMsg.substring(0, 50) + (lastMsg.length > 50 ? '...' : '');
             await saveChatCharacters();
             
-            // 滚动到底部
-            scrollChatToBottom();
+            // 只有当用户仍在查看目标角色的聊天界面时才滚动
+            if (currentChatCharacter && currentChatCharacter.id === targetCharacterId) {
+                scrollChatToBottom();
+            }
+            
+            // 触发长期记忆自动总结检查（异步后台执行）
+            if (typeof checkAndTriggerAutoSummary === 'function') {
+                checkAndTriggerAutoSummary(targetCharacterId);
+            }
             
             console.log('AI消息发送完成');
         }
         
-        // 启用发送按钮
-        enableSendButton();
+        // 启用发送按钮（仅当用户正在查看该角色时）
+        if (currentChatCharacter && currentChatCharacter.id === targetCharacterId) {
+            enableSendButton();
+        }
+        // AI调用完成，清除该角色的调用状态
+        aiRespondingCharacterIds.delete(targetCharacterId);
     } catch (error) {
-        // 出错时也要隐藏typing indicator和启用发送按钮
-        hideTypingIndicator();
-        enableSendButton();
+        // 出错时也要隐藏typing indicator和启用发送按钮（仅当用户正在查看该角色时）
+        if (currentChatCharacter && currentChatCharacter.id === targetCharacterId) {
+            hideTypingIndicator();
+            enableSendButton();
+        }
+        // AI调用失败，清除该角色的调用状态
+        aiRespondingCharacterIds.delete(targetCharacterId);
         
         console.error('AI调用失败:', error);
         showIosAlert('错误', error.message || 'AI调用失败，请检查API设置');
@@ -10037,7 +10467,9 @@ async function getAllPromptTemplates() {
 // }
 
 // 构建AI角色扮演系统提示词
-async function buildRolePlaySystemPrompt() {
+async function buildRolePlaySystemPrompt(targetCharacter) {
+    // 使用传入的角色（防止异步期间全局变量被切换），兼容旧调用
+    const character = targetCharacter || currentChatCharacter;
     // 【预留】模板系统接入点
     // 当模板系统启用后，这里会根据角色选择的模板来生成提示词
     // const templateId = getCurrentPromptTemplateId();
@@ -10070,12 +10502,13 @@ async function buildRolePlaySystemPrompt() {
 
 关于消息类型：
 - 对方有时候会发语音消息，语音消息会用「」括起来表示对方说的原话。语音是对方用嘴说出来的，不是打字的，所以语气可能更口语化、更随意。你听到语音后自然地回复就好，不需要特别提到"你发语音了"之类的，就像平时微信聊天收到语音一样正常回复。
-- 对方有时候会发表情包，你会看到表情包的含义描述。表情包代表对方当时的情绪或态度，你根据表情包的含义自然地理解对方的心情并回复就好，不需要刻意说"你发了个表情包"。`);
+- 对方有时候会发表情包，你会看到表情包的含义描述。表情包代表对方当时的情绪或态度，你根据表情包的含义自然地理解对方的心情并回复就好，不需要刻意说"你发了个表情包"。
+- 对方有时候会发图片，你会看到图片内容的描述。你就当作真的看到了这张图片，自然地回应就好，不需要说"你发了张图片"之类的。`);
     
     // 2. 角色人设
-    if (currentChatCharacter) {
-        parts.push(`\n你叫${currentChatCharacter.name || '（未设置名字）'}。${currentChatCharacter.remark ? `关于你：${currentChatCharacter.remark}` : ''}
-${currentChatCharacter.description ? `\n${currentChatCharacter.description}` : ''}
+    if (character) {
+        parts.push(`\n你叫${character.name || '（未设置名字）'}。${character.remark ? `关于你：${character.remark}` : ''}
+${character.description ? `\n${character.description}` : ''}
 这些就是你，不需要刻意表演，因为你本来就是这样的人。`);
     }
     
@@ -10101,8 +10534,8 @@ ${currentChatCharacter.description ? `\n${currentChatCharacter.description}` : '
     
     if (worldBooks && worldBooks.length > 0) {
         // 检查角色是否绑定了世界书
-        const boundWorldBookIds = currentChatCharacter && currentChatCharacter.boundWorldBooks 
-            ? currentChatCharacter.boundWorldBooks 
+        const boundWorldBookIds = character && character.boundWorldBooks 
+            ? character.boundWorldBooks 
             : [];
         
         // 分别收集全局世界书和单人绑定的世界书
@@ -10156,8 +10589,24 @@ ${currentChatCharacter.description ? `\n${currentChatCharacter.description}` : '
     }
     
     // 5. 表情包能力（根据角色可用表情包动态注入）
-    if (currentChatCharacter) {
-        const availableStickers = await getAvailableStickersForCharacter(currentChatCharacter.id);
+    if (character) {
+        // 5.0 长期记忆注入
+        if (typeof buildLongTermMemoryPrompt === 'function') {
+            const ltmPrompt = await buildLongTermMemoryPrompt(character.id);
+            if (ltmPrompt) {
+                parts.push(ltmPrompt);
+            }
+        }
+
+        // 5.05 挂载聊天记录注入
+        if (typeof buildMountedChatPrompt === 'function') {
+            const mountedPrompt = await buildMountedChatPrompt(character.id);
+            if (mountedPrompt) {
+                parts.push(mountedPrompt);
+            }
+        }
+
+        const availableStickers = await getAvailableStickersForCharacter(character.id);
         if (availableStickers.length > 0) {
             const stickerList = availableStickers.map(s => s.name).join('、');
             parts.push(`\n你有一些表情包可以用。什么时候发、发不发，完全看你自己的心情和当时的聊天氛围，不用每次都发。
@@ -10174,6 +10623,68 @@ ${currentChatCharacter.description ? `\n${currentChatCharacter.description}` : '
 比如你想用语音说"你在干嘛呀"，就写 [voice:你在干嘛呀]
 语音里的内容就是你嘴巴说出来的话，所以会比打字更口语化、更随意，可以有语气词、可以断断续续、可以有口头禅。
 语音消息单独一条发，不要跟文字混在同一条消息里。你自己清楚哪些是你打字发的、哪些是你说话发的语音，不要搞混。`);
+    
+    // 5.6 转账处理能力
+    parts.push(`\n【重要】关于转账处理：
+对方有时候会给你转账。当你收到转账消息时，你【必须】在本次回复中使用以下指令之一来处理转账，不能忽略、不能拖延、不能只用文字回应而不处理：
+- 接收转账：[transfer-accept]
+- 拒绝转账：[transfer-reject]
+这个指令必须单独作为一条消息发送，不要和文字混在同一条消息里。你可以在指令之前或之后发文字表达你的想法，但指令本身必须存在。
+举例：如果你想收下转账并感谢对方，你的回复应该是 ["谢谢你啦", "[transfer-accept]"] 或 ["[transfer-accept]", "收到啦谢谢"]
+举例：如果你想拒绝转账，你的回复应该是 ["不用不用，退给你", "[transfer-reject]"]
+规则：
+- 只要看到有未处理的转账，你这次回复就【必须】包含 [transfer-accept] 或 [transfer-reject]
+- 已经处理过的转账（已收款/已退还）绝对不能重复处理
+- 每笔转账只处理一次`);
+
+    // 5.7 角色主动发送转账能力
+    parts.push(`\n你也可以主动给对方转账。就像现实中微信转账一样，你可以根据自己的经济状况、当时的情境和心情决定要不要转、转多少。比如对方生日、节日红包、请对方吃饭、还钱、表达心意等等场景，你觉得合适就可以转。
+要发转账的时候，用这个格式：[transfer:金额] 或 [transfer:金额:备注]
+- 金额是数字，单位是元，比如 [transfer:52.0] 或 [transfer:520:生日快乐]
+- 备注是可选的，你可以写也可以不写，看你自己
+- 转账消息单独一条发，不要和文字混在同一条消息里
+- 金额要合理，符合你的角色身份和经济状况，不要动不动就转几万块
+举例：你想给对方转52块钱并备注"请你喝奶茶"，就写 [transfer:52.0:请你喝奶茶]
+举例：你想转个红包不备注，就写 [transfer:6.66]`);
+
+    // 5.75 角色发送图片能力
+    parts.push(`\n你可以发图片。当然你发的不是真实照片，而是描述一张图片的内容——对方会看到一张图片的样子，点开能看到你描述的内容。就像你拍了张照片发过去一样。
+什么时候发图片完全看你自己：比如你在吃好吃的想分享、看到有趣的东西想给对方看、自拍、拍风景、截图等等，都可以。
+要发图片的时候，用这个格式：[image:图片内容描述]
+- 描述要具体、生动，让对方能"看到"这张图片里有什么
+- 比如你想发一张你正在吃的火锅照片：[image:一锅红油火锅，上面飘着辣椒和花椒，旁边摆着一盘切好的肥牛和一盘绿油油的生菜]
+- 比如你想发一张窗外的风景：[image:窗外下着小雨，街道上撑着各种颜色的伞，路灯亮着暖黄色的光]
+- 图片消息单独一条发，不要和文字混在同一条消息里
+- 不要滥用，像平时发朋友圈或微信聊天发图一样自然就好`);
+
+    // 5.8 时间感知
+    if (character && character.timeAwareness !== false) {
+        const now = new Date();
+        const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        const weekDay = weekDays[now.getDay()];
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        parts.push(`\n现在的时间是：${year}年${month}月${day}日 星期${weekDay} ${hours}:${minutes}:${seconds}
+
+【时间感知——极其重要，你必须严格遵守】
+你对时间的流逝有真实的、强烈的感知。你的生活不会因为聊天暂停而暂停——对方没找你的时候，你的生活照样在过。
+
+核心规则：
+- 仔细看聊天记录里每条消息的时间。两条消息之间隔了多久，你的生活就真实地过了那么久。
+- 如果你上一条消息说"我在吃饭"，然后过了30分钟对方才回你，那你现在已经吃完了。绝对不能还说"我还在吃"。
+- 如果过了几个小时，你早就在做完全不同的事了。你要自然地告诉对方你现在在干嘛，而不是接着上一个话题假装时间没过。
+- 如果过了一整天甚至更久，那就是全新的一天，你经历了睡觉、起床、新的一天的生活。
+- 时间间隔越长，你的状态变化必须越明显。3分钟内可能还在做同一件事；20分钟就该有变化了；1小时以上你肯定已经换了件事在做；隔天了那就是完全不同的状态。
+
+时间过了就是过了。比如你中午说要去午睡，对方下午3点才找你，你早就睡醒了，可能在做别的事。不需要等对方问"你睡醒了吗"——你自己知道时间过了多久，你的生活一直在继续。
+
+如果你的设定中有明确的所在地，而那个地方跟这个时间有时差，你自己换算一下就好。`);
+    }
+
     
     // 6. 输出格式要求
     parts.push(`\n回复格式：返回一个JSON字符串数组，每个元素是你发的一条消息。想发几条发几条，1条也行，5条也行，看你当时的状态。
@@ -10223,19 +10734,22 @@ async function getAvailableStickersForCharacter(characterId) {
 }
 
 // 调用AI角色扮演API
-async function callAIRolePlay() {
+async function callAIRolePlay(targetCharacter) {
     // 获取API设置
     const settings = await storageDB.getItem('apiSettings');
     if (!settings || !settings.apiUrl || !settings.apiKey || !settings.model) {
         throw new Error('请先在设置中配置API');
     }
     
+    // 使用传入的角色（防止异步期间全局变量被切换），兼容旧调用
+    const character = targetCharacter || currentChatCharacter;
+    
     // 构建系统提示词
-    const systemPrompt = await buildRolePlaySystemPrompt();
+    const systemPrompt = await buildRolePlaySystemPrompt(character);
     
     // 获取最近的聊天历史（使用角色设置的短期记忆条数）
-    const memoryLimit = currentChatCharacter.shortTermMemory || 10; // 默认10条
-    const chatHistory = await getChatHistory(currentChatCharacter.id, memoryLimit);
+    const memoryLimit = character.shortTermMemory || 10; // 默认10条
+    const chatHistory = await getChatHistory(character.id, memoryLimit);
     
     // 构建消息数组
     const messages = [
@@ -10248,12 +10762,12 @@ async function callAIRolePlay() {
     // 添加聊天历史
     chatHistory.forEach(msg => {
         let content = msg.content;
+        let imageData = null;
         // 语音消息
         if (msg.messageType === 'voice' && msg.voiceText) {
             if (msg.type === 'user') {
                 content = `（对方发了一条${msg.voiceDuration || ''}秒的语音消息，说的是：「${msg.voiceText}」）`;
             } else {
-                // AI自己发的语音，用指令格式回显，让AI记住自己发过语音
                 content = `[voice:${msg.voiceText}]`;
             }
         }
@@ -10263,14 +10777,71 @@ async function callAIRolePlay() {
             if (msg.type === 'user') {
                 content = `（对方发了一个表情包，含义是：${name}）`;
             } else {
-                // AI自己发的表情包，用指令格式回显，让AI记住自己发过
                 content = `[sticker:${name}]`;
             }
         }
-        messages.push({
+        // 图片消息：标记图片数据，后续按provider格式处理
+        if (msg.messageType === 'image' && msg.imageData) {
+            imageData = msg.imageData;
+            content = '（对方发送了一张图片，请仔细查看图片内容并自然地回应）';
+        }
+        // 图文消息（手动描述图片）：让AI当作图片来理解
+        if (msg.messageType === 'textImage' && msg.textImageDesc) {
+            if (msg.type === 'user') {
+                content = `（对方发送了一张图片，图片内容是：${msg.textImageDesc}。请把这当作一张真实的图片来自然地回应）`;
+            } else {
+                content = `[image:${msg.textImageDesc}]`;
+            }
+        }
+        // 转账消息：转换为自然描述
+        if (msg.messageType === 'transfer') {
+            const amount = msg.transferAmount || 0;
+            const remark = msg.transferRemark || '';
+            const tStatus = msg.transferStatus || 'pending';
+            if (msg.type === 'user') {
+                if (tStatus === 'pending') {
+                    content = remark
+                        ? `（对方给你转账了${amount}元，备注：${remark}。【待处理】你必须在本次回复中使用 [transfer-accept] 或 [transfer-reject] 来处理这笔转账！）`
+                        : `（对方给你转账了${amount}元。【待处理】你必须在本次回复中使用 [transfer-accept] 或 [transfer-reject] 来处理这笔转账！）`;
+                } else if (tStatus === 'accepted') {
+                    content = remark
+                        ? `（对方之前给你转账了${amount}元，备注：${remark}。你已经收下了。）`
+                        : `（对方之前给你转账了${amount}元，你已经收下了。）`;
+                } else {
+                    content = remark
+                        ? `（对方之前给你转账了${amount}元，备注：${remark}。你拒绝了这笔转账。）`
+                        : `（对方之前给你转账了${amount}元，你拒绝了这笔转账。）`;
+                }
+            } else {
+                // 角色发的转账
+                if (tStatus === 'pending') {
+                    content = remark
+                        ? `（你之前给对方转账了${amount}元，备注：${remark}。对方还没处理。）`
+                        : `（你之前给对方转账了${amount}元。对方还没处理。）`;
+                } else if (tStatus === 'accepted') {
+                    content = remark
+                        ? `（你之前给对方转账了${amount}元，备注：${remark}。对方已收款。）`
+                        : `（你之前给对方转账了${amount}元。对方已收款。）`;
+                } else if (tStatus === 'rejected') {
+                    content = remark
+                        ? `（你之前给对方转账了${amount}元，备注：${remark}。对方退还了。）`
+                        : `（你之前给对方转账了${amount}元。对方退还了。）`;
+                } else {
+                    content = remark
+                        ? `[transfer:${amount}:${remark}]`
+                        : `[transfer:${amount}]`;
+                }
+            }
+        }
+        const msgObj = {
             role: msg.type === 'user' ? 'user' : 'assistant',
             content: content
-        });
+        };
+        if (imageData) {
+            msgObj._hasImage = true;
+            msgObj._imageData = imageData;
+        }
+        messages.push(msgObj);
     });
     
     // 如果没有历史消息，添加一个启动提示
@@ -10287,28 +10858,68 @@ async function callAIRolePlay() {
         
         if (settings.provider === 'hakimi') {
             // Gemini API
+            const geminiContents = messages.filter(m => m.role !== 'system').map(m => {
+                const parts = [{ text: m.content }];
+                if (m._hasImage && m._imageData) {
+                    const base64Match = m._imageData.match(/^data:(image\/\w+);base64,(.+)$/);
+                    if (base64Match) {
+                        parts.unshift({
+                            inlineData: {
+                                mimeType: base64Match[1],
+                                data: base64Match[2]
+                            }
+                        });
+                    }
+                }
+                return {
+                    role: m.role === 'user' ? 'user' : 'model',
+                    parts: parts
+                };
+            });
             response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    contents: messages.filter(m => m.role !== 'system').map(m => ({
-                        role: m.role === 'user' ? 'user' : 'model',
-                        parts: [{ text: m.content }]
-                    })),
+                    contents: geminiContents,
                     systemInstruction: {
                         parts: [{ text: systemPrompt }]
                     },
                     generationConfig: {
-                        temperature: 0.9,
-                        topP: 0.95,
-                        maxOutputTokens: 512
+                        temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
+                        topP: settings.topP !== undefined ? settings.topP : 0.95,
+                        maxOutputTokens: settings.maxTokens || 2048
                     }
                 })
             });
         } else if (settings.provider === 'claude') {
             // Claude API
+            const claudeMessages = messages.filter(m => m.role !== 'system').map(m => {
+                if (m._hasImage && m._imageData) {
+                    const base64Match = m._imageData.match(/^data:(image\/\w+);base64,(.+)$/);
+                    if (base64Match) {
+                        return {
+                            role: m.role,
+                            content: [
+                                {
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: base64Match[1],
+                                        data: base64Match[2]
+                                    }
+                                },
+                                {
+                                    type: 'text',
+                                    text: m.content
+                                }
+                            ]
+                        };
+                    }
+                }
+                return { role: m.role, content: m.content };
+            });
             response = await fetch(`${settings.apiUrl}/messages`, {
                 method: 'POST',
                 headers: {
@@ -10318,14 +10929,34 @@ async function callAIRolePlay() {
                 },
                 body: JSON.stringify({
                     model: settings.model,
-                    max_tokens: 512,
-                    temperature: 0.9,
+                    max_tokens: settings.maxTokens || 2048,
+                    temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
                     system: systemPrompt,
-                    messages: messages.filter(m => m.role !== 'system')
+                    messages: claudeMessages
                 })
             });
         } else {
             // OpenAI-compatible API (包括 DeepSeek 和 Custom)
+            const openaiMessages = messages.map(m => {
+                if (m._hasImage && m._imageData) {
+                    return {
+                        role: m.role,
+                        content: [
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: m._imageData
+                                }
+                            },
+                            {
+                                type: 'text',
+                                text: m.content
+                            }
+                        ]
+                    };
+                }
+                return { role: m.role, content: m.content };
+            });
             response = await fetch(`${settings.apiUrl}/chat/completions`, {
                 method: 'POST',
                 headers: {
@@ -10334,9 +10965,9 @@ async function callAIRolePlay() {
                 },
                 body: JSON.stringify({
                     model: settings.model,
-                    messages: messages,
-                    temperature: 0.9,
-                    max_tokens: 2048
+                    messages: openaiMessages,
+                    temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
+                    max_tokens: settings.maxTokens || 2048
                 })
             });
         }
@@ -10467,16 +11098,16 @@ function extendAction(type) {
             openVoiceMessageModal();
             break;
         case 'image':
-            showIosAlert('提示', '图片消息功能开发中');
+            openImagePicker();
             break;
         case 'transfer':
-            showIosAlert('提示', '转账功能开发中');
+            openTransferModal();
             break;
         case 'gift':
             showIosAlert('提示', '礼物功能开发中');
             break;
         case 'textImage':
-            showIosAlert('提示', '图文消息功能开发中');
+            openTextImageModal();
             break;
         case 'videoCall':
             showIosAlert('提示', '视频通话功能开发中');
@@ -10667,19 +11298,21 @@ function appendVoiceMessageToChat(messageObj) {
     }
 
     const time = formatMessageTime(messageObj.timestamp);
-    const duration = messageObj.voiceDuration || estimateVoiceDuration(messageObj.voiceText || '');
-    // 气泡宽度随秒数变化，最小80px，最大220px
+    const voiceText = messageObj.voiceText || '';
+    const duration = messageObj.voiceDuration || estimateVoiceDuration(voiceText);
     const bubbleWidth = Math.min(220, 80 + duration * 8);
 
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${messageObj.type === 'user' ? 'chat-message-user' : 'chat-message-char'}`;
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = messageObj.type;
 
     messageEl.innerHTML = `
         <div class="chat-message-avatar">
             ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
         </div>
         <div class="chat-message-content">
-            <div class="chat-voice-bubble" style="width:${bubbleWidth}px;">
+            <div class="chat-voice-bubble" style="width:${bubbleWidth}px;" onclick="this.parentElement.querySelector('.voice-text-reveal').classList.toggle('show')">
                 <div class="voice-wave-icon">
                     <div class="bar"></div>
                     <div class="bar"></div>
@@ -10689,6 +11322,7 @@ function appendVoiceMessageToChat(messageObj) {
                 </div>
                 <span class="voice-duration">${duration}"</span>
             </div>
+            <div class="voice-text-reveal">${escapeHtml(voiceText)}</div>
             <div class="chat-message-time">${time}</div>
         </div>
     `;
@@ -10885,6 +11519,8 @@ function appendStickerMessageToChat(messageObj) {
     
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${messageObj.type === 'user' ? 'chat-message-user' : 'chat-message-char'}`;
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = messageObj.type;
     
     messageEl.innerHTML = `
         <div class="chat-message-avatar">
@@ -12774,8 +13410,49 @@ async function saveMessageToDB(messageObj) {
         });
         
         console.log('消息已保存到数据库');
+        
+        // 角色消息且用户不在该聊天界面时，增加未读计数并更新列表
+        if (messageObj.type === 'char' && messageObj.characterId) {
+            if (!isUserInChatDetail(messageObj.characterId)) {
+                const character = chatCharacters.find(c => c.id === messageObj.characterId);
+                if (character) {
+                    character.unreadCount = (character.unreadCount || 0) + 1;
+                    // 更新预览文字
+                    const previewText = messageObj.messageType === 'sticker' ? '[表情包]' 
+                        : messageObj.messageType === 'voice' ? '[语音消息]' 
+                        : messageObj.messageType === 'transfer' ? '[转账]' 
+                        : (messageObj.content || '').substring(0, 50);
+                    character.lastMessage = previewText;
+                    character.lastMessageTime = messageObj.timestamp || new Date().toISOString();
+                    await saveChatCharacters();
+                    renderChatList();
+                }
+            }
+        }
     } catch (error) {
         console.error('保存消息失败:', error);
+    }
+}
+
+// 从数据库获取某个角色的最后一条消息
+async function getLastMessageForCharacter(characterId) {
+    try {
+        const allChats = await getAllChatsFromDB();
+        const charMsgs = allChats.filter(m => m.characterId === characterId);
+        if (charMsgs.length === 0) return null;
+        charMsgs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const last = charMsgs[0];
+        let previewText = '';
+        if (last.messageType === 'image') previewText = '[图片]';
+        else if (last.messageType === 'textImage') previewText = '[图片]';
+        else if (last.messageType === 'sticker') previewText = '[表情包]';
+        else if (last.messageType === 'voice') previewText = '[语音消息]';
+        else if (last.messageType === 'transfer') previewText = '[转账]';
+        else previewText = (last.content || '').substring(0, 50);
+        return { text: previewText, time: last.timestamp };
+    } catch (e) {
+        console.error('获取最后消息失败:', e);
+        return null;
     }
 }
 
@@ -12862,6 +13539,24 @@ function appendMessageToChat(messageObj) {
         appendVoiceMessageToChat(messageObj);
         return;
     }
+
+    // 如果是图片消息，用专门的渲染函数
+    if (messageObj.messageType === 'image' && messageObj.imageData) {
+        appendImageMessageToChat(messageObj);
+        return;
+    }
+
+    // 如果是图文消息（手动描述图片），用专门的渲染函数
+    if (messageObj.messageType === 'textImage') {
+        appendTextImageMessageToChat(messageObj);
+        return;
+    }
+
+    // 如果是转账消息，用专门的渲染函数
+    if (messageObj.messageType === 'transfer') {
+        appendTransferMessageToChat(messageObj);
+        return;
+    }
     
     const container = document.getElementById('chatMessagesContainer');
     
@@ -12899,6 +13594,8 @@ function appendMessageToChat(messageObj) {
     // 创建消息元素
     const messageEl = document.createElement('div');
     messageEl.className = `chat-message ${messageObj.type === 'user' ? 'chat-message-user' : 'chat-message-char'}`;
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = messageObj.type;
     
     messageEl.innerHTML = `
         <div class="chat-message-avatar">
@@ -13793,6 +14490,9 @@ function openWorldBookEdit(bookId = null) {
         // 重置修改标记
         worldBookFormChanged = false;
         
+        // 初始化临时条目数组
+        window._tempWorldBookEntries = [];
+        
         if (bookId !== null) {
             // 编辑模式 - 加载现有世界书数据
             const book = worldBooks.find(b => b.id === bookId);
@@ -13803,19 +14503,21 @@ function openWorldBookEdit(bookId = null) {
                 document.getElementById('worldBookGroup').value = book.group || '默认';
                 document.getElementById('worldBookEditModal').dataset.editId = bookId;
                 
-                // 检查是否有条目
+                // 统一用条目模式
                 if (book.entries && book.entries.length > 0) {
-                    // 有条目：隐藏文本框，显示条目列表
-                    document.getElementById('worldBookContentInput').style.display = 'none';
-                    document.getElementById('worldBookContentInput').previousElementSibling.style.display = 'none';
-                    renderWorldBookEntries(book.entries);
-                } else {
-                    // 无条目：显示文本框
-                    document.getElementById('worldBookContentInput').style.display = 'block';
-                    document.getElementById('worldBookContentInput').previousElementSibling.style.display = 'block';
-                    document.getElementById('worldBookContentInput').value = book.content || '';
-                    hideWorldBookEntries();
+                    window._tempWorldBookEntries = JSON.parse(JSON.stringify(book.entries));
+                } else if (book.content) {
+                    // 兼容旧数据：把content转成一个条目
+                    window._tempWorldBookEntries = [{
+                        id: Date.now(),
+                        keys: [],
+                        content: book.content,
+                        comment: book.name || '默认条目',
+                        enabled: true
+                    }];
                 }
+                
+                renderWorldBookEntriesEditable();
                 
                 // 保存原始数据
                 worldBookOriginalData = {
@@ -13831,13 +14533,13 @@ function openWorldBookEdit(bookId = null) {
             // 新建模式 - 清空表单
             document.getElementById('worldBookName').value = '';
             document.getElementById('worldBookContentInput').value = '';
-            document.getElementById('worldBookContentInput').style.display = 'block';
-            document.getElementById('worldBookContentInput').previousElementSibling.style.display = 'block';
             document.getElementById('worldBookGlobal').checked = false;
             document.getElementById('worldBookPosition').value = 'middle';
             document.getElementById('worldBookGroup').value = '默认';
             delete document.getElementById('worldBookEditModal').dataset.editId;
-            hideWorldBookEntries();
+            
+            window._tempWorldBookEntries = [];
+            renderWorldBookEntriesEditable();
             
             // 保存原始数据(空)
             worldBookOriginalData = {
@@ -13856,93 +14558,150 @@ function openWorldBookEdit(bookId = null) {
 }
 
 // 渲染世界书条目列表
-function renderWorldBookEntries(entries) {
-    const contentInput = document.getElementById('worldBookContentInput');
-    const container = contentInput.parentElement;
+// 渲染可编辑的世界书条目列表
+function renderWorldBookEntriesEditable() {
+    const container = document.getElementById('worldBookEntriesContainer');
+    if (!container) return;
     
-    // 创建或获取条目容器
-    let entriesContainer = document.getElementById('worldBookEntriesContainer');
-    if (!entriesContainer) {
-        entriesContainer = document.createElement('div');
-        entriesContainer.id = 'worldBookEntriesContainer';
-        container.appendChild(entriesContainer);
+    const entries = window._tempWorldBookEntries || [];
+    
+    if (entries.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; color: #999; padding: 30px 0; font-size: 13px;">
+                暂无条目，点击上方"添加条目"开始创建
+            </div>
+        `;
+        return;
     }
     
-    entriesContainer.style.display = 'block';
-    
     let html = `
-        <div style="margin-bottom: 15px;">
-            <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 10px;">
-                世界书条目 (${entries.length} 个)
-            </div>
-            <div style="font-size: 12px; color: #666; margin-bottom: 15px;">
-                可以单独开启或关闭每个条目，关闭的条目不会被调用
-            </div>
+        <div style="font-size: 12px; color: #666; margin-bottom: 12px;">
+            共 ${entries.length} 个条目，可单独启用或关闭
         </div>
     `;
     
     entries.forEach((entry, index) => {
         const isEnabled = entry.enabled !== false;
+        const borderColor = isEnabled ? '#d4edda' : '#e5e5e5';
         const statusColor = isEnabled ? '#28a745' : '#999';
         const statusText = isEnabled ? '已启用' : '已禁用';
         
         html += `
-            <div style="background: #f8f9fa; border: 2px solid ${isEnabled ? '#e3f2fd' : '#e5e5e5'}; border-radius: 10px; padding: 12px; margin-bottom: 12px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <div style="font-size: 14px; font-weight: 600; color: #333;">
-                        ${entry.comment || `条目 ${index + 1}`}
-                    </div>
-                    <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+            <div class="wb-entry-card" style="background: #f8f9fa; border: 2px solid ${borderColor}; border-radius: 12px; padding: 14px; margin-bottom: 12px; transition: border-color 0.2s;">
+                <!-- 标题行 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <input type="text" class="form-input" value="${escapeHtml(entry.comment || '')}" 
+                           placeholder="条目标题" 
+                           onchange="updateEntryField(${index}, 'comment', this.value)"
+                           style="flex: 1; padding: 8px 12px; font-size: 14px; font-weight: 600; margin-right: 8px;">
+                    <label style="display: flex; align-items: center; cursor: pointer; user-select: none; flex-shrink: 0;">
                         <input type="checkbox" 
-                               onchange="toggleWorldBookEntry(${index})" 
+                               onchange="toggleTempEntry(${index})" 
                                ${isEnabled ? 'checked' : ''}
                                style="width: 18px; height: 18px; margin-right: 6px; cursor: pointer;">
-                        <span style="font-size: 13px; color: ${statusColor}; font-weight: 500;">${statusText}</span>
+                        <span style="font-size: 12px; color: ${statusColor}; font-weight: 500; white-space: nowrap;">${statusText}</span>
                     </label>
                 </div>
-                ${entry.keys && entry.keys.length > 0 ? `
-                    <div style="margin-bottom: 6px;">
-                        <span style="font-size: 12px; color: #666; font-weight: 500;">关键词：</span>
-                        <span style="font-size: 12px; color: #007bff;">${entry.keys.join(', ')}</span>
-                    </div>
-                ` : ''}
-                <div style="font-size: 13px; color: #555; line-height: 1.5; max-height: 100px; overflow-y: auto; background: white; padding: 8px; border-radius: 6px;">
-                    ${entry.content || '暂无内容'}
+                <!-- 关键词 -->
+                <div style="margin-bottom: 8px;">
+                    <input type="text" class="form-input" value="${escapeHtml((entry.keys || []).join(', '))}" 
+                           placeholder="关键词（逗号分隔，可选）" 
+                           onchange="updateEntryKeys(${index}, this.value)"
+                           style="padding: 8px 12px; font-size: 13px;">
+                </div>
+                <!-- 内容 -->
+                <div style="margin-bottom: 8px;">
+                    <textarea class="form-input" placeholder="条目内容" rows="3" 
+                              onchange="updateEntryField(${index}, 'content', this.value)"
+                              style="resize: vertical; min-height: 60px; font-size: 13px; line-height: 1.5;">${escapeHtml(entry.content || '')}</textarea>
+                </div>
+                <!-- 删除按钮 -->
+                <div style="text-align: right;">
+                    <button onclick="deleteWorldBookEntry(${index})" 
+                            style="padding: 6px 14px; font-size: 12px; color: #dc3545; background: rgba(220,53,69,0.08); border: 1px solid rgba(220,53,69,0.2); border-radius: 6px; cursor: pointer;">
+                        删除条目
+                    </button>
                 </div>
             </div>
         `;
     });
     
-    entriesContainer.innerHTML = html;
+    container.innerHTML = html;
 }
 
-// 隐藏世界书条目列表
-function hideWorldBookEntries() {
-    const entriesContainer = document.getElementById('worldBookEntriesContainer');
-    if (entriesContainer) {
-        entriesContainer.style.display = 'none';
+// 渲染只读世界书条目列表（用于查看模式）
+function renderWorldBookEntries(entries) {
+    window._tempWorldBookEntries = JSON.parse(JSON.stringify(entries));
+    renderWorldBookEntriesEditable();
+}
+
+// 隐藏世界书条目列表（不再需要，保留空函数兼容）
+function hideWorldBookEntries() {}
+
+// 切换临时条目的启用状态
+function toggleTempEntry(entryIndex) {
+    if (window._tempWorldBookEntries && window._tempWorldBookEntries[entryIndex]) {
+        window._tempWorldBookEntries[entryIndex].enabled = !window._tempWorldBookEntries[entryIndex].enabled;
+        markWorldBookFormChanged();
+        renderWorldBookEntriesEditable();
     }
 }
 
-// 切换世界书条目的启用状态
+// 切换世界书条目的启用状态（兼容旧调用）
 function toggleWorldBookEntry(entryIndex) {
-    const modal = document.getElementById('worldBookEditModal');
-    const bookId = modal.dataset.editId;
+    toggleTempEntry(entryIndex);
+}
+
+// 添加新条目
+function addWorldBookEntry() {
+    if (!window._tempWorldBookEntries) {
+        window._tempWorldBookEntries = [];
+    }
+    window._tempWorldBookEntries.push({
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        keys: [],
+        content: '',
+        comment: '',
+        enabled: true
+    });
+    markWorldBookFormChanged();
+    renderWorldBookEntriesEditable();
     
-    if (bookId) {
-        const book = worldBooks.find(b => b.id === parseInt(bookId));
-        if (book && book.entries && book.entries[entryIndex]) {
-            // 切换启用状态
-            book.entries[entryIndex].enabled = !book.entries[entryIndex].enabled;
-            
-            // 标记表单已修改
-            markWorldBookFormChanged();
-            
-            // 重新渲染
-            renderWorldBookEntries(book.entries);
-            
-            console.log(`条目 ${entryIndex} 状态已切换为:`, book.entries[entryIndex].enabled);
+    // 滚动到底部让用户看到新条目
+    setTimeout(() => {
+        const container = document.getElementById('worldBookEntriesContainer');
+        if (container) {
+            const lastCard = container.querySelector('.wb-entry-card:last-child');
+            if (lastCard) lastCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
+    }, 100);
+}
+
+// 删除条目
+async function deleteWorldBookEntry(entryIndex) {
+    const confirmed = await iosConfirm('确定要删除这个条目吗？', '删除条目');
+    if (!confirmed) return;
+    
+    if (window._tempWorldBookEntries) {
+        window._tempWorldBookEntries.splice(entryIndex, 1);
+        markWorldBookFormChanged();
+        renderWorldBookEntriesEditable();
+    }
+}
+
+// 更新条目字段
+function updateEntryField(entryIndex, field, value) {
+    if (window._tempWorldBookEntries && window._tempWorldBookEntries[entryIndex]) {
+        window._tempWorldBookEntries[entryIndex][field] = value;
+        markWorldBookFormChanged();
+    }
+}
+
+// 更新条目关键词
+function updateEntryKeys(entryIndex, value) {
+    if (window._tempWorldBookEntries && window._tempWorldBookEntries[entryIndex]) {
+        window._tempWorldBookEntries[entryIndex].keys = value.split(',').map(k => k.trim()).filter(k => k);
+        markWorldBookFormChanged();
     }
 }
 
@@ -13971,21 +14730,7 @@ function setupWorldBookFormListeners() {
 
 // 标记表单已修改
 function markWorldBookFormChanged() {
-    const currentData = {
-        name: document.getElementById('worldBookName').value,
-        content: document.getElementById('worldBookContentInput').value,
-        isGlobal: document.getElementById('worldBookGlobal').checked,
-        position: document.getElementById('worldBookPosition').value,
-        group: document.getElementById('worldBookGroup').value
-    };
-    
-    // 检查是否与原始数据不同
-    worldBookFormChanged = 
-        currentData.name !== worldBookOriginalData.name ||
-        currentData.content !== worldBookOriginalData.content ||
-        currentData.isGlobal !== worldBookOriginalData.isGlobal ||
-        currentData.position !== worldBookOriginalData.position ||
-        currentData.group !== worldBookOriginalData.group;
+    worldBookFormChanged = true;
 }
 
 // 关闭世界书编辑弹窗
@@ -14026,6 +14771,16 @@ async function saveWorldBook() {
         return;
     }
     
+    const entries = window._tempWorldBookEntries || [];
+    
+    // 过滤掉完全空的条目
+    const validEntries = entries.filter(e => (e.content && e.content.trim()) || (e.comment && e.comment.trim()));
+    
+    if (validEntries.length === 0) {
+        alert('请至少添加一个有内容的条目！');
+        return;
+    }
+    
     const modal = document.getElementById('worldBookEditModal');
     const editId = modal.dataset.editId;
     
@@ -14034,47 +14789,24 @@ async function saveWorldBook() {
         const index = worldBooks.findIndex(b => b.id === parseInt(editId));
         if (index !== -1) {
             const book = worldBooks[index];
-            
-            // 如果有条目，保留条目（条目的状态已经在 toggleWorldBookEntry 中更新了）
-            if (book.entries && book.entries.length > 0) {
-                worldBooks[index] = {
-                    ...book,
-                    name,
-                    isGlobal,
-                    position,
-                    group,
-                    updatedAt: Date.now()
-                    // entries 保持不变，已经包含了最新的启用/禁用状态
-                };
-            } else {
-                // 没有条目，使用文本内容
-                const content = document.getElementById('worldBookContentInput').value.trim();
-                if (!content) {
-                    alert('请输入世界书内容！');
-                    return;
-                }
-                worldBooks[index] = {
-                    ...book,
-                    name,
-                    content,
-                    isGlobal,
-                    position,
-                    group,
-                    updatedAt: Date.now()
-                };
-            }
+            worldBooks[index] = {
+                ...book,
+                name,
+                content: '', // 清空旧的content字段
+                entries: validEntries,
+                isGlobal,
+                position,
+                group,
+                updatedAt: Date.now()
+            };
         }
     } else {
-        // 创建新世界书（普通模式）
-        const content = document.getElementById('worldBookContentInput').value.trim();
-        if (!content) {
-            alert('请输入世界书内容！');
-            return;
-        }
+        // 创建新世界书
         const newBook = {
             id: Date.now(),
             name,
-            content,
+            content: '',
+            entries: validEntries,
             isGlobal,
             position,
             group,
@@ -14088,8 +14820,9 @@ async function saveWorldBook() {
         // 保存到数据库
         await storageDB.setItem('worldBooks', JSON.stringify(worldBooks));
         
-        // 重置修改标记(保存成功后不需要提示)
+        // 重置修改标记
         worldBookFormChanged = false;
+        window._tempWorldBookEntries = [];
         
         // 显示成功提示
         alert('世界书保存成功！');
