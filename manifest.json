@@ -1,0 +1,27 @@
+{
+  "name": "不知道叫什么名字小手机",
+  "short_name": "不知其名",
+  "description": "不知道叫什么名字",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/ZKRRp1Yg/IMG-20260124-144817.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://i.postimg.cc/ZKRRp1Yg/IMG-20260124-144817.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "lifestyle"],
+  "lang": "zh-CN",
+  "dir": "ltr"
+}
