@@ -1,6 +1,245 @@
 // ========== script2.js - 扩展功能模块 ==========
 // 依赖 script.js 中的全局变量和函数
 
+// ========== 定位消息功能 ==========
+
+// 打开定位输入弹窗
+function openLocationModal() {
+    // 收起扩展面板
+    const panel = document.getElementById('chatExtendPanel');
+    if (panel) panel.classList.remove('active');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'locationOverlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'width:300px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);';
+
+    // 标题
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:22px 24px 8px;text-align:center;';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:17px;font-weight:600;color:#333;';
+    title.textContent = '发送定位';
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size:12px;color:#aaa;margin-top:6px;';
+    subtitle.textContent = '输入地址信息发送给对方';
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    // 表单区域
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:12px 24px 8px;';
+
+    // 地址（必填）
+    const addrLabel = document.createElement('div');
+    addrLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    addrLabel.textContent = '地址（必填）';
+    const addrInput = document.createElement('input');
+    addrInput.id = 'locationAddrInput';
+    addrInput.type = 'text';
+    addrInput.placeholder = '例如：北京市朝阳区建国路88号';
+    addrInput.maxLength = 100;
+    addrInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;transition:border-color 0.2s;margin-bottom:14px;';
+    addrInput.onfocus = () => { addrInput.style.borderColor = '#999'; };
+    addrInput.onblur = () => { addrInput.style.borderColor = '#e0e0e0'; };
+
+    // 坐标（可选）
+    const coordLabel = document.createElement('div');
+    coordLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    coordLabel.textContent = '坐标（可选）';
+    const coordInput = document.createElement('input');
+    coordInput.id = 'locationCoordInput';
+    coordInput.type = 'text';
+    coordInput.placeholder = '例如：39.9042, 116.4074';
+    coordInput.maxLength = 60;
+    coordInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;transition:border-color 0.2s;margin-bottom:14px;';
+    coordInput.onfocus = () => { coordInput.style.borderColor = '#999'; };
+    coordInput.onblur = () => { coordInput.style.borderColor = '#e0e0e0'; };
+
+    // 距离（可选）
+    const distLabel = document.createElement('div');
+    distLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    distLabel.textContent = '距离（可选）';
+    const distRow = document.createElement('div');
+    distRow.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;';
+    const distInput = document.createElement('input');
+    distInput.id = 'locationDistInput';
+    distInput.type = 'text';
+    distInput.placeholder = '例如：1200';
+    distInput.maxLength = 20;
+    distInput.style.cssText = 'flex:1;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;transition:border-color 0.2s;';
+    distInput.onfocus = () => { distInput.style.borderColor = '#999'; };
+    distInput.onblur = () => { distInput.style.borderColor = '#e0e0e0'; };
+    const unitInput = document.createElement('input');
+    unitInput.id = 'locationUnitInput';
+    unitInput.type = 'text';
+    unitInput.placeholder = '单位';
+    unitInput.value = 'km';
+    unitInput.maxLength = 10;
+    unitInput.style.cssText = 'width:70px;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;transition:border-color 0.2s;text-align:center;';
+    unitInput.onfocus = () => { unitInput.style.borderColor = '#999'; };
+    unitInput.onblur = () => { unitInput.style.borderColor = '#e0e0e0'; };
+    distRow.appendChild(distInput);
+    distRow.appendChild(unitInput);
+
+    body.appendChild(addrLabel);
+    body.appendChild(addrInput);
+    body.appendChild(coordLabel);
+    body.appendChild(coordInput);
+    body.appendChild(distLabel);
+    body.appendChild(distRow);
+
+    // 按钮区域
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:8px 24px 20px;display:flex;gap:10px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'flex:1;padding:13px 0;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;transition:all 0.15s;';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeLocationModal(overlay, card);
+
+    const sendBtn = document.createElement('button');
+    sendBtn.style.cssText = 'flex:1;padding:13px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;transition:all 0.15s;';
+    sendBtn.textContent = '发送';
+    sendBtn.onclick = () => sendLocationMessage(overlay, card);
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(sendBtn);
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // 入场动画
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        card.style.transform = 'scale(1) translateY(0)';
+        card.style.opacity = '1';
+    });
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeLocationModal(overlay, card);
+    });
+
+    setTimeout(() => addrInput.focus(), 400);
+}
+
+// 关闭定位弹窗
+function closeLocationModal(overlay, card) {
+    overlay.style.opacity = '0';
+    card.style.transform = 'scale(0.9) translateY(20px)';
+    card.style.opacity = '0';
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+}
+
+// 发送定位消息
+async function sendLocationMessage(overlay, card) {
+    const addr = document.getElementById('locationAddrInput').value.trim();
+    if (!addr) {
+        showIosAlert('提示', '请输入地址');
+        return;
+    }
+    const coord = document.getElementById('locationCoordInput').value.trim();
+    const dist = document.getElementById('locationDistInput').value.trim();
+    const unit = document.getElementById('locationUnitInput').value.trim();
+
+    if (!currentChatCharacter) return;
+
+    closeLocationModal(overlay, card);
+
+    const messageObj = {
+        id: Date.now().toString() + Math.random(),
+        characterId: currentChatCharacter.id,
+        content: '[位置]',
+        type: 'user',
+        timestamp: new Date().toISOString(),
+        sender: 'user',
+        messageType: 'location',
+        locationAddress: addr,
+        locationCoord: coord || '',
+        locationDistance: dist || '',
+        locationUnit: unit || ''
+    };
+
+    appendLocationMessageToChat(messageObj);
+    await saveMessageToDB(messageObj);
+    await updateChatListLastMessage(currentChatCharacter.id, '[位置]', messageObj.timestamp);
+    scrollChatToBottom();
+}
+
+// 渲染定位消息到聊天界面
+function appendLocationMessageToChat(messageObj) {
+    const container = document.getElementById('chatMessagesContainer');
+
+    const emptyMsg = container.querySelector('.chat-empty-message');
+    if (emptyMsg) emptyMsg.remove();
+
+    let avatar = '';
+    if (messageObj.type === 'user') {
+        const userAvatarImg = document.getElementById('userAvatarImage');
+        if (userAvatarImg && userAvatarImg.style.display === 'block' && userAvatarImg.src) {
+            avatar = userAvatarImg.src;
+        }
+    } else {
+        if (currentChatCharacter && currentChatCharacter.avatar) {
+            avatar = currentChatCharacter.avatar;
+        }
+    }
+
+    const time = formatMessageTime(messageObj.timestamp);
+    const addr = messageObj.locationAddress || '';
+    const coord = messageObj.locationCoord || '';
+    const dist = messageObj.locationDistance || '';
+    const unit = messageObj.locationUnit || '';
+
+    // 构建可选信息
+    let metaHtml = '';
+    if (coord) {
+        metaHtml += `<span class="chat-location-coord">${escapeHtml(coord)}</span>`;
+    }
+    if (dist) {
+        metaHtml += `<span class="chat-location-distance">${escapeHtml(dist)}${unit ? ' ' + escapeHtml(unit) : ''}</span>`;
+    }
+
+    const messageEl = document.createElement('div');
+    messageEl.className = `chat-message ${messageObj.type === 'user' ? 'chat-message-user' : 'chat-message-char'}`;
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = messageObj.type;
+
+    messageEl.innerHTML = `
+        <div class="chat-message-avatar">
+            ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
+        </div>
+        <div class="chat-message-content">
+            <div class="chat-location-bubble">
+                <div class="chat-location-map">
+                    <div class="chat-location-pin">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="#e74c3c" stroke="none">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/>
+                        </svg>
+                        <div class="chat-location-pin-dot"></div>
+                    </div>
+                </div>
+                <div class="chat-location-body">
+                    <div class="chat-location-address">${escapeHtml(addr)}</div>
+                    ${metaHtml ? `<div class="chat-location-meta">${metaHtml}</div>` : ''}
+                </div>
+                <div class="chat-location-footer">
+                    <span class="chat-location-footer-label">位置信息</span>
+                </div>
+            </div>
+            <div class="chat-message-time">${time}</div>
+        </div>
+    `;
+
+    container.appendChild(messageEl);
+}
+
 // ========== 聊天发送图片功能 ==========
 
 // 打开图片选择器
@@ -347,6 +586,16 @@ async function sendTransferMessage() {
     // 格式化金额（保留两位小数）
     amount = Math.round(amount * 100) / 100;
 
+    // 检查钱包是否冻结
+    if (isWalletFrozen()) {
+        showIosAlert('转账失败', '您的钱包已被冻结（花呗逾期），请先还清花呗欠款。');
+        return;
+    }
+
+    // 选择转账途径
+    const paySource = await showTransferSourceChoice(amount);
+    if (!paySource) return; // 用户取消
+
     const remark = document.getElementById('transferRemark').value.trim();
 
     if (!currentChatCharacter) return;
@@ -366,8 +615,20 @@ async function sendTransferMessage() {
         transferAmount: amount,
         transferRemark: remark,
         transferId: transferId,
-        transferStatus: 'pending'
+        transferStatus: 'pending',
+        transferSource: paySource // 记录转账来源
     };
+
+    // 扣款
+    const data = JSON.parse(localStorage.getItem('walletData') || '{}');
+    if (paySource === 'balance') {
+        data.balance = Math.round((data.balance - amount) * 100) / 100;
+    } else if (paySource === 'huabei') {
+        data.huabeiUsed = Math.round((data.huabeiUsed + amount) * 100) / 100;
+    } else if (paySource === 'yuebao') {
+        data.yuebaoAmount = Math.round((data.yuebaoAmount - amount) * 100) / 100;
+    }
+    localStorage.setItem('walletData', JSON.stringify(data));
 
     // 渲染到聊天界面
     appendTransferMessageToChat(messageObj);
@@ -380,6 +641,103 @@ async function sendTransferMessage() {
 
     // 滚动到底部
     scrollChatToBottom();
+
+    // 来源提示
+    const sourceNames = { balance: '余额', huabei: '花呗', yuebao: '余额宝' };
+    showToast(`已通过${sourceNames[paySource]}转账 ¥${amount.toFixed(2)}`);
+}
+
+// 转账来源选择弹窗
+function showTransferSourceChoice(amount) {
+    return new Promise((resolve) => {
+        const data = JSON.parse(localStorage.getItem('walletData') || '{}');
+        const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const balanceOk = (data.balance || 0) >= amount;
+        const huabeiOk = data.huabeiEnabled && ((data.huabeiTotal - data.huabeiUsed) >= amount) && !data.huabeiFrozen;
+        const yuebaoOk = (data.yuebaoAmount || 0) >= amount;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'ios-dialog-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'ios-dialog';
+        dialog.style.width = '300px';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'ios-dialog-title';
+        titleEl.textContent = '选择支付方式';
+
+        const msgEl = document.createElement('div');
+        msgEl.className = 'ios-dialog-message';
+        msgEl.textContent = `转账金额：¥${fmt(amount)}`;
+
+        const buttonsEl = document.createElement('div');
+        buttonsEl.className = 'ios-dialog-buttons vertical';
+
+        // 余额
+        const balBtn = document.createElement('button');
+        balBtn.className = 'ios-dialog-button' + (balanceOk ? ' primary' : '');
+        balBtn.textContent = `余额 (¥${fmt(data.balance || 0)})`;
+        balBtn.style.opacity = balanceOk ? '1' : '0.4';
+        balBtn.onclick = () => {
+            if (!balanceOk) { showToast('余额不足'); return; }
+            close('balance');
+        };
+
+        // 花呗
+        const hbBtn = document.createElement('button');
+        hbBtn.className = 'ios-dialog-button' + (huabeiOk ? ' primary' : '');
+        if (data.huabeiEnabled) {
+            const remaining = data.huabeiTotal - data.huabeiUsed;
+            hbBtn.textContent = data.huabeiFrozen ? '花呗 (已冻结)' : `花呗 (剩余¥${fmt(remaining)})`;
+        } else {
+            hbBtn.textContent = '花呗 (未开通)';
+        }
+        hbBtn.style.opacity = huabeiOk ? '1' : '0.4';
+        hbBtn.onclick = () => {
+            if (data.huabeiFrozen) { showToast('花呗已冻结，请先还款'); return; }
+            if (!data.huabeiEnabled) { showToast('花呗未开通'); return; }
+            if (!huabeiOk) { showToast('花呗额度不足'); return; }
+            close('huabei');
+        };
+
+        // 余额宝
+        const ybBtn = document.createElement('button');
+        ybBtn.className = 'ios-dialog-button' + (yuebaoOk ? ' primary' : '');
+        ybBtn.textContent = `余额宝 (¥${fmt(data.yuebaoAmount || 0)})`;
+        ybBtn.style.opacity = yuebaoOk ? '1' : '0.4';
+        ybBtn.onclick = () => {
+            if (!yuebaoOk) { showToast('余额宝资金不足'); return; }
+            close('yuebao');
+        };
+
+        // 取消
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'ios-dialog-button';
+        cancelBtn.textContent = '取消';
+        cancelBtn.onclick = () => close(null);
+
+        buttonsEl.appendChild(balBtn);
+        buttonsEl.appendChild(hbBtn);
+        buttonsEl.appendChild(ybBtn);
+        buttonsEl.appendChild(cancelBtn);
+        dialog.appendChild(titleEl);
+        dialog.appendChild(msgEl);
+        dialog.appendChild(buttonsEl);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        setTimeout(() => overlay.classList.add('show'), 10);
+
+        function close(result) {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                resolve(result);
+            }, 300);
+        }
+    });
 }
 
 // 渲染转账消息到聊天界面
@@ -852,6 +1210,8 @@ async function performAutoSummary(characterId, interval) {
             const amount = msg.transferAmount || 0;
             const status = msg.transferStatus || 'pending';
             content = `(转账 ¥${amount} ${status === 'accepted' ? '已收款' : status === 'rejected' ? '已退还' : '待处理'})`;
+        } else if (msg.messageType === 'location') {
+            content = `(位置: ${msg.locationAddress || ''})`;
         }
         const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : '';
         return `[${time}] ${role}: ${content}`;
@@ -2886,6 +3246,7 @@ if (_origSaveMessageToDB) {
                 else if (messageObj.messageType === 'transfer') text = '[转账]';
                 else if (messageObj.messageType === 'image') text = '[图片]';
                 else if (messageObj.messageType === 'textImage') text = '[图片]';
+                else if (messageObj.messageType === 'location') text = '[位置]';
 
                 showMsgNotification(
                     character.id,
@@ -2925,14 +3286,31 @@ async function updateChatStats() {
         const userCount = msgs.filter(m => m.type === 'user').length;
         const charCount = msgs.filter(m => m.type === 'char').length;
 
-        // 估算token：累加所有消息内容
+        // 估算总token：模拟实际发送给API的完整内容
         let totalTokens = 0;
-        msgs.forEach(m => {
-            totalTokens += estimateTokenCount(m.content || '');
-            if (m.voiceText) totalTokens += estimateTokenCount(m.voiceText);
-            if (m.textImageDesc) totalTokens += estimateTokenCount(m.textImageDesc);
-            if (m.transferRemark) totalTokens += estimateTokenCount(m.transferRemark);
-        });
+
+        // 1. 系统提示词（人设、世界书、记忆等）
+        try {
+            const systemPrompt = await buildRolePlaySystemPrompt(currentChatCharacter);
+            totalTokens += estimateTokenCount(systemPrompt);
+        } catch (e) {
+            console.warn('估算系统提示词token失败:', e);
+        }
+
+        // 2. 短期记忆范围内的聊天历史（和实际发送给API的一致）
+        const memoryLimit = currentChatCharacter.shortTermMemory || 10;
+        try {
+            const recentMsgs = await getChatHistory(currentChatCharacter.id, memoryLimit);
+            recentMsgs.forEach(m => {
+                totalTokens += estimateTokenCount(m.content || '');
+                if (m.voiceText) totalTokens += estimateTokenCount(m.voiceText);
+                if (m.textImageDesc) totalTokens += estimateTokenCount(m.textImageDesc);
+                if (m.transferRemark) totalTokens += estimateTokenCount(m.transferRemark);
+                if (m.locationAddress) totalTokens += estimateTokenCount(m.locationAddress);
+            });
+        } catch (e) {
+            console.warn('估算聊天历史token失败:', e);
+        }
 
         // 格式化数字显示
         const fmt = n => n >= 10000 ? (n / 10000).toFixed(1) + '万' : n.toLocaleString();
@@ -3120,6 +3498,7 @@ async function openManualSummaryModal() {
             else if (m.messageType === 'image') text = '(图片)';
             else if (m.messageType === 'textImage') text = '(图文)';
             else if (m.messageType === 'transfer') text = '(转账)';
+            else if (m.messageType === 'location') text = '(位置)';
             if (text.length > 30) text = text.substring(0, 30) + '...';
             lines.push(`<div style="padding:2px 0;">${role} ${escapeHtml(text)}</div>`);
         });
@@ -3223,6 +3602,7 @@ async function executeManualSummary(overlay, card, allMsgs) {
                 const status = msg.transferStatus || 'pending';
                 content = `(转账 ¥${amount} ${status === 'accepted' ? '已收款' : status === 'rejected' ? '已退还' : '待处理'})`;
             }
+            else if (msg.messageType === 'location') content = `(位置: ${msg.locationAddress || ''})`;
             const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : '';
             return `[${time}] ${role}: ${content}`;
         }).join('\n');
@@ -3515,6 +3895,8 @@ async function buildMountedChatPrompt(characterId) {
                 } else if (msg.messageType === 'transfer') {
                     const amt = msg.transferAmount || 0;
                     content = `（转账 ¥${amt}）`;
+                } else if (msg.messageType === 'location') {
+                    content = `（位置：${msg.locationAddress || ''}）`;
                 }
                 const sender = msg.type === 'user' ? userName : targetName;
                 chatLog += `${sender}: ${content}\n`;
@@ -3532,3 +3914,2659 @@ async function buildMountedChatPrompt(characterId) {
 
     return `\n以下是你可以参考的其他聊天记录。这些是用户和其他角色之间的对话，你可以从中了解用户的习惯、喜好和近况，但不要直接提及你看过这些记录：\n\n${parts.join('\n\n')}`;
 }
+
+// ========== 方案二：个人资料卡片 + ID卡小组件 ==========
+
+function getScheme2Html() {
+    return `
+    <!-- 方案二：个人资料卡片（紧凑版） -->
+    <div class="s2-profile-card">
+        <div class="s2-banner" id="s2Banner" onclick="openS2BannerModal()">
+            <div class="s2-banner-placeholder" id="s2BannerPlaceholder">点击设置背景图</div>
+            <img id="s2BannerImage" style="display:none;width:100%;height:100%;object-fit:cover;">
+        </div>
+        <div class="s2-avatar-wrapper" onclick="openS2AvatarModal()">
+            <div class="s2-avatar" id="s2Avatar">
+                <span id="s2AvatarPlaceholder">头像</span>
+                <img id="s2AvatarImage" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">
+            </div>
+        </div>
+        <div class="s2-info">
+            <div class="s2-name" id="s2Name" onclick="openS2NameModal()">Name</div>
+            <div class="s2-username" id="s2Username" onclick="openS2UsernameModal()">username</div>
+            <div class="s2-bio" id="s2Bio" onclick="openS2BioModal()">点击编辑个性签名</div>
+            <div class="s2-location" id="s2Location" onclick="openS2LocationModal()">
+                <svg class="s2-location-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <span id="s2LocationText">地球</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 下半区：左边APP + 右边ID卡 -->
+    <div class="s2-bottom-row">
+        <!-- 左边：4个APP -->
+        <div class="s2-app-grid">
+            <div class="app-item" onclick="openChatPage()">
+                <div class="app-icon" id="appIcon-chat" data-default-text="聊">聊</div>
+                <div class="app-name" id="appName-chat" data-default-name="聊天">聊天</div>
+            </div>
+            <div class="app-item" onclick="openWorldBook()">
+                <div class="app-icon" id="appIcon-worldbook" data-default-text="书">书</div>
+                <div class="app-name" id="appName-worldbook" data-default-name="世界书">世界书</div>
+            </div>
+            <div class="app-item" onclick="openWalletPage()">
+                <div class="app-icon" id="appIcon-wallet" data-default-text="钱">钱</div>
+                <div class="app-name" id="appName-wallet" data-default-name="钱包">钱包</div>
+            </div>
+            <div class="app-item">
+                <div class="app-icon" id="appIcon-couple" data-default-text="情">情</div>
+                <div class="app-name" id="appName-couple" data-default-name="情侣空间">情侣空间</div>
+            </div>
+        </div>
+
+        <!-- 右边：ID卡/工牌小组件 -->
+        <div class="s2-idcard" onclick="openS2IdCardModal()">
+            <!-- 挂带 -->
+            <div class="s2-idcard-strap"></div>
+            <!-- 金属夹子 -->
+            <div class="s2-idcard-clip">
+                <div class="s2-clip-body">
+                    <div class="s2-clip-inner"></div>
+                    <div class="s2-clip-screw"></div>
+                </div>
+            </div>
+            <!-- 卡片主体 -->
+            <div class="s2-idcard-body">
+                <!-- 左侧照片区 -->
+                <div class="s2-idcard-photo">
+                    <div class="s2-idcard-photo-inner" id="s2IdCardPhoto">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                    </div>
+                </div>
+                <!-- 右侧信息区 -->
+                <div class="s2-idcard-info">
+                    <div class="s2-idcard-row">
+                        <svg class="s2-idcard-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <span class="s2-idcard-text" id="s2IdCardName">name</span>
+                    </div>
+                    <div class="s2-idcard-row">
+                        <svg class="s2-idcard-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        <span class="s2-idcard-text" id="s2IdCardLocation">location</span>
+                    </div>
+                    <div class="s2-idcard-row">
+                        <svg class="s2-idcard-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        <span class="s2-idcard-text" id="s2IdCardMotto">motto</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+// 加载方案二数据
+async function loadScheme2Data() {
+    try {
+        const banner = await storageDB.getItem('s2_banner');
+        if (banner) {
+            document.getElementById('s2BannerImage').src = banner;
+            document.getElementById('s2BannerImage').style.display = 'block';
+            document.getElementById('s2BannerPlaceholder').style.display = 'none';
+        }
+
+        const avatar = await storageDB.getItem('s2_avatar');
+        if (avatar) {
+            document.getElementById('s2AvatarImage').src = avatar;
+            document.getElementById('s2AvatarImage').style.display = 'block';
+            document.getElementById('s2AvatarPlaceholder').style.display = 'none';
+        }
+
+        const name = await storageDB.getItem('s2_name');
+        if (name) document.getElementById('s2Name').textContent = name;
+
+        const username = await storageDB.getItem('s2_username');
+        if (username) document.getElementById('s2Username').textContent = username;
+
+        const bio = await storageDB.getItem('s2_bio');
+        if (bio) document.getElementById('s2Bio').textContent = bio;
+
+        const location = await storageDB.getItem('s2_location');
+        if (location) document.getElementById('s2LocationText').textContent = location;
+
+        // ID卡数据
+        const idName = await storageDB.getItem('s2_idcard_name');
+        if (idName) document.getElementById('s2IdCardName').textContent = idName;
+
+        const idLocation = await storageDB.getItem('s2_idcard_location');
+        if (idLocation) document.getElementById('s2IdCardLocation').textContent = idLocation;
+
+        const idMotto = await storageDB.getItem('s2_idcard_motto');
+        if (idMotto) document.getElementById('s2IdCardMotto').textContent = idMotto;
+
+        // ID卡照片
+        const idPhoto = await storageDB.getItem('s2_idcard_photo');
+        if (idPhoto) {
+            const photoEl = document.getElementById('s2IdCardPhoto');
+            if (photoEl) photoEl.innerHTML = '<img src="' + idPhoto + '">';
+        }
+
+        // 加载APP图标
+        await loadAppIcons();
+        loadAppNames();
+    } catch (e) {
+        console.error('加载方案二数据失败:', e);
+    }
+}
+
+// ===== 方案二编辑弹窗 =====
+
+// 通用图片选择弹窗（支持本地上传和URL）
+function openS2ImagePicker(title, compressOpts, callback, onReset) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '280px';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = title;
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding: 8px 16px 16px;';
+
+    // URL输入区
+    const urlLabel = document.createElement('div');
+    urlLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    urlLabel.textContent = '图片链接';
+    const urlInput = document.createElement('input');
+    urlInput.type = 'text';
+    urlInput.placeholder = '粘贴图片URL';
+    urlInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;color:#333;outline:none;box-sizing:border-box;';
+    urlInput.onfocus = () => { urlInput.style.borderColor = '#007aff'; };
+    urlInput.onblur = () => { urlInput.style.borderColor = '#e0e0e0'; };
+
+    const urlBtn = document.createElement('button');
+    urlBtn.style.cssText = 'width:100%;padding:10px;margin-top:8px;border:none;border-radius:10px;font-size:14px;font-weight:500;color:#fff;background:#333;cursor:pointer;transition:opacity 0.15s;';
+    urlBtn.textContent = '使用链接';
+    urlBtn.onclick = async () => {
+        const url = urlInput.value.trim();
+        if (!url) { showToast('请输入图片链接'); return; }
+        closeDialog();
+        callback(url);
+    };
+
+    // 分隔线
+    const divider = document.createElement('div');
+    divider.style.cssText = 'display:flex;align-items:center;gap:10px;margin:14px 0;';
+    divider.innerHTML = '<div style="flex:1;height:1px;background:#e0e0e0;"></div><span style="font-size:12px;color:#bbb;">或</span><div style="flex:1;height:1px;background:#e0e0e0;"></div>';
+
+    // 本地上传按钮
+    const localBtn = document.createElement('button');
+    localBtn.style.cssText = 'width:100%;padding:10px;border:1.5px solid #d0d0d0;border-radius:10px;font-size:14px;font-weight:500;color:#333;background:#fff;cursor:pointer;transition:all 0.15s;';
+    localBtn.textContent = '本地上传';
+    localBtn.onclick = () => {
+        const fi = document.createElement('input');
+        fi.type = 'file';
+        fi.accept = 'image/*';
+        fi.onchange = async (ev) => {
+            const file = ev.target.files[0];
+            if (!file) return;
+            try {
+                const data = await compressImage(file, compressOpts);
+                closeDialog();
+                callback(data);
+            } catch (err) {
+                showToast('图片处理失败');
+            }
+        };
+        fi.click();
+    };
+
+    body.appendChild(urlLabel);
+    body.appendChild(urlInput);
+    body.appendChild(urlBtn);
+    body.appendChild(divider);
+    body.appendChild(localBtn);
+
+    // 重置按钮
+    if (onReset) {
+        const resetDivider = document.createElement('div');
+        resetDivider.style.cssText = 'margin:14px 0 0;';
+        const resetBtn = document.createElement('button');
+        resetBtn.style.cssText = 'width:100%;padding:10px;border:1.5px solid #ff3b30;border-radius:10px;font-size:14px;font-weight:500;color:#ff3b30;background:#fff;cursor:pointer;transition:all 0.15s;';
+        resetBtn.textContent = '重置为默认';
+        resetBtn.onclick = async () => {
+            closeDialog();
+            const confirmed = await iosConfirm('确定要重置为默认吗？', '重置');
+            if (confirmed) onReset();
+        };
+        body.appendChild(resetDivider);
+        body.appendChild(resetBtn);
+    }
+
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    buttonsEl.appendChild(cancelBtn);
+
+    dialog.appendChild(titleEl);
+    dialog.appendChild(body);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => { overlay.classList.add('show'); urlInput.focus(); }, 10);
+
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+    }
+}
+
+// 背景图
+function openS2BannerModal() {
+    openS2ImagePicker('设置背景图', { maxWidth: 1200, maxHeight: 600, quality: 0.8, maxSizeKB: 400 }, async (data) => {
+        await storageDB.setItem('s2_banner', data);
+        document.getElementById('s2BannerImage').src = data;
+        document.getElementById('s2BannerImage').style.display = 'block';
+        document.getElementById('s2BannerPlaceholder').style.display = 'none';
+        showToast('背景图已更新');
+    }, async () => {
+        await storageDB.removeItem('s2_banner');
+        const img = document.getElementById('s2BannerImage');
+        const ph = document.getElementById('s2BannerPlaceholder');
+        if (img) { img.style.display = 'none'; img.removeAttribute('src'); }
+        if (ph) ph.style.display = 'block';
+        showToast('背景图已重置');
+    });
+}
+
+// 头像
+function openS2AvatarModal() {
+    openS2ImagePicker('设置头像', { maxWidth: 400, maxHeight: 400, quality: 0.8, maxSizeKB: 200 }, async (data) => {
+        await storageDB.setItem('s2_avatar', data);
+        document.getElementById('s2AvatarImage').src = data;
+        document.getElementById('s2AvatarImage').style.display = 'block';
+        document.getElementById('s2AvatarPlaceholder').style.display = 'none';
+        showToast('头像已更新');
+    }, async () => {
+        await storageDB.removeItem('s2_avatar');
+        const img = document.getElementById('s2AvatarImage');
+        const ph = document.getElementById('s2AvatarPlaceholder');
+        if (img) { img.style.display = 'none'; img.removeAttribute('src'); }
+        if (ph) ph.style.display = 'block';
+        showToast('头像已重置');
+    });
+}
+
+// 名称
+function openS2NameModal() {
+    iosPrompt('修改名称', document.getElementById('s2Name').textContent, async (val) => {
+        val = val.trim();
+        if (!val) return;
+        await storageDB.setItem('s2_name', val);
+        document.getElementById('s2Name').textContent = val;
+        showToast('名称已更新');
+    });
+}
+
+// 用户名
+function openS2UsernameModal() {
+    iosPrompt('修改用户名', document.getElementById('s2Username').textContent, async (val) => {
+        val = val.trim();
+        if (!val) return;
+        await storageDB.setItem('s2_username', val);
+        document.getElementById('s2Username').textContent = val;
+        showToast('用户名已更新');
+    });
+}
+
+// 个性签名
+function openS2BioModal() {
+    iosPrompt('修改个性签名', document.getElementById('s2Bio').textContent, async (val) => {
+        val = val.trim();
+        if (!val) return;
+        await storageDB.setItem('s2_bio', val);
+        document.getElementById('s2Bio').textContent = val;
+        showToast('签名已更新');
+    });
+}
+
+// 位置
+function openS2LocationModal() {
+    iosPrompt('修改位置', document.getElementById('s2LocationText').textContent, async (val) => {
+        val = val.trim();
+        if (!val) return;
+        await storageDB.setItem('s2_location', val);
+        document.getElementById('s2LocationText').textContent = val;
+        showToast('位置已更新');
+    });
+}
+
+// ID卡编辑弹窗
+function openS2IdCardModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '300px';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '编辑ID卡';
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding: 8px 16px 16px;';
+
+    // 照片上传
+    const photoLabel = document.createElement('div');
+    photoLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    photoLabel.textContent = '卡片照片';
+    const photoBtn = document.createElement('div');
+    photoBtn.style.cssText = 'width:100%;padding:10px 12px;border:1.5px dashed #d0d0d0;border-radius:10px;font-size:13px;color:#999;text-align:center;cursor:pointer;margin-bottom:12px;transition:border-color 0.2s;';
+    photoBtn.textContent = '点击上传照片';
+    photoBtn.onclick = () => {
+        closeDialog();
+        openS2ImagePicker('设置卡片照片', { maxWidth: 200, maxHeight: 400, quality: 0.8, maxSizeKB: 150 }, async (data) => {
+            await storageDB.setItem('s2_idcard_photo', data);
+            const photoEl = document.getElementById('s2IdCardPhoto');
+            if (photoEl) photoEl.innerHTML = '<img src="' + data + '">';
+            showToast('照片已更新');
+            // 重新打开ID卡编辑弹窗
+            openS2IdCardModal();
+        }, async () => {
+            await storageDB.removeItem('s2_idcard_photo');
+            const photoEl = document.getElementById('s2IdCardPhoto');
+            if (photoEl) photoEl.innerHTML = '📷';
+            showToast('卡片照片已重置');
+            openS2IdCardModal();
+        });
+    };
+
+    // 名称输入
+    const nameLabel = document.createElement('div');
+    nameLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    nameLabel.textContent = '名称';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = document.getElementById('s2IdCardName').textContent;
+    nameInput.maxLength = 20;
+    nameInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;';
+    nameInput.onfocus = () => { nameInput.style.borderColor = '#007aff'; };
+    nameInput.onblur = () => { nameInput.style.borderColor = '#e0e0e0'; };
+
+    // 位置输入
+    const locLabel = document.createElement('div');
+    locLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    locLabel.textContent = '位置';
+    const locInput = document.createElement('input');
+    locInput.type = 'text';
+    locInput.value = document.getElementById('s2IdCardLocation').textContent;
+    locInput.maxLength = 30;
+    locInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;';
+    locInput.onfocus = () => { locInput.style.borderColor = '#007aff'; };
+    locInput.onblur = () => { locInput.style.borderColor = '#e0e0e0'; };
+
+    // 座右铭输入
+    const mottoLabel = document.createElement('div');
+    mottoLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    mottoLabel.textContent = '座右铭';
+    const mottoInput = document.createElement('input');
+    mottoInput.type = 'text';
+    mottoInput.value = document.getElementById('s2IdCardMotto').textContent;
+    mottoInput.maxLength = 50;
+    mottoInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;';
+    mottoInput.onfocus = () => { mottoInput.style.borderColor = '#007aff'; };
+    mottoInput.onblur = () => { mottoInput.style.borderColor = '#e0e0e0'; };
+
+    body.appendChild(photoLabel);
+    body.appendChild(photoBtn);
+    body.appendChild(nameLabel);
+    body.appendChild(nameInput);
+    body.appendChild(locLabel);
+    body.appendChild(locInput);
+    body.appendChild(mottoLabel);
+    body.appendChild(mottoInput);
+
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+
+    const okBtn = document.createElement('button');
+    okBtn.className = 'ios-dialog-button primary';
+    okBtn.textContent = '保存';
+    okBtn.onclick = async () => {
+        const n = nameInput.value.trim();
+        const l = locInput.value.trim();
+        const m = mottoInput.value.trim();
+        if (n) { await storageDB.setItem('s2_idcard_name', n); document.getElementById('s2IdCardName').textContent = n; }
+        if (l) { await storageDB.setItem('s2_idcard_location', l); document.getElementById('s2IdCardLocation').textContent = l; }
+        if (m) { await storageDB.setItem('s2_idcard_motto', m); document.getElementById('s2IdCardMotto').textContent = m; }
+        showToast('ID卡已更新');
+        closeDialog();
+    };
+
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(okBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(body);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => { overlay.classList.add('show'); nameInput.focus(); }, 10);
+
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => { document.body.removeChild(overlay); }, 300);
+    }
+}
+
+// ========== 钱包功能 ==========
+
+let walletBalanceHidden = false;
+
+// 打开钱包页面
+function openWalletPage() {
+    const page = document.getElementById('walletPage');
+    if (page) {
+        page.classList.add('active');
+        loadWalletData();
+    }
+}
+
+// 关闭钱包页面
+function closeWalletPage() {
+    const page = document.getElementById('walletPage');
+    if (page) {
+        page.classList.remove('active');
+    }
+}
+
+// 钱包默认数据
+const WALLET_DEFAULTS = {
+    balance: 5200,
+    huabeiEnabled: false,
+    huabeiTotal: 0,
+    huabeiUsed: 0,
+    huabeiRepayDay: 6,       // 每月还款日，默认6号
+    huabeiMinRepay: 10,      // 最低还款比例(%)，默认10%
+    huabeiOverdue: false,    // 是否逾期
+    huabeiFrozen: false,     // 是否冻结（征信问题）
+    huabeiLastRepayMonth: '', // 上次还款月份 'YYYY-MM'
+    yuebaoAmount: 0,
+    yuebaoEarn: 0,
+    yuebaoRate: 2.35,
+    yuebaoTotalEarn: 0,      // 累计收益
+    yuebaoLastUpdate: '',    // 上次计算利息的日期 'YYYY-MM-DD'
+    bankCards: []
+};
+
+// 加载钱包数据
+function loadWalletData() {
+    let data = JSON.parse(localStorage.getItem('walletData') || 'null');
+
+    if (!data) {
+        data = Object.assign({}, WALLET_DEFAULTS);
+        localStorage.setItem('walletData', JSON.stringify(data));
+    }
+
+    // 补齐旧数据中缺失的字段
+    let patched = false;
+    if (!('huabeiEnabled' in data)) {
+        // 旧版数据，重置为新默认值
+        data = Object.assign({}, WALLET_DEFAULTS);
+        patched = true;
+    }
+    for (const key in WALLET_DEFAULTS) {
+        if (!(key in data)) {
+            data[key] = WALLET_DEFAULTS[key];
+            patched = true;
+        }
+    }
+    if (patched) localStorage.setItem('walletData', JSON.stringify(data));
+
+    // 检查花呗逾期
+    checkHuabeiOverdue();
+    // 计算余额宝利息
+    calculateYuebaoInterest();
+    data = JSON.parse(localStorage.getItem('walletData'));
+
+    updateWalletUI(data);
+}
+
+// 更新钱包UI
+function updateWalletUI(data) {
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const balEl = document.getElementById('walletBalanceAmount');
+    if (balEl) balEl.textContent = walletBalanceHidden ? '****' : fmt(data.balance);
+
+    // 冻结提示
+    let frozenBanner = document.getElementById('walletFrozenBanner');
+    if (data.huabeiFrozen) {
+        if (!frozenBanner) {
+            frozenBanner = document.createElement('div');
+            frozenBanner.id = 'walletFrozenBanner';
+            frozenBanner.style.cssText = 'margin:0 16px 10px;padding:10px 16px;background:#fff5f5;border-radius:10px;border:1px solid #ffe0e0;font-size:12px;color:#e53e3e;display:flex;align-items:center;gap:6px;';
+            frozenBanner.innerHTML = '钱包已冻结：花呗逾期未还款，部分功能受限';
+            const walletInner = document.querySelector('.wallet-page-inner');
+            const balCard = document.querySelector('.wallet-balance-card');
+            if (walletInner && balCard) {
+                walletInner.insertBefore(frozenBanner, balCard.nextSibling);
+            }
+        }
+    } else if (frozenBanner) {
+        frozenBanner.remove();
+    }
+
+    // 花呗区域
+    const huabeiSection = document.getElementById('walletHuabeiSection');
+    if (huabeiSection) {
+        if (data.huabeiEnabled) {
+            huabeiSection.innerHTML = `
+                <div class="wallet-section-header">
+                    <span class="wallet-section-title">花呗</span>
+                    <span class="wallet-section-more" onclick="openHuabei()">查看详情 ></span>
+                </div>
+                <div class="wallet-section-body">
+                    <div class="wallet-huabei-row">
+                        <div class="wallet-huabei-item">
+                            <div class="wallet-huabei-label">总额度</div>
+                            <div class="wallet-huabei-value">${fmt(data.huabeiTotal)}</div>
+                        </div>
+                        <div class="wallet-huabei-divider"></div>
+                        <div class="wallet-huabei-item">
+                            <div class="wallet-huabei-label">剩余额度</div>
+                            <div class="wallet-huabei-value">${fmt(data.huabeiTotal - data.huabeiUsed)}</div>
+                        </div>
+                        <div class="wallet-huabei-divider"></div>
+                        <div class="wallet-huabei-item">
+                            <div class="wallet-huabei-label">本月待还</div>
+                            <div class="wallet-huabei-value wallet-huabei-due">${fmt(data.huabeiUsed)}</div>
+                        </div>
+                    </div>
+                </div>`;
+        } else {
+            huabeiSection.innerHTML = `
+                <div class="wallet-section-header">
+                    <span class="wallet-section-title">花呗</span>
+                </div>
+                <div class="wallet-section-body">
+                    <div class="wallet-empty-state">
+                        <div class="wallet-empty-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="3"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                        </div>
+                        <div class="wallet-empty-text">花呗尚未开通</div>
+                        <button class="wallet-activate-btn" onclick="activateHuabei()">立即开通</button>
+                    </div>
+                </div>`;
+        }
+    }
+
+    // 余额宝区域
+    const yuebaoSection = document.getElementById('walletYuebaoSection');
+    if (yuebaoSection) {
+        if (data.yuebaoAmount > 0) {
+            yuebaoSection.innerHTML = `
+                <div class="wallet-section-header">
+                    <span class="wallet-section-title">余额宝</span>
+                    <span class="wallet-section-more" onclick="openYuebao()">查看详情 ></span>
+                </div>
+                <div class="wallet-section-body">
+                    <div class="wallet-yuebao-info">
+                        <div class="wallet-yuebao-main">
+                            <div class="wallet-yuebao-label">总金额</div>
+                            <div class="wallet-yuebao-amount">${fmt(data.yuebaoAmount)}</div>
+                        </div>
+                        <div class="wallet-yuebao-right">
+                            <div class="wallet-yuebao-label">昨日收益</div>
+                            <div class="wallet-yuebao-earn">+${fmt(data.yuebaoEarn)}</div>
+                        </div>
+                    </div>
+                    <div class="wallet-yuebao-bar-wrap">
+                        <div class="wallet-yuebao-bar">
+                            <div class="wallet-yuebao-bar-fill" style="width:${Math.min(data.yuebaoRate / 5 * 100, 100)}%;"></div>
+                        </div>
+                        <div class="wallet-yuebao-bar-label">七日年化 <span>${data.yuebaoRate}%</span></div>
+                    </div>
+                </div>`;
+        } else {
+            yuebaoSection.innerHTML = `
+                <div class="wallet-section-header">
+                    <span class="wallet-section-title">余额宝</span>
+                </div>
+                <div class="wallet-section-body">
+                    <div class="wallet-empty-state">
+                        <div class="wallet-empty-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        </div>
+                        <div class="wallet-empty-text">余额宝暂无资金</div>
+                        <button class="wallet-activate-btn" onclick="transferToYuebao()">转入余额宝</button>
+                    </div>
+                </div>`;
+        }
+    }
+
+    // 小荷包区域
+    const xiaoheSection = document.getElementById('walletXiaoheSection');
+    if (xiaoheSection) {
+        xiaoheSection.innerHTML = `
+            <div class="wallet-section-header">
+                <span class="wallet-section-title">小荷包</span>
+            </div>
+            <div class="wallet-section-body">
+                <div class="wallet-empty-state">
+                    <div class="wallet-empty-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z"/></svg>
+                    </div>
+                    <div class="wallet-empty-text">小荷包功能即将上线</div>
+                    <button class="wallet-activate-btn" onclick="openXiaohe()">敬请期待</button>
+                </div>
+            </div>`;
+    }
+
+    // 银行卡区域
+    const bankSection = document.getElementById('walletBankCardList');
+    if (bankSection) {
+        const cards = data.bankCards || [];
+        if (cards.length > 0) {
+            const bankColors = ['#e8f0fe', '#fef3e8', '#f0fdf4', '#fdf2f8'];
+            const bankStroke = ['#3b7ddd', '#e8910d', '#22a06b', '#d946a8'];
+            bankSection.innerHTML = cards.map((card, i) => `
+                <div class="wallet-bankcard" onclick="openBankCardDetail(${i})">
+                    <div class="wallet-bankcard-icon" style="background:${bankColors[i % 4]};color:${bankStroke[i % 4]};">
+                        ${card.image
+                            ? `<img src="${card.image}" style="width:40px;height:40px;border-radius:10px;object-fit:cover;">`
+                            : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`
+                        }
+                    </div>
+                    <div class="wallet-bankcard-info">
+                        <div class="wallet-bankcard-name">${card.name}</div>
+                        <div class="wallet-bankcard-num">尾号 ${card.tail} · 余额 ¥${card.balance.toLocaleString('zh-CN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+                    </div>
+                    <div class="wallet-bankcard-type">${card.type}</div>
+                </div>`).join('');
+        } else {
+            bankSection.innerHTML = `
+                <div class="wallet-empty-state wallet-empty-state-sm">
+                    <div class="wallet-empty-text">暂无绑定的银行卡</div>
+                </div>`;
+        }
+    }
+}
+
+// 切换余额显示/隐藏
+function toggleWalletBalance() {
+    walletBalanceHidden = !walletBalanceHidden;
+    const eyeEl = document.getElementById('walletBalanceEye');
+    if (eyeEl) {
+        eyeEl.innerHTML = walletBalanceHidden
+            ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+            : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    }
+    loadWalletData();
+}
+
+// 充值
+function walletRecharge() {
+    if (isWalletFrozen()) {
+        showIosAlert('操作受限', '您的钱包已被冻结（花呗逾期），充值后资金将优先用于还款。');
+    }
+    iosPrompt('充值金额', '', (val) => {
+        const amount = parseFloat(val);
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        const data = JSON.parse(localStorage.getItem('walletData'));
+        data.balance = Math.round((data.balance + amount) * 100) / 100;
+        localStorage.setItem('walletData', JSON.stringify(data));
+        updateWalletUI(data);
+        showToast('充值成功 +' + amount.toFixed(2));
+    });
+}
+
+// 提现
+function walletWithdraw() {
+    if (isWalletFrozen()) {
+        showIosAlert('操作受限', '您的钱包已被冻结（花呗逾期），请先还清花呗欠款后再提现。');
+        return;
+    }
+    iosPrompt('提现金额', '', (val) => {
+        const amount = parseFloat(val);
+        const data = JSON.parse(localStorage.getItem('walletData'));
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        if (amount > data.balance) {
+            showIosAlert('提示', '余额不足');
+            return;
+        }
+        data.balance = Math.round((data.balance - amount) * 100) / 100;
+        localStorage.setItem('walletData', JSON.stringify(data));
+        updateWalletUI(data);
+        showToast('提现成功 -' + amount.toFixed(2));
+    });
+}
+
+// 花呗详情
+function openHuabei() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    if (!data.huabeiEnabled) {
+        activateHuabei();
+        return;
+    }
+    // 先检查逾期
+    checkHuabeiOverdue();
+    showHuabeiDetailPage();
+}
+
+// 检查花呗是否逾期
+function checkHuabeiOverdue() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    if (!data || !data.huabeiEnabled || data.huabeiUsed <= 0) return;
+
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const repayDay = data.huabeiRepayDay || 6;
+
+    // 如果本月已过还款日，且本月未还款，且有待还金额
+    if (now.getDate() > repayDay && data.huabeiLastRepayMonth !== currentMonth && data.huabeiUsed > 0) {
+        data.huabeiOverdue = true;
+        data.huabeiFrozen = true;
+        localStorage.setItem('walletData', JSON.stringify(data));
+    }
+}
+
+// 检查钱包是否被冻结（供外部调用）
+function isWalletFrozen() {
+    const data = JSON.parse(localStorage.getItem('walletData') || '{}');
+    return data.huabeiFrozen === true;
+}
+
+// 显示花呗详情页
+function showHuabeiDetailPage() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const remaining = data.huabeiTotal - data.huabeiUsed;
+    const repayDay = data.huabeiRepayDay || 6;
+    const minRepay = data.huabeiMinRepay || 10;
+    const minRepayAmount = Math.round(data.huabeiUsed * minRepay / 100 * 100) / 100;
+
+    // 创建全屏页面
+    let page = document.getElementById('huabeiDetailPage');
+    if (!page) {
+        page = document.createElement('div');
+        page.id = 'huabeiDetailPage';
+        page.className = 'settings-page';
+        document.body.appendChild(page);
+    }
+
+    const overdueHtml = data.huabeiOverdue ? `
+        <div style="margin:0 16px 14px;padding:14px 18px;background:#fff5f5;border-radius:14px;border:1px solid #ffe0e0;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="font-size:15px;font-weight:600;color:#e53e3e;">账户已逾期</span>
+            </div>
+            <div style="font-size:12px;color:#e53e3e;line-height:1.6;">
+                您的花呗已逾期未还款，钱包功能已被冻结。<br>请尽快还款以恢复正常使用。
+            </div>
+        </div>` : '';
+
+    page.innerHTML = `
+        <div class="wallet-page-inner">
+            <div class="wallet-header">
+                <div class="wallet-back-btn" onclick="closeHuabeiDetail()">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </div>
+                <div class="wallet-header-title">花呗</div>
+                <div style="width:40px;"></div>
+            </div>
+
+            ${overdueHtml}
+
+            <!-- 额度概览 -->
+            <div style="margin:16px;padding:24px 20px;background:#fff;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div style="text-align:center;margin-bottom:20px;">
+                    <div style="font-size:13px;color:#999;margin-bottom:8px;">剩余额度(元)</div>
+                    <div style="font-size:36px;font-weight:700;color:${remaining > 0 ? '#222' : '#e53e3e'};font-variant-numeric:tabular-nums;">${fmt(remaining)}</div>
+                </div>
+                <div class="wallet-huabei-row">
+                    <div class="wallet-huabei-item">
+                        <div class="wallet-huabei-label">总额度</div>
+                        <div class="wallet-huabei-value">${fmt(data.huabeiTotal)}</div>
+                    </div>
+                    <div class="wallet-huabei-divider"></div>
+                    <div class="wallet-huabei-item">
+                        <div class="wallet-huabei-label">已使用</div>
+                        <div class="wallet-huabei-value" style="color:#e8910d;">${fmt(data.huabeiUsed)}</div>
+                    </div>
+                    <div class="wallet-huabei-divider"></div>
+                    <div class="wallet-huabei-item">
+                        <div class="wallet-huabei-label">待还款</div>
+                        <div class="wallet-huabei-value wallet-huabei-due">${fmt(data.huabeiUsed)}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 还款信息 -->
+            <div style="margin:0 16px 14px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div style="padding:16px 18px 0;">
+                    <div style="font-size:16px;font-weight:600;color:#222;">还款信息</div>
+                </div>
+                <div style="padding:14px 18px 18px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+                        <span style="font-size:14px;color:#666;">每月还款日</span>
+                        <span style="font-size:14px;font-weight:500;color:#333;">每月${repayDay}号</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+                        <span style="font-size:14px;color:#666;">最低还款比例</span>
+                        <span style="font-size:14px;font-weight:500;color:#333;">${minRepay}%</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+                        <span style="font-size:14px;color:#666;">最低还款金额</span>
+                        <span style="font-size:14px;font-weight:500;color:#e8910d;">¥${fmt(minRepayAmount)}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div style="margin:0 16px 14px;display:flex;flex-direction:column;gap:10px;">
+                <button onclick="huabeiRepay()" style="width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;">立即还款</button>
+                <button onclick="openHuabeiSettings()" style="width:100%;padding:14px;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;">还款设置</button>
+                <button onclick="closeHuabeiService()" style="width:100%;padding:14px;border:1.5px solid #e8910d;border-radius:12px;font-size:15px;font-weight:500;color:#e8910d;background:#fff;cursor:pointer;">关闭花呗</button>
+            </div>
+
+            <div style="height:40px;"></div>
+        </div>
+    `;
+
+    page.classList.add('active');
+}
+
+// 关闭花呗详情
+function closeHuabeiDetail() {
+    const page = document.getElementById('huabeiDetailPage');
+    if (page) page.classList.remove('active');
+    // 刷新钱包UI
+    loadWalletData();
+}
+
+// 关闭花呗服务
+async function closeHuabeiService() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    if (data.huabeiUsed > 0) {
+        showIosAlert('无法关闭', '您还有未还清的花呗账单，请先还清所有欠款后再关闭花呗。');
+        return;
+    }
+    const ok = await iosConfirm('关闭后花呗额度将被清零，如需使用需重新开通。确认关闭？', '关闭花呗');
+    if (!ok) return;
+    data.huabeiEnabled = false;
+    data.huabeiTotal = 0;
+    data.huabeiUsed = 0;
+    data.huabeiOverdue = false;
+    data.huabeiFrozen = false;
+    data.huabeiLastRepayMonth = '';
+    localStorage.setItem('walletData', JSON.stringify(data));
+    showToast('花呗已关闭');
+    closeHuabeiDetail();
+}
+
+// 花呗还款
+async function huabeiRepay() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    if (data.huabeiUsed <= 0) {
+        showToast('当前无需还款');
+        return;
+    }
+
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const minRepay = data.huabeiMinRepay || 10;
+    const minAmount = Math.max(0.01, Math.round(data.huabeiUsed * minRepay / 100 * 100) / 100);
+
+    // 选择还款方式
+    const choice = await showHuabeiRepayChoice(data, fmt);
+    if (!choice) return;
+
+    iosPrompt(`还款金额（最低¥${fmt(minAmount)}）`, data.huabeiUsed.toFixed(2), async (val) => {
+        const amount = parseFloat(val);
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        if (amount < minAmount) {
+            showIosAlert('提示', `还款金额不能低于最低还款额 ¥${fmt(minAmount)}`);
+            return;
+        }
+        if (amount > data.huabeiUsed) {
+            showIosAlert('提示', '还款金额不能超过待还金额');
+            return;
+        }
+
+        // 检查还款来源余额
+        if (choice === 'balance') {
+            if (amount > data.balance) {
+                showIosAlert('提示', '余额不足');
+                return;
+            }
+            data.balance = Math.round((data.balance - amount) * 100) / 100;
+        } else if (choice === 'yuebao') {
+            if (amount > data.yuebaoAmount) {
+                showIosAlert('提示', '余额宝资金不足');
+                return;
+            }
+            data.yuebaoAmount = Math.round((data.yuebaoAmount - amount) * 100) / 100;
+        }
+
+        data.huabeiUsed = Math.round((data.huabeiUsed - amount) * 100) / 100;
+        if (data.huabeiUsed <= 0) {
+            data.huabeiUsed = 0;
+            data.huabeiOverdue = false;
+            data.huabeiFrozen = false;
+        }
+
+        // 记录还款月份
+        const now = new Date();
+        data.huabeiLastRepayMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        localStorage.setItem('walletData', JSON.stringify(data));
+        showToast('还款成功 ¥' + fmt(amount));
+        showHuabeiDetailPage(); // 刷新页面
+    });
+}
+
+// 花呗还款来源选择
+function showHuabeiRepayChoice(data, fmt) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'ios-dialog-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'ios-dialog';
+        dialog.style.width = '300px';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'ios-dialog-title';
+        titleEl.textContent = '选择还款来源';
+
+        const msgEl = document.createElement('div');
+        msgEl.className = 'ios-dialog-message';
+        msgEl.textContent = `余额: ¥${fmt(data.balance)}\n余额宝: ¥${fmt(data.yuebaoAmount)}`;
+
+        const buttonsEl = document.createElement('div');
+        buttonsEl.className = 'ios-dialog-buttons vertical';
+
+        const balBtn = document.createElement('button');
+        balBtn.className = 'ios-dialog-button primary';
+        balBtn.textContent = `余额还款 (¥${fmt(data.balance)})`;
+        balBtn.onclick = () => close('balance');
+
+        const yueBtn = document.createElement('button');
+        yueBtn.className = 'ios-dialog-button primary';
+        yueBtn.textContent = `余额宝还款 (¥${fmt(data.yuebaoAmount)})`;
+        yueBtn.onclick = () => close('yuebao');
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'ios-dialog-button';
+        cancelBtn.textContent = '取消';
+        cancelBtn.onclick = () => close(null);
+
+        buttonsEl.appendChild(balBtn);
+        buttonsEl.appendChild(yueBtn);
+        buttonsEl.appendChild(cancelBtn);
+        dialog.appendChild(titleEl);
+        dialog.appendChild(msgEl);
+        dialog.appendChild(buttonsEl);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        setTimeout(() => overlay.classList.add('show'), 10);
+
+        function close(result) {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                resolve(result);
+            }, 300);
+        }
+    });
+}
+
+// 花呗设置
+function openHuabeiSettings() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const repayDay = data.huabeiRepayDay || 6;
+    const minRepay = data.huabeiMinRepay || 10;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '300px';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '还款设置';
+
+    const formWrap = document.createElement('div');
+    formWrap.style.cssText = 'padding:12px 16px 16px;';
+
+    // 还款日选择
+    const dayLabel = document.createElement('div');
+    dayLabel.style.cssText = 'font-size:13px;color:#999;margin-bottom:6px;';
+    dayLabel.textContent = '每月还款日';
+    const daySelect = document.createElement('select');
+    daySelect.id = 'huabeiRepayDaySelect';
+    daySelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:14px;background:#fff;';
+    for (let i = 1; i <= 28; i++) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `每月${i}号`;
+        if (i === repayDay) opt.selected = true;
+        daySelect.appendChild(opt);
+    }
+
+    // 最低还款比例
+    const minLabel = document.createElement('div');
+    minLabel.style.cssText = 'font-size:13px;color:#999;margin-bottom:6px;';
+    minLabel.textContent = '最低还款比例';
+    const minSelect = document.createElement('select');
+    minSelect.id = 'huabeiMinRepaySelect';
+    minSelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;background:#fff;';
+    [5, 10, 15, 20, 30, 50].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = `${v}%`;
+        if (v === minRepay) opt.selected = true;
+        minSelect.appendChild(opt);
+    });
+
+    formWrap.appendChild(dayLabel);
+    formWrap.appendChild(daySelect);
+    formWrap.appendChild(minLabel);
+    formWrap.appendChild(minSelect);
+
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'ios-dialog-button primary';
+    saveBtn.textContent = '保存';
+    saveBtn.onclick = () => {
+        const newDay = parseInt(document.getElementById('huabeiRepayDaySelect').value);
+        const newMin = parseInt(document.getElementById('huabeiMinRepaySelect').value);
+        const d = JSON.parse(localStorage.getItem('walletData'));
+        d.huabeiRepayDay = newDay;
+        d.huabeiMinRepay = newMin;
+        localStorage.setItem('walletData', JSON.stringify(d));
+        closeDialog();
+        showToast('设置已保存');
+        showHuabeiDetailPage(); // 刷新
+    };
+
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(saveBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(formWrap);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => overlay.classList.add('show'), 10);
+
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => document.body.removeChild(overlay), 300);
+    }
+}
+
+// 根据用户人设和余额计算花呗额度
+function calculateHuabeiQuota() {
+    // 获取用户人设描述
+    let userDesc = '';
+    let userName = '';
+    try {
+        const userDataStr = localStorage.getItem('chatUserData');
+        if (userDataStr) {
+            const userData = JSON.parse(userDataStr);
+            userDesc = (userData.description || '').toLowerCase();
+            userName = userData.name || '';
+        }
+    } catch (e) {}
+
+    // 也检查personas中标记为ID卡的人设
+    try {
+        const personasData = localStorage.getItem('personas');
+        if (personasData) {
+            const allPersonas = JSON.parse(personasData);
+            const idCard = allPersonas.find(p => p.isIdCard === true);
+            if (idCard && idCard.description) {
+                userDesc += ' ' + idCard.description.toLowerCase();
+            }
+        }
+    } catch (e) {}
+
+    // 获取钱包余额
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    const balance = walletData.balance || 0;
+
+    // ===== 人设关键词分析 =====
+    // 富裕关键词
+    const richKeywords = ['富', '有钱', '土豪', '富豪', '老板', '总裁', 'ceo', '董事', '企业家',
+        '百万', '千万', '亿', '豪车', '豪宅', '别墅', '奢侈', '贵族', '名媛', '富二代',
+        '继承', '财阀', '大佬', '巨富', '首富', '资产', '投资人', '金融'];
+    // 中产关键词
+    const middleKeywords = ['白领', '程序员', '工程师', '医生', '律师', '教师', '老师', '公务员',
+        '经理', '主管', '设计师', '会计', '上班族', '职员', '中产', '小康', '稳定'];
+    // 贫穷关键词
+    const poorKeywords = ['穷', '没钱', '贫', '打工', '底层', '月光', '负债', '欠债', '破产',
+        '失业', '流浪', '乞丐', '困难', '拮据', '窘迫', '落魄', '潦倒', '屌丝', '社畜'];
+    // 学生关键词
+    const studentKeywords = ['学生', '大学', '高中', '初中', '小学', '校园', '读书', '学校',
+        '毕业', '在校', '研究生', '博士', '本科', '专科'];
+
+    let personaScore = 50; // 默认中等 (0-100)
+
+    // 计算人设得分
+    richKeywords.forEach(kw => { if (userDesc.includes(kw)) personaScore += 15; });
+    middleKeywords.forEach(kw => { if (userDesc.includes(kw)) personaScore += 5; });
+    poorKeywords.forEach(kw => { if (userDesc.includes(kw)) personaScore -= 15; });
+    studentKeywords.forEach(kw => { if (userDesc.includes(kw)) personaScore -= 8; });
+
+    // 限制范围
+    personaScore = Math.max(5, Math.min(100, personaScore));
+
+    // ===== 余额因子 =====
+    let balanceFactor;
+    if (balance >= 100000) balanceFactor = 1.0;
+    else if (balance >= 50000) balanceFactor = 0.85;
+    else if (balance >= 10000) balanceFactor = 0.7;
+    else if (balance >= 5000) balanceFactor = 0.5;
+    else if (balance >= 1000) balanceFactor = 0.35;
+    else if (balance >= 100) balanceFactor = 0.2;
+    else balanceFactor = 0.1;
+
+    // ===== 综合计算额度 =====
+    // 基础额度范围：500 ~ 200000
+    const baseQuota = (personaScore / 100) * 150000 + 500;
+    let finalQuota = baseQuota * balanceFactor;
+
+    // 加一点随机浮动 (±10%)
+    const randomFactor = 0.9 + Math.random() * 0.2;
+    finalQuota = finalQuota * randomFactor;
+
+    // 取整到百
+    finalQuota = Math.round(finalQuota / 100) * 100;
+
+    // 最低500，最高200000
+    finalQuota = Math.max(500, Math.min(200000, finalQuota));
+
+    return {
+        quota: finalQuota,
+        personaScore: personaScore,
+        balance: balance,
+        hasPersona: userDesc.trim().length > 0
+    };
+}
+
+// 开通花呗 — 弹出选择方式
+async function activateHuabei() {
+    // 创建选择弹窗：AI评估 or 随机额度
+    const choice = await showHuabeiActivateChoice();
+    if (!choice) return; // 用户取消
+
+    let quota = 0;
+
+    if (choice === 'ai') {
+        // ===== AI 评估模式 =====
+        quota = await getHuabeiQuotaFromAI();
+        if (quota === null) return; // 用户取消或失败
+    } else {
+        // ===== 随机额度模式 =====
+        const presets = [500, 1000, 1500, 2000, 3000, 5000, 8000, 10000, 15000, 20000, 30000, 50000, 80000, 100000, 150000, 200000];
+        quota = presets[Math.floor(Math.random() * presets.length)];
+    }
+
+    // 确认开通
+    const ok = await iosConfirm(`预计可获得额度：¥${quota.toLocaleString()}\n\n确认开通花呗？`, '开通花呗');
+    if (ok) {
+        const data = JSON.parse(localStorage.getItem('walletData'));
+        data.huabeiEnabled = true;
+        data.huabeiTotal = quota;
+        data.huabeiUsed = 0;
+        localStorage.setItem('walletData', JSON.stringify(data));
+        updateWalletUI(data);
+        showToast('花呗开通成功，额度 ¥' + quota.toLocaleString());
+    }
+}
+
+// 花呗开通方式选择弹窗
+function showHuabeiActivateChoice() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'ios-dialog-overlay';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'ios-dialog';
+        dialog.style.width = '300px';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'ios-dialog-title';
+        titleEl.textContent = '开通花呗';
+
+        const msgEl = document.createElement('div');
+        msgEl.className = 'ios-dialog-message';
+        msgEl.textContent = '请选择额度生成方式';
+
+        const buttonsEl = document.createElement('div');
+        buttonsEl.className = 'ios-dialog-buttons vertical';
+
+        // AI评估按钮
+        const aiBtn = document.createElement('button');
+        aiBtn.className = 'ios-dialog-button primary';
+        aiBtn.innerHTML = 'AI智能评估';
+        aiBtn.onclick = () => close('ai');
+
+        // 随机额度按钮
+        const randomBtn = document.createElement('button');
+        randomBtn.className = 'ios-dialog-button primary';
+        randomBtn.innerHTML = '随机额度';
+        randomBtn.onclick = () => close('random');
+
+        // 取消按钮
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'ios-dialog-button';
+        cancelBtn.textContent = '取消';
+        cancelBtn.onclick = () => close(null);
+
+        buttonsEl.appendChild(aiBtn);
+        buttonsEl.appendChild(randomBtn);
+        buttonsEl.appendChild(cancelBtn);
+        dialog.appendChild(titleEl);
+        dialog.appendChild(msgEl);
+        dialog.appendChild(buttonsEl);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        setTimeout(() => overlay.classList.add('show'), 10);
+
+        function close(result) {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                resolve(result);
+            }, 300);
+        }
+    });
+}
+
+// 通过AI API评估花呗额度
+async function getHuabeiQuotaFromAI() {
+    // 获取API设置
+    const settings = await getSummaryApiSettings();
+    if (!settings || !settings.apiUrl || !settings.apiKey || !settings.model) {
+        await showIosAlert('提示', 'API未配置，请先在设置中配置API');
+        return null;
+    }
+
+    // 收集用户信息
+    let userDesc = '';
+    let userName = '';
+    try {
+        const userDataStr = localStorage.getItem('chatUserData');
+        if (userDataStr) {
+            const userData = JSON.parse(userDataStr);
+            userDesc = userData.description || '';
+            userName = userData.name || '';
+        }
+    } catch (e) {}
+
+    try {
+        const personasData = localStorage.getItem('personas');
+        if (personasData) {
+            const allPersonas = JSON.parse(personasData);
+            const idCard = allPersonas.find(p => p.isIdCard === true);
+            if (idCard && idCard.description) {
+                userDesc += '\n' + idCard.description;
+            }
+        }
+    } catch (e) {}
+
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    const balance = walletData.balance || 0;
+
+    const prompt = `你是一个花呗额度评估系统。请根据以下用户信息，给出一个合理的花呗额度数字（单位：元）。
+
+用户名称：${userName || '未知'}
+用户人设描述：${userDesc || '无'}
+账户余额：¥${balance.toFixed(2)}
+
+规则：
+- 额度范围：500 ~ 200000
+- 额度必须是100的整数倍
+- 根据用户的身份、职业、经济状况等综合判断
+- 余额越高，额度倾向越高
+- 如果人设描述为空，主要参考余额
+
+请只回复一个纯数字，不要包含任何其他文字、符号或解释。例如：15000`;
+
+    // 显示加载提示
+    showToast('AI正在评估您的额度...');
+
+    try {
+        let response;
+        const provider = settings.provider || '';
+
+        if (provider === 'hakimi') {
+            response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.7, maxOutputTokens: 50 }
+                })
+            });
+        } else if (provider === 'claude') {
+            response = await fetch(`${settings.apiUrl}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': settings.apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true'
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    max_tokens: 50,
+                    temperature: 0.7,
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+        } else {
+            response = await fetch(`${settings.apiUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    temperature: 0.7,
+                    max_tokens: 50,
+                    messages: [{ role: 'user', content: prompt }]
+                })
+            });
+        }
+
+        if (!response.ok) {
+            throw new Error(`API请求失败: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('花呗AI返回原始数据:', JSON.stringify(data));
+        let text = '';
+
+        if (provider === 'hakimi') {
+            text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        } else if (provider === 'claude') {
+            text = data.content?.[0]?.text || '';
+        } else {
+            // 兼容更多格式
+            text = data.choices?.[0]?.message?.content
+                || data.choices?.[0]?.text
+                || data.result?.text
+                || data.output?.text
+                || (typeof data.result === 'string' ? data.result : '')
+                || (typeof data.output === 'string' ? data.output : '')
+                || '';
+        }
+
+        console.log('花呗AI解析文本:', text);
+
+        // 从回复中提取数字（更宽松的匹配）
+        const match = text.replace(/,/g, '').match(/\d+/);
+        if (match) {
+            let quota = parseInt(match[0]);
+            quota = Math.round(quota / 100) * 100;
+            quota = Math.max(500, Math.min(200000, quota));
+            return quota;
+        } else {
+            // 最后兜底：尝试从整个JSON响应中找数字
+            const rawStr = JSON.stringify(data);
+            const fallbackMatch = rawStr.match(/(\d{3,6})/);
+            if (fallbackMatch) {
+                let quota = parseInt(fallbackMatch[0]);
+                quota = Math.round(quota / 100) * 100;
+                quota = Math.max(500, Math.min(200000, quota));
+                console.log('花呗AI兜底解析额度:', quota);
+                return quota;
+            }
+            throw new Error('AI返回内容无法解析: ' + text);
+        }
+    } catch (e) {
+        console.error('AI评估花呗额度失败:', e);
+        await showIosAlert('提示', 'AI评估失败，已切换为本地评估');
+        // fallback到本地计算
+        const result = calculateHuabeiQuota();
+        return result.quota;
+    }
+}
+
+// 计算余额宝每日利息
+function calculateYuebaoInterest() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    if (!data || data.yuebaoAmount <= 0) return;
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    if (data.yuebaoLastUpdate === todayStr) return; // 今天已经算过了
+
+    const rate = data.yuebaoRate || 2.35; // 七日年化利率(%)
+    const dailyRate = rate / 100 / 365;
+
+    if (data.yuebaoLastUpdate) {
+        // 计算距离上次更新过了几天
+        const lastDate = new Date(data.yuebaoLastUpdate);
+        const diffTime = today.getTime() - lastDate.getTime();
+        const diffDays = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+
+        // 按天复利计算
+        const interest = Math.round(data.yuebaoAmount * dailyRate * diffDays * 100) / 100;
+        data.yuebaoEarn = Math.round(data.yuebaoAmount * dailyRate * 100) / 100; // 昨日收益（按1天算）
+        data.yuebaoAmount = Math.round((data.yuebaoAmount + interest) * 100) / 100;
+        data.yuebaoTotalEarn = Math.round(((data.yuebaoTotalEarn || 0) + interest) * 100) / 100;
+    } else {
+        // 首次，只记录日期，不产生利息
+        data.yuebaoEarn = 0;
+    }
+
+    data.yuebaoLastUpdate = todayStr;
+    localStorage.setItem('walletData', JSON.stringify(data));
+}
+
+// 余额宝详情
+function openYuebao() {
+    calculateYuebaoInterest();
+    showYuebaoDetailPage();
+}
+
+// 余额宝详情页
+function showYuebaoDetailPage() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const rate = data.yuebaoRate || 2.35;
+    const dailyEarn = Math.round(data.yuebaoAmount * rate / 100 / 365 * 100) / 100;
+
+    let page = document.getElementById('yuebaoDetailPage');
+    if (!page) {
+        page = document.createElement('div');
+        page.id = 'yuebaoDetailPage';
+        page.className = 'settings-page';
+        document.body.appendChild(page);
+    }
+
+    page.innerHTML = `
+        <div class="wallet-page-inner">
+            <div class="wallet-header">
+                <div class="wallet-back-btn" onclick="closeYuebaoDetail()">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </div>
+                <div class="wallet-header-title">余额宝</div>
+                <div style="width:40px;"></div>
+            </div>
+
+            <!-- 总金额 -->
+            <div style="margin:16px;padding:24px 20px;background:#fff;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div style="text-align:center;margin-bottom:20px;">
+                    <div style="font-size:13px;color:#999;margin-bottom:8px;">总金额(元)</div>
+                    <div style="font-size:36px;font-weight:700;color:#222;font-variant-numeric:tabular-nums;">${fmt(data.yuebaoAmount)}</div>
+                </div>
+                <div class="wallet-huabei-row">
+                    <div class="wallet-huabei-item">
+                        <div class="wallet-huabei-label">昨日收益</div>
+                        <div class="wallet-huabei-value" style="color:#22a06b;">+${fmt(data.yuebaoEarn)}</div>
+                    </div>
+                    <div class="wallet-huabei-divider"></div>
+                    <div class="wallet-huabei-item">
+                        <div class="wallet-huabei-label">累计收益</div>
+                        <div class="wallet-huabei-value" style="color:#22a06b;">+${fmt(data.yuebaoTotalEarn || 0)}</div>
+                    </div>
+                    <div class="wallet-huabei-divider"></div>
+                    <div class="wallet-huabei-item">
+                        <div class="wallet-huabei-label">预估日收益</div>
+                        <div class="wallet-huabei-value" style="color:#22a06b;">+${fmt(dailyEarn)}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 收益信息 -->
+            <div style="margin:0 16px 14px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div style="padding:16px 18px 0;">
+                    <div style="font-size:16px;font-weight:600;color:#222;">收益信息</div>
+                </div>
+                <div style="padding:14px 18px 18px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+                        <span style="font-size:14px;color:#666;">七日年化收益率</span>
+                        <span style="font-size:14px;font-weight:500;color:#e8910d;">${rate}%</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+                        <span style="font-size:14px;color:#666;">每万份收益</span>
+                        <span style="font-size:14px;font-weight:500;color:#333;">¥${fmt(10000 * rate / 100 / 365)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+                        <span style="font-size:14px;color:#666;">收益计算方式</span>
+                        <span style="font-size:14px;font-weight:500;color:#333;">按日计息</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div style="margin:0 16px 14px;display:flex;flex-direction:column;gap:10px;">
+                <button onclick="transferToYuebao()" style="width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;">转入</button>
+                <button onclick="transferFromYuebao()" style="width:100%;padding:14px;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;">转出到余额</button>
+            </div>
+
+            <div style="margin:0 16px;padding:14px 18px;background:#f9f9f9;border-radius:12px;">
+                <div style="font-size:12px;color:#999;line-height:1.8;">
+                    · 转入资金次日开始产生收益<br>
+                    · 收益每日自动计入本金<br>
+                    · 转出实时到账，无手续费
+                </div>
+            </div>
+
+            <div style="height:40px;"></div>
+        </div>
+    `;
+
+    page.classList.add('active');
+}
+
+// 关闭余额宝详情
+function closeYuebaoDetail() {
+    const page = document.getElementById('yuebaoDetailPage');
+    if (page) page.classList.remove('active');
+    loadWalletData();
+}
+
+// 转入余额宝
+function transferToYuebao() {
+    iosPrompt('转入金额', '', (val) => {
+        const amount = parseFloat(val);
+        const data = JSON.parse(localStorage.getItem('walletData'));
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        if (amount > data.balance) {
+            showIosAlert('提示', '余额不足');
+            return;
+        }
+        data.balance = Math.round((data.balance - amount) * 100) / 100;
+        data.yuebaoAmount = Math.round((data.yuebaoAmount + amount) * 100) / 100;
+        if (!data.yuebaoRate) data.yuebaoRate = 2.35;
+        // 如果是首次转入，记录今天为起始日期（次日开始计息）
+        if (!data.yuebaoLastUpdate) {
+            const today = new Date();
+            data.yuebaoLastUpdate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        }
+        localStorage.setItem('walletData', JSON.stringify(data));
+        showToast('转入成功 ¥' + amount.toFixed(2));
+        // 如果详情页打开着就刷新
+        const detailPage = document.getElementById('yuebaoDetailPage');
+        if (detailPage && detailPage.classList.contains('active')) {
+            showYuebaoDetailPage();
+        } else {
+            updateWalletUI(data);
+        }
+    });
+}
+
+// 从余额宝转出
+function transferFromYuebao() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    if (data.yuebaoAmount <= 0) {
+        showToast('余额宝暂无资金');
+        return;
+    }
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    iosPrompt(`转出金额（可用 ¥${fmt(data.yuebaoAmount)}）`, '', (val) => {
+        const amount = parseFloat(val);
+        const d = JSON.parse(localStorage.getItem('walletData'));
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        if (amount > d.yuebaoAmount) {
+            showIosAlert('提示', '余额宝资金不足');
+            return;
+        }
+        d.yuebaoAmount = Math.round((d.yuebaoAmount - amount) * 100) / 100;
+        d.balance = Math.round((d.balance + amount) * 100) / 100;
+        localStorage.setItem('walletData', JSON.stringify(d));
+        showToast('转出成功 ¥' + amount.toFixed(2));
+        const detailPage = document.getElementById('yuebaoDetailPage');
+        if (detailPage && detailPage.classList.contains('active')) {
+            showYuebaoDetailPage();
+        } else {
+            updateWalletUI(d);
+        }
+    });
+}
+
+// 银行卡管理
+function openBankCards() {
+    showBankCardListPage();
+}
+
+// 小荷包（占位）
+function openXiaohe() {
+    showIosAlert('小荷包', '小荷包功能开发中，敬请期待');
+}
+
+// 账单
+function openWalletBills() {
+    showIosAlert('账单', '账单功能开发中，敬请期待');
+}
+
+// 生成随机银行卡号（16位）
+function generateBankCardNumber() {
+    let num = '';
+    for (let i = 0; i < 16; i++) {
+        num += Math.floor(Math.random() * 10);
+    }
+    return num;
+}
+
+// 添加银行卡
+function addBankCard() {
+    let cardImage = '';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '300px';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '添加银行卡';
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:8px 16px 16px;';
+
+    // 卡片图片
+    const imgLabel = document.createElement('div');
+    imgLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    imgLabel.textContent = '卡片图片（可选）';
+    const imgPreview = document.createElement('div');
+    imgPreview.id = 'bankCardImgPreview';
+    imgPreview.style.cssText = 'width:100%;height:60px;border:1.5px dashed #d0d0d0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#999;cursor:pointer;margin-bottom:12px;overflow:hidden;transition:border-color 0.2s;';
+    imgPreview.textContent = '点击上传图片';
+    imgPreview.onclick = () => {
+        closeDialog();
+        openS2ImagePicker('银行卡图片', { maxWidth: 200, maxHeight: 200, quality: 0.8, maxSizeKB: 100 }, (data) => {
+            cardImage = data;
+            addBankCard.__resumeData = { cardImage: data };
+            addBankCard();
+        });
+    };
+
+    // 如果是从图片选择器返回的
+    if (addBankCard.__resumeData) {
+        cardImage = addBankCard.__resumeData.cardImage;
+        delete addBankCard.__resumeData;
+        imgPreview.innerHTML = `<img src="${cardImage}" style="height:56px;border-radius:8px;object-fit:cover;">`;
+        imgPreview.style.borderStyle = 'solid';
+        imgPreview.style.borderColor = '#e0e0e0';
+    }
+
+    // 银行名称
+    const nameLabel = document.createElement('div');
+    nameLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    nameLabel.textContent = '银行名称';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.placeholder = '例如：中国银行';
+    nameInput.maxLength = 20;
+    nameInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;';
+    nameInput.onfocus = () => { nameInput.style.borderColor = '#007aff'; };
+    nameInput.onblur = () => { nameInput.style.borderColor = '#e0e0e0'; };
+
+    // 卡片类型
+    const typeLabel = document.createElement('div');
+    typeLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    typeLabel.textContent = '卡片类型';
+    const typeSelect = document.createElement('select');
+    typeSelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;background:#fff;';
+    ['储蓄卡', '信用卡'].forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        typeSelect.appendChild(opt);
+    });
+
+    // 卡内余额
+    const balLabel = document.createElement('div');
+    balLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    balLabel.textContent = '卡内余额';
+    const balInput = document.createElement('input');
+    balInput.type = 'number';
+    balInput.placeholder = '0.00';
+    balInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;';
+    balInput.onfocus = () => { balInput.style.borderColor = '#007aff'; };
+    balInput.onblur = () => { balInput.style.borderColor = '#e0e0e0'; };
+
+    // 额度限制
+    const limitLabel = document.createElement('div');
+    limitLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    limitLabel.textContent = '额度限制（0为不限）';
+    const limitInput = document.createElement('input');
+    limitInput.type = 'number';
+    limitInput.placeholder = '0';
+    limitInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;';
+    limitInput.onfocus = () => { limitInput.style.borderColor = '#007aff'; };
+    limitInput.onblur = () => { limitInput.style.borderColor = '#e0e0e0'; };
+
+    body.appendChild(imgLabel);
+    body.appendChild(imgPreview);
+    body.appendChild(nameLabel);
+    body.appendChild(nameInput);
+    body.appendChild(typeLabel);
+    body.appendChild(typeSelect);
+    body.appendChild(balLabel);
+    body.appendChild(balInput);
+    body.appendChild(limitLabel);
+    body.appendChild(limitInput);
+
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'ios-dialog-button primary';
+    saveBtn.textContent = '添加';
+    saveBtn.onclick = () => {
+        const name = nameInput.value.trim();
+        if (!name) { showToast('请输入银行名称'); return; }
+        const cardNum = generateBankCardNumber();
+        const tail = cardNum.slice(-4);
+        const balance = Math.max(0, parseFloat(balInput.value) || 0);
+        const limit = Math.max(0, parseFloat(limitInput.value) || 0);
+
+        const newCard = {
+            id: 'card_' + Date.now(),
+            name: name,
+            type: typeSelect.value,
+            cardNumber: cardNum,
+            tail: tail,
+            balance: Math.round(balance * 100) / 100,
+            limit: Math.round(limit * 100) / 100,
+            image: cardImage || '',
+            createdAt: new Date().toISOString()
+        };
+
+        const data = JSON.parse(localStorage.getItem('walletData'));
+        if (!data.bankCards) data.bankCards = [];
+        data.bankCards.push(newCard);
+        localStorage.setItem('walletData', JSON.stringify(data));
+        closeDialog();
+        showToast('银行卡添加成功');
+        loadWalletData();
+        // 如果管理页打开着就刷新
+        const listPage = document.getElementById('bankCardListPage');
+        if (listPage && listPage.classList.contains('active')) {
+            showBankCardListPage();
+        }
+    };
+
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(saveBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(body);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => { overlay.classList.add('show'); nameInput.focus(); }, 10);
+
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+    }
+}
+
+// 银行卡管理列表页
+function showBankCardListPage() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const cards = data.bankCards || [];
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    let page = document.getElementById('bankCardListPage');
+    if (!page) {
+        page = document.createElement('div');
+        page.id = 'bankCardListPage';
+        page.className = 'settings-page';
+        document.body.appendChild(page);
+    }
+
+    const bankColors = ['#e8f0fe', '#fef3e8', '#f0fdf4', '#fdf2f8'];
+    const bankStroke = ['#3b7ddd', '#e8910d', '#22a06b', '#d946a8'];
+
+    const cardsHtml = cards.length > 0 ? cards.map((card, i) => `
+        <div style="margin:0 16px 10px;padding:16px;background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,0.04);cursor:pointer;" onclick="openBankCardDetail(${i})">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                <div style="width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:${bankColors[i % 4]};color:${bankStroke[i % 4]};overflow:hidden;flex-shrink:0;">
+                    ${card.image
+                        ? `<img src="${card.image}" style="width:44px;height:44px;object-fit:cover;">`
+                        : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`
+                    }
+                </div>
+                <div style="flex:1;">
+                    <div style="font-size:15px;font-weight:600;color:#222;">${card.name}</div>
+                    <div style="font-size:12px;color:#aaa;margin-top:2px;">${card.type} · ${card.cardNumber.replace(/(\d{4})/g, '$1 ').trim()}</div>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                    <div style="font-size:12px;color:#999;">余额</div>
+                    <div style="font-size:18px;font-weight:700;color:#222;font-variant-numeric:tabular-nums;">¥${fmt(card.balance)}</div>
+                </div>
+                ${card.limit > 0 ? `<div style="text-align:right;">
+                    <div style="font-size:12px;color:#999;">额度限制</div>
+                    <div style="font-size:14px;font-weight:500;color:#e8910d;">¥${fmt(card.limit)}</div>
+                </div>` : ''}
+            </div>
+        </div>
+    `).join('') : '<div style="text-align:center;padding:40px 0;color:#ccc;font-size:14px;">暂无银行卡</div>';
+
+    page.innerHTML = `
+        <div class="wallet-page-inner">
+            <div class="wallet-header">
+                <div class="wallet-back-btn" onclick="closeBankCardList()">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </div>
+                <div class="wallet-header-title">银行卡管理</div>
+                <div style="width:40px;"></div>
+            </div>
+            <div style="margin-top:12px;">
+            ${cardsHtml}
+            </div>
+            <div style="margin:14px 16px;">
+                <button onclick="addBankCard()" style="width:100%;padding:14px;border:1.5px dashed #d0d0d0;border-radius:12px;font-size:15px;font-weight:500;color:#999;background:#fff;cursor:pointer;">+ 添加银行卡</button>
+            </div>
+            <div style="height:40px;"></div>
+        </div>
+    `;
+
+    page.classList.add('active');
+}
+
+// 关闭银行卡列表
+function closeBankCardList() {
+    const page = document.getElementById('bankCardListPage');
+    if (page) page.classList.remove('active');
+    loadWalletData();
+}
+
+// 银行卡详情
+function openBankCardDetail(index) {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const cards = data.bankCards || [];
+    if (index < 0 || index >= cards.length) return;
+    const card = cards[index];
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const bankColors = ['#e8f0fe', '#fef3e8', '#f0fdf4', '#fdf2f8'];
+    const bankStroke = ['#3b7ddd', '#e8910d', '#22a06b', '#d946a8'];
+
+    let page = document.getElementById('bankCardDetailPage');
+    if (!page) {
+        page = document.createElement('div');
+        page.id = 'bankCardDetailPage';
+        page.className = 'settings-page';
+        document.body.appendChild(page);
+    }
+
+    page.innerHTML = `
+        <div class="wallet-page-inner">
+            <div class="wallet-header">
+                <div class="wallet-back-btn" onclick="closeBankCardDetail()">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </div>
+                <div class="wallet-header-title">${card.name}</div>
+                <div style="width:40px;"></div>
+            </div>
+
+            <!-- 卡片展示 -->
+            <div style="margin:16px;padding:24px 20px;background:${bankColors[index % 4]};border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+                    ${card.image
+                        ? `<img src="${card.image}" style="width:48px;height:48px;border-radius:12px;object-fit:cover;">`
+                        : `<div style="width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.6);color:${bankStroke[index % 4]};"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="3"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>`
+                    }
+                    <div>
+                        <div style="font-size:17px;font-weight:700;color:#222;">${card.name}</div>
+                        <div style="font-size:12px;color:#666;margin-top:2px;">${card.type}</div>
+                    </div>
+                </div>
+                <div style="font-size:13px;color:#666;margin-bottom:4px;">卡号</div>
+                <div style="font-size:18px;font-weight:600;color:#222;letter-spacing:2px;font-variant-numeric:tabular-nums;">${card.cardNumber.replace(/(\d{4})/g, '$1 ').trim()}</div>
+            </div>
+
+            <!-- 余额信息 -->
+            <div style="margin:0 16px 14px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div style="padding:14px 18px 18px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+                        <span style="font-size:14px;color:#666;">卡内余额</span>
+                        <span style="font-size:16px;font-weight:600;color:#222;">¥${fmt(card.balance)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f5f5f5;">
+                        <span style="font-size:14px;color:#666;">额度限制</span>
+                        <span style="font-size:14px;font-weight:500;color:#333;">${card.limit > 0 ? '¥' + fmt(card.limit) : '无限制'}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;">
+                        <span style="font-size:14px;color:#666;">添加时间</span>
+                        <span style="font-size:14px;font-weight:500;color:#333;">${card.createdAt ? new Date(card.createdAt).toLocaleDateString('zh-CN') : '未知'}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div style="margin:0 16px 14px;display:flex;flex-direction:column;gap:10px;">
+                <button onclick="editBankCard(${index})" style="width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;">编辑</button>
+                <button onclick="deleteBankCard(${index})" style="width:100%;padding:14px;border:1.5px solid #e53e3e;border-radius:12px;font-size:15px;font-weight:500;color:#e53e3e;background:#fff;cursor:pointer;">删除银行卡</button>
+            </div>
+
+            <div style="height:40px;"></div>
+        </div>
+    `;
+
+    page.classList.add('active');
+}
+
+// 关闭银行卡详情
+function closeBankCardDetail() {
+    const page = document.getElementById('bankCardDetailPage');
+    if (page) page.classList.remove('active');
+    // 刷新列表页
+    const listPage = document.getElementById('bankCardListPage');
+    if (listPage && listPage.classList.contains('active')) {
+        showBankCardListPage();
+    }
+    loadWalletData();
+}
+
+// 编辑银行卡
+function editBankCard(index) {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const card = data.bankCards[index];
+    if (!card) return;
+
+    let cardImage = card.image || '';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '300px';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '编辑银行卡';
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:8px 16px 16px;';
+
+    // 卡片图片
+    const imgLabel = document.createElement('div');
+    imgLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    imgLabel.textContent = '卡片图片';
+    const imgPreview = document.createElement('div');
+    imgPreview.style.cssText = 'width:100%;height:60px;border:1.5px dashed #d0d0d0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#999;cursor:pointer;margin-bottom:12px;overflow:hidden;';
+    if (cardImage) {
+        imgPreview.innerHTML = `<img src="${cardImage}" style="height:56px;border-radius:8px;object-fit:cover;">`;
+        imgPreview.style.borderStyle = 'solid';
+        imgPreview.style.borderColor = '#e0e0e0';
+    } else {
+        imgPreview.textContent = '点击上传图片';
+    }
+    imgPreview.onclick = () => {
+        closeDialog();
+        openS2ImagePicker('银行卡图片', { maxWidth: 200, maxHeight: 200, quality: 0.8, maxSizeKB: 100 }, (imgData) => {
+            editBankCard.__resumeData = { index, cardImage: imgData };
+            editBankCard(index);
+        });
+    };
+
+    if (editBankCard.__resumeData && editBankCard.__resumeData.index === index) {
+        cardImage = editBankCard.__resumeData.cardImage;
+        delete editBankCard.__resumeData;
+        imgPreview.innerHTML = `<img src="${cardImage}" style="height:56px;border-radius:8px;object-fit:cover;">`;
+        imgPreview.style.borderStyle = 'solid';
+        imgPreview.style.borderColor = '#e0e0e0';
+    }
+
+    // 名称
+    const nameLabel = document.createElement('div');
+    nameLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    nameLabel.textContent = '银行名称';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = card.name;
+    nameInput.maxLength = 20;
+    nameInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;';
+    nameInput.onfocus = () => { nameInput.style.borderColor = '#007aff'; };
+    nameInput.onblur = () => { nameInput.style.borderColor = '#e0e0e0'; };
+
+    // 类型
+    const typeLabel = document.createElement('div');
+    typeLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    typeLabel.textContent = '卡片类型';
+    const typeSelect = document.createElement('select');
+    typeSelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;background:#fff;';
+    ['储蓄卡', '信用卡'].forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        if (t === card.type) opt.selected = true;
+        typeSelect.appendChild(opt);
+    });
+
+    // 余额
+    const balLabel = document.createElement('div');
+    balLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    balLabel.textContent = '卡内余额';
+    const balInput = document.createElement('input');
+    balInput.type = 'number';
+    balInput.value = card.balance;
+    balInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;';
+    balInput.onfocus = () => { balInput.style.borderColor = '#007aff'; };
+    balInput.onblur = () => { balInput.style.borderColor = '#e0e0e0'; };
+
+    // 额度
+    const limitLabel = document.createElement('div');
+    limitLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:4px;';
+    limitLabel.textContent = '额度限制（0为不限）';
+    const limitInput = document.createElement('input');
+    limitInput.type = 'number';
+    limitInput.value = card.limit || 0;
+    limitInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;';
+    limitInput.onfocus = () => { limitInput.style.borderColor = '#007aff'; };
+    limitInput.onblur = () => { limitInput.style.borderColor = '#e0e0e0'; };
+
+    body.appendChild(imgLabel);
+    body.appendChild(imgPreview);
+    body.appendChild(nameLabel);
+    body.appendChild(nameInput);
+    body.appendChild(typeLabel);
+    body.appendChild(typeSelect);
+    body.appendChild(balLabel);
+    body.appendChild(balInput);
+    body.appendChild(limitLabel);
+    body.appendChild(limitInput);
+
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'ios-dialog-button primary';
+    saveBtn.textContent = '保存';
+    saveBtn.onclick = () => {
+        const name = nameInput.value.trim();
+        if (!name) { showToast('请输入银行名称'); return; }
+        const d = JSON.parse(localStorage.getItem('walletData'));
+        d.bankCards[index].name = name;
+        d.bankCards[index].type = typeSelect.value;
+        d.bankCards[index].balance = Math.round(Math.max(0, parseFloat(balInput.value) || 0) * 100) / 100;
+        d.bankCards[index].limit = Math.round(Math.max(0, parseFloat(limitInput.value) || 0) * 100) / 100;
+        d.bankCards[index].image = cardImage;
+        localStorage.setItem('walletData', JSON.stringify(d));
+        closeDialog();
+        showToast('银行卡已更新');
+        openBankCardDetail(index);
+    };
+
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(saveBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(body);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    setTimeout(() => { overlay.classList.add('show'); nameInput.focus(); }, 10);
+
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+    }
+}
+
+// 删除银行卡
+async function deleteBankCard(index) {
+    const ok = await iosConfirm('确认删除该银行卡？此操作不可撤销。', '删除银行卡');
+    if (!ok) return;
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    data.bankCards.splice(index, 1);
+    localStorage.setItem('walletData', JSON.stringify(data));
+    showToast('银行卡已删除');
+    closeBankCardDetail();
+}
+
+// ========== 主屏幕翻页功能 ==========
+
+let _homeCurrentPage = 0;
+const _homeTotalPages = 2;
+
+function initHomePageSwipe() {
+    const wrapper = document.getElementById('homePagesWrapper');
+    const mainScreen = document.getElementById('mainScreen');
+    if (!wrapper || !mainScreen) return;
+
+    let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = null;
+
+    // 触摸事件
+    wrapper.addEventListener('touchstart', onStart, { passive: true });
+    wrapper.addEventListener('touchmove', onMove, { passive: false });
+    wrapper.addEventListener('touchend', onEnd, { passive: true });
+
+    // 鼠标事件（PC端）
+    wrapper.addEventListener('mousedown', onMouseDown);
+
+    function onStart(e) {
+        const t = e.touches[0];
+        startX = t.clientX;
+        startY = t.clientY;
+        diffX = 0;
+        isScrolling = null;
+        wrapper.classList.add('swiping');
+    }
+
+    function onMove(e) {
+        if (!e.touches.length) return;
+        const t = e.touches[0];
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+
+        // 判断是横向滑动还是纵向滚动
+        if (isScrolling === null) {
+            isScrolling = Math.abs(dy) > Math.abs(dx);
+        }
+        if (isScrolling) return;
+
+        e.preventDefault();
+        diffX = dx;
+
+        // 边界阻尼
+        let offset = -_homeCurrentPage * 100 + (diffX / wrapper.offsetWidth) * 100;
+        if (offset > 0) offset *= 0.3;
+        if (offset < -(_homeTotalPages - 1) * 100) {
+            offset = -(_homeTotalPages - 1) * 100 + (offset + (_homeTotalPages - 1) * 100) * 0.3;
+        }
+        wrapper.style.transform = `translateX(${offset}%)`;
+    }
+
+    function onEnd() {
+        wrapper.classList.remove('swiping');
+        if (isScrolling) return;
+
+        const threshold = wrapper.offsetWidth * 0.2;
+        if (diffX < -threshold && _homeCurrentPage < _homeTotalPages - 1) {
+            _homeCurrentPage++;
+        } else if (diffX > threshold && _homeCurrentPage > 0) {
+            _homeCurrentPage--;
+        }
+        goToHomePage(_homeCurrentPage);
+    }
+
+    // PC鼠标拖拽
+    function onMouseDown(e) {
+        // 忽略来自按钮、输入框等的拖拽
+        if (e.target.closest('button, input, select, textarea, a, .app-item, .dock-app, .widget, .notebook-widget, .music-widget')) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        diffX = 0;
+        isScrolling = null;
+        wrapper.classList.add('swiping');
+
+        const onMouseMove = (ev) => {
+            const dx = ev.clientX - startX;
+            const dy = ev.clientY - startY;
+            if (isScrolling === null) {
+                isScrolling = Math.abs(dy) > Math.abs(dx);
+            }
+            if (isScrolling) return;
+            ev.preventDefault();
+            diffX = dx;
+            let offset = -_homeCurrentPage * 100 + (diffX / wrapper.offsetWidth) * 100;
+            if (offset > 0) offset *= 0.3;
+            if (offset < -(_homeTotalPages - 1) * 100) {
+                offset = -(_homeTotalPages - 1) * 100 + (offset + (_homeTotalPages - 1) * 100) * 0.3;
+            }
+            wrapper.style.transform = `translateX(${offset}%)`;
+        };
+
+        const onMouseUp = () => {
+            wrapper.classList.remove('swiping');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            if (isScrolling) return;
+            const threshold = wrapper.offsetWidth * 0.2;
+            if (diffX < -threshold && _homeCurrentPage < _homeTotalPages - 1) {
+                _homeCurrentPage++;
+            } else if (diffX > threshold && _homeCurrentPage > 0) {
+                _homeCurrentPage--;
+            }
+            goToHomePage(_homeCurrentPage);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    }
+
+    // 点击指示器切换
+    document.querySelectorAll('.home-dot').forEach(dot => {
+        dot.addEventListener('click', () => {
+            const page = parseInt(dot.dataset.page);
+            if (!isNaN(page)) {
+                _homeCurrentPage = page;
+                goToHomePage(page);
+            }
+        });
+    });
+}
+
+function goToHomePage(page) {
+    const wrapper = document.getElementById('homePagesWrapper');
+    if (!wrapper) return;
+    wrapper.style.transform = `translateX(-${page * 100}%)`;
+    // 更新指示器
+    document.querySelectorAll('.home-dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === page);
+    });
+}
+
+// 第二页APP占位函数
+// ========== 短信应用功能 ==========
+
+// 短信数据存储
+let smsConversations = JSON.parse(localStorage.getItem('smsConversations') || '{}');
+let currentSmsPhone = null;
+
+// 保存短信数据
+function saveSmsData() {
+    localStorage.setItem('smsConversations', JSON.stringify(smsConversations));
+}
+
+// 打开短信应用
+function openSmsApp() {
+    const page = document.getElementById('smsListPage');
+    page.style.display = 'block';
+    renderSmsList();
+}
+
+// 关闭短信应用
+function closeSmsApp() {
+    const page = document.getElementById('smsListPage');
+    page.style.display = 'none';
+}
+
+// 渲染短信列表
+function renderSmsList() {
+    const list = document.getElementById('smsList');
+    const keys = Object.keys(smsConversations);
+
+    if (keys.length === 0) {
+        list.innerHTML = '<div class="sms-empty"><div class="sms-empty-text">暂无信息</div></div>';
+        return;
+    }
+
+    // 按最后消息时间排序
+    keys.sort((a, b) => {
+        const msgsA = smsConversations[a];
+        const msgsB = smsConversations[b];
+        const tA = msgsA.length ? new Date(msgsA[msgsA.length - 1].time).getTime() : 0;
+        const tB = msgsB.length ? new Date(msgsB[msgsB.length - 1].time).getTime() : 0;
+        return tB - tA;
+    });
+
+    list.innerHTML = keys.map(phone => {
+        const msgs = smsConversations[phone];
+        const last = msgs[msgs.length - 1];
+        const timeStr = formatSmsTime(last.time);
+        const preview = last.text.length > 30 ? last.text.substring(0, 30) + '...' : last.text;
+
+        return `<div class="sms-list-item" onclick="openSmsDetail('${phone}')">
+            <div class="sms-list-avatar">
+                <img src="https://i.postimg.cc/Nf6f1665/CFEEC469058BDB0EAD269FB4D4FE5F6C.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar">
+            </div>
+            <div class="sms-list-info">
+                <div class="sms-list-top">
+                    <div class="sms-list-name">${escapeHtml(phone)}</div>
+                    <div class="sms-list-time">${timeStr}</div>
+                </div>
+                <div class="sms-list-preview">${escapeHtml(preview)}</div>
+            </div>
+            <div class="sms-list-arrow">›</div>
+        </div>`;
+    }).join('');
+}
+
+// 格式化短信时间
+function formatSmsTime(timeStr) {
+    const d = new Date(timeStr);
+    const now = new Date();
+    const diff = now - d;
+    const oneDay = 86400000;
+
+    if (diff < oneDay && d.getDate() === now.getDate()) {
+        return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+    } else if (diff < oneDay * 2) {
+        return '昨天';
+    } else if (diff < oneDay * 7) {
+        const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+        return weekdays[d.getDay()];
+    } else {
+        return (d.getMonth() + 1) + '/' + d.getDate();
+    }
+}
+
+// 搜索过滤
+function filterSmsList() {
+    const q = document.getElementById('smsSearchInput').value.trim().toLowerCase();
+    const items = document.querySelectorAll('.sms-list-item');
+    items.forEach(item => {
+        const name = item.querySelector('.sms-list-name').textContent.toLowerCase();
+        const preview = item.querySelector('.sms-list-preview').textContent.toLowerCase();
+        item.style.display = (name.includes(q) || preview.includes(q)) ? '' : 'none';
+    });
+}
+
+// 打开短信详情
+function openSmsDetail(phone) {
+    currentSmsPhone = phone;
+    const page = document.getElementById('smsDetailPage');
+    page.style.display = 'block';
+
+    document.getElementById('smsDetailName').textContent = phone;
+    renderSmsMessages();
+
+    // 聚焦输入框
+    setTimeout(() => {
+        const input = document.getElementById('smsInputField');
+        if (input) input.focus();
+    }, 350);
+}
+
+// 关闭短信详情
+function closeSmsDetail() {
+    const page = document.getElementById('smsDetailPage');
+    page.style.display = 'none';
+    currentSmsPhone = null;
+}
+
+// 渲染短信消息
+function renderSmsMessages() {
+    const container = document.getElementById('smsMessages');
+    const msgs = smsConversations[currentSmsPhone] || [];
+
+    let html = '<div class="sms-imessage-hint">信息 · 短信</div>';
+
+    let lastDate = '';
+    msgs.forEach(msg => {
+        const d = new Date(msg.time);
+        const dateStr = (d.getMonth() + 1) + '月' + d.getDate() + '日 ' +
+            d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+
+        // 日期分隔
+        const dayStr = d.toDateString();
+        if (dayStr !== lastDate) {
+            const now = new Date();
+            let label = '';
+            if (d.toDateString() === now.toDateString()) {
+                label = '今天 ' + d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+            } else {
+                label = dateStr;
+            }
+            html += `<div class="sms-time-divider">${label}</div>`;
+            lastDate = dayStr;
+        }
+
+        const type = msg.from === 'user' ? 'sent' : 'received';
+        html += `<div class="sms-bubble-row ${type}">
+            <div class="sms-bubble ${type}">${escapeHtml(msg.text)}</div>
+        </div>`;
+    });
+
+    // 不在联系人提示
+    html += `<div class="sms-not-in-contacts">发件人不在你的联系人列表中。<br><a href="javascript:void(0)" onclick="showToast('功能开发中')">报告垃圾信息</a></div>`;
+
+    container.innerHTML = html;
+
+    // 滚动到底部
+    setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+    }, 50);
+}
+
+// 切换发送按钮显示
+function toggleSmsSendBtn() {
+    const input = document.getElementById('smsInputField');
+    const sendBtn = document.getElementById('smsSendBtn');
+    const mic = document.getElementById('smsInputMic');
+    if (input.value.trim()) {
+        sendBtn.style.display = 'flex';
+        mic.style.display = 'none';
+    } else {
+        sendBtn.style.display = 'none';
+        mic.style.display = 'flex';
+    }
+}
+
+// 发送短信
+function sendSmsMessage() {
+    const input = document.getElementById('smsInputField');
+    const text = input.value.trim();
+    if (!text || !currentSmsPhone) return;
+
+    if (!smsConversations[currentSmsPhone]) {
+        smsConversations[currentSmsPhone] = [];
+    }
+
+    smsConversations[currentSmsPhone].push({
+        text: text,
+        from: 'user',
+        time: new Date().toISOString()
+    });
+
+    saveSmsData();
+    input.value = '';
+    toggleSmsSendBtn();
+    renderSmsMessages();
+}
+
+// 打开新建短信（底部弹出半屏弹窗）
+function openSmsCompose() {
+    // 如果已存在则不重复创建
+    if (document.getElementById('smsComposeOverlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sms-compose-overlay';
+    overlay.id = 'smsComposeOverlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'sms-compose-sheet';
+    sheet.id = 'smsComposeSheet';
+
+    sheet.innerHTML = `
+        <div class="sms-compose-sheet-header">
+            <div class="sms-compose-sheet-cancel" onclick="closeSmsCompose()">取消</div>
+            <div class="sms-compose-sheet-title">新信息</div>
+            <div style="width:50px;"></div>
+        </div>
+        <div class="sms-compose-sheet-to">
+            <span class="sms-compose-sheet-to-label">收件人：</span>
+            <input type="tel" class="sms-compose-sheet-to-input" id="smsComposeToInput" placeholder="输入电话号码">
+        </div>
+        <div class="sms-compose-sheet-body"></div>
+        <div class="sms-compose-sheet-input-bar">
+            <div class="sms-compose-sheet-input-wrapper">
+                <input type="text" class="sms-compose-sheet-input" id="smsComposeInputField" placeholder="信息 · 短信" oninput="toggleSmsComposeSendBtn()">
+            </div>
+            <div class="sms-send-btn" id="smsComposeSendBtn" onclick="sendComposeMessage()" style="display:none;">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="14" fill="#34C759"/><path d="M9 14.5l3.5 3.5L19 11" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="sms-input-mic" id="smsComposeInputMic">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" stroke="#8E8E93" stroke-width="2"/><path d="M19 11c0 3.53-2.61 6.44-6 6.93V21M5 11c0 3.53 2.61 6.44 6 6.93V21M8 21h8" stroke="#8E8E93" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+        </div>
+    `;
+
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeSmsCompose();
+    });
+
+    // 聚焦收件人输入框
+    setTimeout(() => {
+        const toInput = document.getElementById('smsComposeToInput');
+        if (toInput) toInput.focus();
+    }, 400);
+
+    // 绑定回车发送
+    setTimeout(() => {
+        const composeInput = document.getElementById('smsComposeInputField');
+        if (composeInput) {
+            composeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendComposeMessage();
+                }
+            });
+        }
+    }, 500);
+}
+
+// 关闭新建短信弹窗
+function closeSmsCompose() {
+    const overlay = document.getElementById('smsComposeOverlay');
+    if (!overlay) return;
+    const sheet = document.getElementById('smsComposeSheet');
+    if (sheet) {
+        sheet.style.animation = 'smsSheetDown 0.25s ease forwards';
+    }
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.25s';
+    setTimeout(() => {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }, 280);
+}
+
+// 切换新建短信发送按钮
+function toggleSmsComposeSendBtn() {
+    const input = document.getElementById('smsComposeInputField');
+    const sendBtn = document.getElementById('smsComposeSendBtn');
+    const mic = document.getElementById('smsComposeInputMic');
+    if (input.value.trim()) {
+        sendBtn.style.display = 'flex';
+        mic.style.display = 'none';
+    } else {
+        sendBtn.style.display = 'none';
+        mic.style.display = 'flex';
+    }
+}
+
+// 发送新建短信
+function sendComposeMessage() {
+    const phoneInput = document.getElementById('smsComposeToInput');
+    const msgInput = document.getElementById('smsComposeInputField');
+    const phone = phoneInput.value.trim();
+    const text = msgInput.value.trim();
+
+    if (!phone) {
+        showToast('请输入电话号码');
+        return;
+    }
+    if (!text) {
+        showToast('请输入短信内容');
+        return;
+    }
+
+    if (!smsConversations[phone]) {
+        smsConversations[phone] = [];
+    }
+
+    smsConversations[phone].push({
+        text: text,
+        from: 'user',
+        time: new Date().toISOString()
+    });
+
+    saveSmsData();
+
+    // 关闭新建页，打开详情页
+    closeSmsCompose();
+    renderSmsList();
+    openSmsDetail(phone);
+}
+
+// 监听回车发送（短信详情页）
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        const smsInput = document.getElementById('smsInputField');
+        if (smsInput) {
+            smsInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendSmsMessage();
+                }
+            });
+        }
+    }, 500);
+});
+function openLinkApp() {
+    showIosAlert('联机', '联机功能开发中，敬请期待');
+}
+function openGameHall() {
+    showIosAlert('游戏大厅', '游戏大厅功能开发中，敬请期待');
+}
+function openForum() {
+    showIosAlert('论坛', '论坛功能开发中，敬请期待');
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+    initHomePageSwipe();
+});

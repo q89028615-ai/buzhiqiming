@@ -309,20 +309,359 @@ body {
 /* 主屏幕区域 */
 .main-screen {
     flex: 1;
-    padding: 15px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: clamp(10px, 2vh, 20px); /* 间距自适应但有上下限 */
-    overflow-y: auto;
-    justify-content: space-evenly; /* 关键：均匀分配垂直空间，消除底部空白 */
-    min-height: 0; /* 重要：允许flex子项缩小 */
-    /* 防止过度自适应：限制最大和最小高度 */
-    max-height: 100vh; /* 不超过视口高度 */
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+    max-height: 100vh;
     background-color: transparent;
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 主屏幕滑动翻页 */
+.home-pages-wrapper {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    will-change: transform;
+    transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.home-pages-wrapper.swiping {
+    transition: none;
+}
+
+.home-page {
+    flex: 0 0 100%;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 第一页保持原有样式 */
+#homePage1 {
+    padding: 15px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 2vh, 20px);
+    justify-content: space-evenly;
+}
+
+/* 第二页 */
+.home-page2-content {
+    padding: 30px 20px;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 照片展示区域 */
+.photo-showcase {
+    width: 100%;
+    height: 120px;
+    background-color: #e8e8e8;
+    border-radius: 14px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s ease;
     position: relative;
+}
+
+.photo-showcase:active {
+    transform: scale(0.98);
+}
+
+.photo-showcase-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 14px;
+}
+
+/* 第二页双组件行 */
+.page2-widget-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+/* 左：情侣红线组件 */
+.p2-couple-widget {
+    flex: 1;
+    aspect-ratio: 1;
+    background: transparent;
+    border-radius: 14px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+}
+
+.couple-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #d8d8d8;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    z-index: 2;
+}
+.couple-avatar:active { transform: scale(0.93); }
+
+.couple-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.couple-red-thread {
+    width: 90px;
+    height: 36px;
+    flex-shrink: 0;
+    margin: 0 -10px;
+    z-index: 1;
+}
+
+.heartbeat-line {
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+    animation: heartbeatDraw 2.5s ease-in-out infinite;
+}
+
+@keyframes heartbeatDraw {
+    0% { stroke-dashoffset: 300; opacity: 0.3; }
+    40% { stroke-dashoffset: 0; opacity: 1; }
+    70% { stroke-dashoffset: 0; opacity: 1; }
+    100% { stroke-dashoffset: -300; opacity: 0.3; }
+}
+
+/* 右：胶片机组件 */
+.p2-film-widget {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+    padding-top: 10px;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.10));
+}
+.p2-film-widget:active { transform: scale(0.97); }
+
+/* 出片口 */
+.film-bar {
+    width: 90%;
+    height: 18px;
+    background: linear-gradient(180deg, #c8c8c8 0%, #a8a8a8 40%, #b8b8b8 100%);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+    position: relative;
+}
+
+.film-slot {
+    width: 80%;
+    height: 10px;
+    background: #2a2a2a;
+    border-radius: 5px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+}
+
+/* 票券整体 */
+.film-body {
+    width: 68%;
+    margin-top: -9px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 5;
+    position: relative;
+    background: #fff;
+    border-radius: 0 0 6px 6px;
+    overflow: visible;
+    /* 左右缺口mask：两个radial-gradient挖洞，intersect合成 */
+    -webkit-mask-image:
+        radial-gradient(circle 13px at 0% 73%, transparent 99%, black 100%),
+        radial-gradient(circle 13px at 100% 73%, transparent 99%, black 100%);
+    -webkit-mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-composite: source-in;
+    mask-image:
+        radial-gradient(circle 13px at 0% 73%, transparent 99%, black 100%),
+        radial-gradient(circle 13px at 100% 73%, transparent 99%, black 100%);
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+    mask-composite: intersect;
+}
+
+/* 上半部分 */
+.film-upper {
+    width: 100%;
+    background: #fff;
+    padding: 7px 7px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.film-photo-box {
+    width: 100%;
+    aspect-ratio: 1.5;
+    background: #f0f0f0;
+    border: 1px solid #e8e8e8;
+    overflow: hidden;
+    border-radius: 2px;
+}
+
+.film-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.film-caption {
+    font-size: 7px;
+    color: #aaa;
+    margin-top: 5px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    letter-spacing: 0.5px;
+    padding-bottom: 2px;
+}
+
+/* 分割区：虚线+缺口（缺口由film-body的mask实现） */
+.film-tear {
+    width: 100%;
+    height: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    z-index: 5;
+}
+
+.film-tear-line {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    top: -1px;
+    border-top: 2px dashed #d0d0d0;
+}
+
+.film-tear-notch {
+    display: none;
+}
+
+.film-tear-l {
+    left: -12px;
+}
+.film-tear-r {
+    right: -12px;
+}
+
+/* 下半部分 */
+.film-lower {
+    width: 100%;
+    background: #fff;
+    padding: 10px 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    border-radius: 0 0 6px 6px;
+}
+
+.film-sparkles {
+    font-size: 11px;
+    color: #c0c0c0;
+    letter-spacing: 6px;
+}
+
+.film-footer-text {
+    font-size: 7px;
+    color: #bbb;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    letter-spacing: 0.3px;
+}
+
+.page2-app-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px 16px;
+    justify-items: center;
+}
+
+.page2-app-grid .app-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.page2-app-grid .app-item:active {
+    transform: scale(0.95);
+}
+
+.page2-app-grid .app-icon {
+    width: 50px;
+    height: 50px;
+    background-color: #f5f5f5;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 600;
+    color: #333;
+}
+
+/* 页面指示器 */
+.home-page-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0 4px;
+    flex-shrink: 0;
+}
+
+.home-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.home-dot.active {
+    background: rgba(0, 0, 0, 0.6);
+    transform: scale(1.2);
 }
 
 /* 小组件区域 */
@@ -1340,10 +1679,9 @@ textarea.form-input {
 }
 
 @media (max-width: 360px) {
-    .main-screen {
+    #homePage1 {
         padding: 10px 15px;
         gap: 12px;
-        /* 删除 max-height，使用 justify-content 自动分配 */
     }
 
     .widget {
@@ -1376,10 +1714,9 @@ textarea.form-input {
 
 /* 超小屏幕优化 */
 @media (max-height: 700px) {
-    .main-screen {
+    #homePage1 {
         gap: 10px;
         padding: 12px 20px;
-        /* 删除 max-height，使用 justify-content 自动分配 */
     }
     
     .widget {
@@ -1930,4 +2267,1448 @@ input[type="range"]::-moz-range-track {
     flex-shrink: 0;
     align-self: flex-start;
     margin-top: 2px;
+}
+
+
+/* ========== 方案二：个人资料卡片样式 ========== */
+
+.s2-profile-card {
+    width: calc(100% - 40px);
+    max-width: 360px;
+    margin: 0 auto;
+    border-radius: 16px;
+    overflow: visible;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    background: #fff;
+    position: relative;
+}
+
+.s2-banner {
+    width: 100%;
+    height: 90px;
+    background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%);
+    border-radius: 16px 16px 0 0;
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.s2-banner-placeholder {
+    font-size: 11px;
+    color: #aaa;
+    pointer-events: none;
+}
+
+.s2-avatar-wrapper {
+    width: 64px;
+    height: 64px;
+    position: relative;
+    margin: -32px auto 0;
+    z-index: 2;
+    cursor: pointer;
+}
+
+.s2-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: #e0e0e0;
+    border: 3px solid #fff;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #999;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+}
+
+.s2-avatar:active {
+    transform: scale(0.95);
+}
+
+.s2-info {
+    text-align: center;
+    padding: 8px 16px 14px;
+}
+
+.s2-name {
+    font-size: 17px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.s2-name:active {
+    opacity: 0.6;
+}
+
+.s2-username {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.s2-username:active {
+    opacity: 0.6;
+}
+
+.s2-bio {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 6px;
+    line-height: 1.4;
+    cursor: pointer;
+    padding: 0 8px;
+    transition: opacity 0.2s;
+}
+
+.s2-bio:active {
+    opacity: 0.6;
+}
+
+.s2-location {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    color: #999;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.s2-location:active {
+    opacity: 0.6;
+}
+
+.s2-location-icon {
+    font-size: 12px;
+}
+
+.s2-location-svg {
+    flex-shrink: 0;
+    vertical-align: middle;
+    margin-top: -1px;
+}
+
+/* 下半区：左APP + 右ID卡 */
+.s2-bottom-row {
+    display: flex;
+    gap: 12px;
+    width: calc(100% - 40px);
+    max-width: 360px;
+    margin: 0 auto;
+    align-items: stretch;
+}
+
+/* 方案二APP网格（左半） */
+.s2-app-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 10px;
+    padding: 8px 0;
+    justify-items: center;
+    align-content: center;
+}
+
+.s2-app-grid .app-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.s2-app-grid .app-item:active {
+    transform: scale(0.95);
+}
+
+.s2-app-grid .app-icon {
+    width: 46px;
+    height: 46px;
+    background-color: #f5f5f5;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    max-width: none;
+    min-width: auto;
+    aspect-ratio: auto;
+}
+
+.s2-app-grid .app-name {
+    font-size: 9px;
+    color: #666;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* ID卡/工牌小组件（右半） */
+.s2-idcard {
+    flex: 1;
+    position: relative;
+    padding-top: 28px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.s2-idcard:active {
+    transform: scale(0.97);
+}
+
+/* 挂带 */
+.s2-idcard-strap {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 18px;
+    height: 30px;
+    background: linear-gradient(to bottom, transparent 0%, #d8d8d8 8%, #c8c8c8 100%);
+    border-radius: 2px;
+    z-index: 1;
+}
+
+/* 金属夹子 */
+.s2-idcard-clip {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 4;
+}
+
+.s2-clip-body {
+    width: 28px;
+    height: 18px;
+    background: linear-gradient(to bottom, #e0e0e0 0%, #c0c0c0 40%, #b8b8b8 60%, #d0d0d0 100%);
+    border-radius: 3px;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.s2-clip-inner {
+    width: 20px;
+    height: 10px;
+    background: linear-gradient(to bottom, #d5d5d5, #bbb);
+    border-radius: 2px;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.s2-clip-screw {
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #e8e8e8, #b0b0b0);
+    border: 1px solid #a0a0a0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+/* 卡片主体 */
+.s2-idcard-body {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1.5px solid #ddd;
+    border-radius: 10px;
+    padding: 16px 10px 12px;
+    display: flex;
+    gap: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06), inset 0 0 0 1px rgba(255,255,255,0.5);
+    min-height: 100px;
+    align-items: center;
+    position: relative;
+    /* 虚线缝合边框效果 */
+    background-image: 
+        linear-gradient(rgba(255,255,255,0.92), rgba(255,255,255,0.92));
+}
+
+.s2-idcard-body::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+    border: 1px dashed rgba(200, 200, 200, 0.5);
+    border-radius: 7px;
+    pointer-events: none;
+}
+
+/* 左侧照片区 */
+.s2-idcard-photo {
+    flex-shrink: 0;
+    width: 40px;
+}
+
+.s2-idcard-photo-inner {
+    width: 40px;
+    height: 70px;
+    background: rgba(240, 240, 240, 0.7);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid rgba(220, 220, 220, 0.6);
+}
+
+.s2-idcard-photo-inner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 5px;
+}
+
+/* 右侧信息区 */
+.s2-idcard-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+}
+
+.s2-idcard-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.s2-idcard-svg {
+    flex-shrink: 0;
+}
+
+.s2-idcard-text {
+    font-size: 11px;
+    color: #999;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 移动端适配 */
+@media (max-width: 767px) {
+    .s2-banner {
+        height: 100px;
+    }
+
+    .s2-avatar-wrapper {
+        width: 72px;
+        height: 72px;
+        margin-top: -36px;
+    }
+
+    .s2-avatar {
+        width: 72px;
+        height: 72px;
+    }
+
+    .s2-name {
+        font-size: 19px;
+    }
+
+    .s2-username {
+        font-size: 13px;
+    }
+
+    .s2-bio {
+        font-size: 12px;
+    }
+
+    .s2-app-grid .app-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 22px;
+    }
+
+    .s2-app-grid .app-name {
+        font-size: 10px;
+    }
+
+    .s2-idcard-text {
+        font-size: 12px;
+    }
+
+    .s2-idcard-photo-inner {
+        width: 44px;
+        height: 76px;
+    }
+}
+
+/* ========== 高级设置分组卡片 ========== */
+.adv-section-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.adv-section-card:last-child {
+    margin-bottom: 0;
+}
+
+.adv-section-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #999;
+    letter-spacing: 0.5px;
+    margin-bottom: 14px;
+}
+
+/* ========== 钱包界面样式 ========== */
+
+.wallet-page-inner {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    background: #f5f5f5;
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+.wallet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 16px 12px;
+    background: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.wallet-back-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.wallet-back-btn:active {
+    background: #f0f0f0;
+}
+
+.wallet-header-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #222;
+}
+
+/* 余额卡片 */
+.wallet-balance-card {
+    margin: 16px;
+    padding: 24px 20px 20px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.wallet-balance-label {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 8px;
+}
+
+.wallet-balance-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.wallet-balance-amount {
+    font-size: 36px;
+    font-weight: 700;
+    color: #222;
+    letter-spacing: -1px;
+    font-variant-numeric: tabular-nums;
+}
+
+.wallet-balance-eye {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 4px;
+}
+
+.wallet-balance-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.wallet-balance-btn {
+    flex: 1;
+    padding: 12px 0;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: #222;
+    color: #fff;
+}
+
+.wallet-balance-btn:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+}
+
+.wallet-balance-btn-outline {
+    background: #f5f5f5;
+    color: #333;
+    border: 1.5px solid #e0e0e0;
+}
+
+/* 快捷功能区 */
+.wallet-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    margin: 0 16px 16px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.wallet-quick-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+
+.wallet-quick-item:active {
+    transform: scale(0.93);
+}
+
+.wallet-quick-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.wallet-quick-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
+
+.wallet-quick-desc {
+    font-size: 10px;
+    color: #aaa;
+}
+
+/* 区块卡片 */
+.wallet-section-card {
+    margin: 0 16px 14px;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.wallet-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 18px 0;
+}
+
+.wallet-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #222;
+}
+
+.wallet-section-more {
+    font-size: 12px;
+    color: #aaa;
+    cursor: pointer;
+}
+
+.wallet-section-body {
+    padding: 14px 18px 18px;
+}
+
+/* 花呗 */
+.wallet-huabei-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.wallet-huabei-item {
+    flex: 1;
+    text-align: center;
+}
+
+.wallet-huabei-divider {
+    width: 1px;
+    height: 32px;
+    background: #eee;
+    flex-shrink: 0;
+}
+
+.wallet-huabei-label {
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 6px;
+}
+
+.wallet-huabei-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    font-variant-numeric: tabular-nums;
+}
+
+.wallet-huabei-due {
+    color: #e8910d;
+}
+
+/* 余额宝 */
+.wallet-yuebao-info {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.wallet-yuebao-main {
+    flex: 1;
+}
+
+.wallet-yuebao-label {
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 4px;
+}
+
+.wallet-yuebao-amount {
+    font-size: 24px;
+    font-weight: 700;
+    color: #222;
+    font-variant-numeric: tabular-nums;
+}
+
+.wallet-yuebao-right {
+    text-align: right;
+}
+
+.wallet-yuebao-earn {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e8910d;
+    font-variant-numeric: tabular-nums;
+}
+
+.wallet-yuebao-bar-wrap {
+    margin-top: 4px;
+}
+
+.wallet-yuebao-bar {
+    width: 100%;
+    height: 6px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.wallet-yuebao-bar-fill {
+    height: 100%;
+    background: #e8910d;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.wallet-yuebao-bar-label {
+    font-size: 11px;
+    color: #bbb;
+    margin-top: 6px;
+}
+
+/* 银行卡 */
+.wallet-bankcard {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f5f5f5;
+}
+
+.wallet-bankcard:last-child {
+    border-bottom: none;
+}
+
+.wallet-bankcard-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.wallet-bankcard-info {
+    flex: 1;
+}
+
+.wallet-bankcard-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.wallet-bankcard-num {
+    font-size: 12px;
+    color: #aaa;
+}
+
+.wallet-bankcard-type {
+    font-size: 11px;
+    color: #999;
+    background: #f5f5f5;
+    padding: 3px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.wallet-add-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 0;
+    font-size: 13px;
+    color: #999;
+    cursor: pointer;
+    border-top: 1px solid #f5f5f5;
+    transition: background 0.15s;
+}
+
+.wallet-add-card:active {
+    background: #fafafa;
+}
+
+/* 钱包空状态 */
+.wallet-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 0 8px;
+}
+
+.wallet-empty-state-sm {
+    padding: 10px 0 4px;
+}
+
+.wallet-empty-icon {
+    opacity: 0.6;
+}
+
+.wallet-empty-text {
+    font-size: 13px;
+    color: #bbb;
+}
+
+.wallet-activate-btn {
+    padding: 8px 28px;
+    border: 1.5px solid #ddd;
+    border-radius: 20px;
+    background: #fff;
+    font-size: 13px;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.wallet-activate-btn:active {
+    background: #f5f5f5;
+    transform: scale(0.96);
+}
+
+/* ========== 仿 iOS 信息应用样式 ========== */
+
+/* 短信列表页 */
+.sms-list-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+}
+
+.sms-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px 0;
+    padding-top: max(8px, env(safe-area-inset-top));
+    background: #fff;
+    flex-shrink: 0;
+}
+
+.sms-header-left {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.sms-header-left:active {
+    opacity: 0.5;
+}
+
+.sms-header-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sms-header-compose {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.sms-header-compose:active {
+    opacity: 0.5;
+}
+
+/* iOS 大标题 */
+.sms-big-title {
+    font-size: 34px;
+    font-weight: 700;
+    color: #000;
+    padding: 2px 20px 8px;
+    background: #fff;
+    flex-shrink: 0;
+    letter-spacing: -0.5px;
+}
+
+.sms-search-bar {
+    padding: 0 16px 10px;
+    background: #fff;
+    flex-shrink: 0;
+}
+
+.sms-search-inner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(118, 118, 128, 0.12);
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+.sms-search-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 17px;
+    color: #000;
+    outline: none;
+}
+
+.sms-search-input::placeholder {
+    color: #8E8E93;
+    font-size: 17px;
+}
+
+/* 短信列表 */
+.sms-list {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.sms-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+}
+
+.sms-list-item::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 76px;
+    right: 0;
+    height: 0.5px;
+    background: #c6c6c8;
+}
+
+.sms-list-item:active {
+    background: #d1d1d6;
+}
+
+.sms-list-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #c7c7cc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sms-list-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.sms-list-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 3px;
+}
+
+.sms-list-name {
+    font-size: 17px;
+    font-weight: 600;
+    color: #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sms-list-time {
+    font-size: 15px;
+    color: #8E8E93;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.sms-list-preview {
+    font-size: 15px;
+    color: #8E8E93;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+
+.sms-list-arrow {
+    color: #c7c7cc;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+/* 空状态 */
+.sms-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 8px;
+    padding-bottom: 80px;
+}
+
+.sms-empty-text {
+    font-size: 17px;
+    color: #8E8E93;
+}
+
+/* ========== 短信详情页 ========== */
+.sms-detail-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+}
+
+.sms-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    padding-top: max(6px, env(safe-area-inset-top));
+    background: #f8f8f8;
+    border-bottom: 0.5px solid rgba(0,0,0,0.15);
+    flex-shrink: 0;
+    min-height: 56px;
+}
+
+.sms-detail-back {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+    padding: 8px;
+    min-width: 40px;
+}
+
+.sms-detail-back:active {
+    opacity: 0.5;
+}
+
+.sms-back-count {
+    font-size: 17px;
+    color: #007AFF;
+}
+
+.sms-detail-contact {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    cursor: pointer;
+}
+
+.sms-detail-contact:active {
+    opacity: 0.6;
+}
+
+.sms-detail-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #8e8e93;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sms-detail-name {
+    font-size: 11px;
+    color: #000;
+    font-weight: 500;
+}
+
+.sms-detail-name-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.sms-detail-chevron {
+    margin-top: 0px;
+    display: flex;
+    align-items: center;
+}
+
+/* 消息区域 */
+.sms-messages {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: #fff;
+}
+
+.sms-imessage-hint {
+    text-align: center;
+    font-size: 12px;
+    color: #8E8E93;
+    padding: 12px 0 6px;
+}
+
+.sms-time-divider {
+    text-align: center;
+    font-size: 12px;
+    color: #8E8E93;
+    padding: 10px 0 4px;
+    font-weight: 400;
+}
+
+/* 气泡 */
+.sms-bubble-row {
+    display: flex;
+    margin-bottom: 2px;
+    padding: 0 16px;
+}
+
+.sms-bubble-row.sent {
+    justify-content: flex-end;
+}
+
+.sms-bubble-row.received {
+    justify-content: flex-start;
+}
+
+.sms-bubble {
+    max-width: 72%;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.35;
+    word-break: break-word;
+    position: relative;
+    z-index: 0;
+}
+
+.sms-bubble.sent {
+    background: #34C759;
+    color: #fff;
+    margin-left: 50px;
+    border-radius: 18px;
+    border-bottom-right-radius: 2px;
+}
+
+/* 发送气泡iOS尾巴 - SVG背景法，透明友好 */
+.sms-bubble.sent::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    right: -8px;
+    width: 14px;
+    height: 18px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='18'%3E%3Cpath d='M0 0 C0 8 2 14 6 17 C9 18 14 18 14 18 C8 18 4 14 2 9 C0.5 5 0 2 0 0Z' fill='%2334C759'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+.sms-bubble.received {
+    background: #e5e5ea;
+    color: #000;
+    margin-right: 50px;
+    border-radius: 18px;
+    border-bottom-left-radius: 2px;
+}
+
+/* 接收气泡iOS尾巴 - SVG背景法，透明友好 */
+.sms-bubble.received::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: -8px;
+    width: 14px;
+    height: 18px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='18'%3E%3Cpath d='M14 0 C14 8 12 14 8 17 C5 18 0 18 0 18 C6 18 10 14 12 9 C13.5 5 14 2 14 0Z' fill='%23e5e5ea'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+.sms-bubble-time {
+    font-size: 11px;
+    color: #8E8E93;
+    margin-top: 2px;
+    text-align: right;
+    padding: 0 4px;
+}
+
+.sms-bubble-row.received .sms-bubble-time {
+    text-align: left;
+}
+
+.sms-not-in-contacts {
+    text-align: center;
+    font-size: 13px;
+    color: #8E8E93;
+    padding: 16px 0;
+    line-height: 1.5;
+}
+
+.sms-not-in-contacts a {
+    color: #007AFF;
+    text-decoration: none;
+}
+
+/* 底部输入栏 */
+.sms-input-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    padding: 6px 8px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    background: #f8f8f8;
+    border-top: 0.5px solid rgba(0,0,0,0.15);
+    flex-shrink: 0;
+}
+
+.sms-input-plus {
+    width: 32px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.sms-input-plus:active {
+    opacity: 0.5;
+}
+
+.sms-input-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1.5px solid #c7c7cc;
+    border-radius: 20px;
+    padding: 0 6px 0 14px;
+    min-height: 36px;
+}
+
+.sms-input-field {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 17px;
+    color: #000;
+    outline: none;
+    padding: 7px 0;
+    min-width: 0;
+}
+
+.sms-input-field::placeholder {
+    color: #c7c7cc;
+    font-size: 17px;
+}
+
+.sms-input-mic {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 4px;
+    flex-shrink: 0;
+}
+
+.sms-input-mic:active {
+    opacity: 0.5;
+}
+
+.sms-send-btn {
+    width: 32px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.12s;
+}
+
+.sms-send-btn:active {
+    transform: scale(0.85);
+}
+
+/* ========== 新建短信 - iOS 风格底部弹窗 ========== */
+
+.sms-compose-overlay {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 400px;
+    height: 100vh;
+    background: rgba(0,0,0,0.3);
+    z-index: 10010;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: fadeIn 0.2s ease;
+}
+
+.sms-compose-sheet {
+    background: #f2f2f7;
+    border-radius: 12px 12px 0 0;
+    width: 100%;
+    height: 93vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    animation: smsSheetUp 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes smsSheetUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+@keyframes smsSheetDown {
+    from { transform: translateY(0); opacity: 1; }
+    to { transform: translateY(100%); opacity: 0.5; }
+}
+
+/* 弹窗顶部拖拽条 */
+.sms-compose-sheet::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 5px;
+    background: #c7c7cc;
+    border-radius: 3px;
+    margin: 8px auto 0;
+    flex-shrink: 0;
+}
+
+.sms-compose-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px 10px;
+    flex-shrink: 0;
+}
+
+.sms-compose-sheet-cancel {
+    font-size: 17px;
+    color: #007AFF;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.sms-compose-sheet-cancel:active {
+    opacity: 0.5;
+}
+
+.sms-compose-sheet-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: #000;
+}
+
+.sms-compose-sheet-to {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-top: 0.5px solid rgba(0,0,0,0.12);
+    border-bottom: 0.5px solid rgba(0,0,0,0.12);
+    background: #fff;
+    flex-shrink: 0;
+}
+
+.sms-compose-sheet-to-label {
+    font-size: 16px;
+    color: #8E8E93;
+    flex-shrink: 0;
+}
+
+.sms-compose-sheet-to-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 16px;
+    color: #007AFF;
+    outline: none;
+    padding: 0 8px;
+}
+
+.sms-compose-sheet-body {
+    flex: 1;
+    overflow-y: auto;
+    background: #fff;
+}
+
+.sms-compose-sheet-input-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    padding: 6px 10px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: #f8f8f8;
+    border-top: 0.5px solid rgba(0,0,0,0.12);
+    flex-shrink: 0;
+}
+
+.sms-compose-sheet-input-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.18);
+    border-radius: 20px;
+    padding: 0 14px;
+    min-height: 36px;
+}
+
+.sms-compose-sheet-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 17px;
+    color: #000;
+    outline: none;
+    padding: 7px 0;
+    min-width: 0;
+}
+
+.sms-compose-sheet-input::placeholder {
+    color: #c7c7cc;
+    font-size: 17px;
+}
+
+@media (max-width: 767px) {
+    .sms-compose-overlay {
+        max-width: 100%;
+        left: 0;
+        transform: none;
+    }
+}
+
+/* 删除滑动 */
+.sms-list-item-wrapper {
+    position: relative;
+    overflow: hidden;
+}
+
+.sms-list-delete {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 80px;
+    background: #ff3b30;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+    transform: translateX(100%);
+    transition: transform 0.2s;
 }
