@@ -1651,11 +1651,11 @@ textarea.form-input {
         margin-bottom: 0px; /* 完全贴着下面 */
     }
 
-    /* APP 网格调整 - 完美微调，几乎贴合 */
+    /* APP 网格调整 - 最终微调，正好贴合 */
     .page2-app-grid {
         grid-template-columns: repeat(4, 1fr);
         gap: 20px 16px;
-        margin-top: -4px; /* 再降一点点，微调到完美位置 */
+        margin-top: 0; /* 再降一点点，回到0，完全贴合不重叠 */
         padding-top: 0;
         padding-bottom: 0;
         flex-shrink: 0;
