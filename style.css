@@ -1612,8 +1612,37 @@ textarea.form-input {
     /* 3. 第二页优化：减少下方空白感 */
     .home-page2-content {
         padding: 30px 20px 20px; /* 减少底部padding，让内容自然对齐 */
-        justify-content: space-between; /* 上下分布对齐 */
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end; /* 让所有内容沉底 */
         height: 100%; /* 确保填满容器 */
+        gap: 20px; /* 控制组件之间的间距 */
+    }
+    
+    /* 让顶部组件自动推上去？或者让它们聚在一起？
+       如果用户觉得“太远”，可能是因为 justify-content: space-between 把它们拉得太开了。
+       如果是 justify-content: flex-end，它们会挤在下面。
+       如果是 justify-content: flex-start，它们会挤在上面。
+       
+       用户说：跟第一页的那个钱包和情侣空间视觉上面不对齐。
+       第一页的布局是 space-evenly。
+       
+       让我们尝试模拟第一页的分布。
+    */
+    .home-page2-content {
+        padding: 15px 20px; /* 与第一页保持一致 */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly; /* 与第一页一致 */
+        height: 100%;
+    }
+    
+    /* 特别调整 APP 网格的 margin，微调位置 */
+    .page2-app-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px 16px;
+        margin-top: 0; /* 移除额外间距，完全交给 space-evenly */
+        padding-bottom: 0; 
     }
     
     .page2-app-grid {
