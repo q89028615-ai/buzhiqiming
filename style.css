@@ -1642,23 +1642,25 @@ textarea.form-input {
     .photo-showcase {
         flex-shrink: 0;
         min-height: 120px;
-        margin-bottom: 12px; /* 稍微留一点缝隙给视觉 */
+        margin-bottom: 5px; /* 这里设为 5px，尽量贴着 */
     }
 
     /* 双组件行 */
     .page2-widget-row {
         flex-shrink: 0;
-        margin-bottom: 5px; /* 这里设为 5px，死死贴着下面的 APP */
+        margin-bottom: 0px; /* 完全贴着下面 */
     }
 
-    /* APP 网格调整 */
+    /* APP 网格调整 - 强制往上提 */
     .page2-app-grid {
         grid-template-columns: repeat(4, 1fr);
         gap: 20px 16px;
-        margin-top: 0; /* 完全贴着上面的组件 */
+        margin-top: -30px; /* 强制往上提！ */
         padding-top: 0; /* 确保没有内边距撑开 */
         padding-bottom: 0;
         flex-shrink: 0;
+        position: relative; /* 允许使用 top 属性进行更激进的移动 */
+        top: -10px; /* 再往上提一点！ */
     }
 
     /* 增大文字尺寸 */
