@@ -14062,6 +14062,11 @@ async function sendMessage() {
 // 保存消息到数据库
 async function saveMessageToDB(messageObj) {
     try {
+        // 在保存之前清理消息内容中的时间戳
+        if (messageObj.content && typeof messageObj.content === 'string') {
+            messageObj.content = messageObj.content.replace(/^\[\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}:\d{2}\]\s*/, '');
+        }
+        
         const transaction = db.transaction(['chats'], 'readwrite');
         const store = transaction.objectStore('chats');
         
@@ -14241,6 +14246,9 @@ function enableSendButton() {
 function cleanMessageContent(content) {
     if (!content || typeof content !== 'string') return content || '';
     let text = content.trim();
+    
+    // 移除消息开头的时间戳格式: [YYYY年M月D日 HH:MM:SS]
+    text = text.replace(/^\[\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}:\d{2}\]\s*/, '');
     
     // 检测多个JSON数组拼接格式: ["xxx"] ["yyy"]
     if (/^\["[^"]*"\](\s*\["[^"]*"\])+$/.test(text)) {
