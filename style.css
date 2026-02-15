@@ -1627,35 +1627,38 @@ textarea.form-input {
        用户说：跟第一页的那个钱包和情侣空间视觉上面不对齐。
        第一页的布局是 space-evenly。
        
-    /* 3. 第二页优化：自然排列，防止压缩 */
+    /* 3. 第二页优化：死死贴着，不留缝隙 */
     .home-page2-content {
-        padding: 20px 20px; /* 保持适中边距 */
+        padding: 20px 20px 0; /* 底部padding设为0，减少下方留白 */
         display: flex;
         flex-direction: column;
-        justify-content: flex-start; /* 改回顶部对齐，不要强行撑满 */
-        height: auto; /* 高度自适应，允许滚动，防止压缩 */
+        justify-content: flex-start; /* 顶部对齐 */
+        height: auto;
         min-height: 100%;
-        gap: 15px; /* 组件之间的固定间距，紧凑一点 */
+        gap: 0; /* 消除默认的flex gap */
     }
 
-    /* 防止顶部照片组件被压扁 */
+    /* 顶部照片组件 */
     .photo-showcase {
-        flex-shrink: 0; /* 禁止压缩 */
-        min-height: 120px; /* 保证高度 */
+        flex-shrink: 0;
+        min-height: 120px;
+        margin-bottom: 12px; /* 稍微留一点缝隙给视觉 */
     }
 
-    /* 防止双组件被压扁 */
+    /* 双组件行 */
     .page2-widget-row {
-        flex-shrink: 0; /* 禁止压缩 */
+        flex-shrink: 0;
+        margin-bottom: 5px; /* 这里设为 5px，死死贴着下面的 APP */
     }
 
     /* APP 网格调整 */
     .page2-app-grid {
         grid-template-columns: repeat(4, 1fr);
         gap: 20px 16px;
-        margin-top: 5px; /* 离上面近一点 */
-        padding-bottom: 20px;
-        flex-shrink: 0; /* 禁止压缩 */
+        margin-top: 0; /* 完全贴着上面的组件 */
+        padding-top: 0; /* 确保没有内边距撑开 */
+        padding-bottom: 0;
+        flex-shrink: 0;
     }
 
     /* 增大文字尺寸 */
