@@ -1627,29 +1627,35 @@ textarea.form-input {
        用户说：跟第一页的那个钱包和情侣空间视觉上面不对齐。
        第一页的布局是 space-evenly。
        
-       让我们尝试模拟第一页的分布。
-    */
+    /* 3. 第二页优化：自然排列，防止压缩 */
     .home-page2-content {
-        padding: 15px 20px; /* 与第一页保持一致 */
+        padding: 20px 20px; /* 保持适中边距 */
         display: flex;
         flex-direction: column;
-        justify-content: space-evenly; /* 与第一页一致 */
-        height: 100%;
+        justify-content: flex-start; /* 改回顶部对齐，不要强行撑满 */
+        height: auto; /* 高度自适应，允许滚动，防止压缩 */
+        min-height: 100%;
+        gap: 15px; /* 组件之间的固定间距，紧凑一点 */
     }
-    
-    /* 特别调整 APP 网格的 margin，微调位置 */
+
+    /* 防止顶部照片组件被压扁 */
+    .photo-showcase {
+        flex-shrink: 0; /* 禁止压缩 */
+        min-height: 120px; /* 保证高度 */
+    }
+
+    /* 防止双组件被压扁 */
+    .page2-widget-row {
+        flex-shrink: 0; /* 禁止压缩 */
+    }
+
+    /* APP 网格调整 */
     .page2-app-grid {
         grid-template-columns: repeat(4, 1fr);
         gap: 20px 16px;
-        margin-top: 0; /* 移除额外间距，完全交给 space-evenly */
-        padding-bottom: 0; 
-    }
-    
-    .page2-app-grid {
-        grid-template-columns: repeat(4, 1fr); /* 恢复一行4个 */
-        gap: 20px 16px; /* 恢复原间距 */
-        margin-top: 20px; /* 增加顶部间距，让它不那么贴着上面的组件 */
-        padding-bottom: 0; 
+        margin-top: 5px; /* 离上面近一点 */
+        padding-bottom: 20px;
+        flex-shrink: 0; /* 禁止压缩 */
     }
 
     /* 增大文字尺寸 */
