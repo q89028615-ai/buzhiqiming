@@ -1579,6 +1579,49 @@ textarea.form-input {
 
     /* ========== 移动端响应式优化 ========== */
     
+    /* 1. 整体加宽：让内容不那么"窄" */
+    .widget, 
+    .notebook-widget,
+    .dock-container,
+    .s2-profile-card,
+    .s2-bottom-row,
+    .wallet-quick-grid,
+    .wallet-section-card,
+    .wallet-balance-card {
+        width: calc(100% - 24px) !important; /* 两侧各留 12px 边距 */
+        max-width: none !important; /* 移除最大宽度限制 */
+    }
+
+    /* 2. 底栏优化：更宽、更长 */
+    .dock-container {
+        padding: 14px 20px; /* 调整内边距 */
+        justify-content: space-between; /* 图标分散对齐，撑满宽度 */
+        gap: 0; /* 由 space-between 控制间距 */
+    }
+    
+    .dock-app {
+        flex: 1; /* 每个图标平分空间 */
+        max-width: none; /* 移除图标容器宽度限制 */
+    }
+    
+    .dock-icon {
+        max-width: 60px; /* 保持图标合理大小 */
+        margin: 0 auto;
+    }
+
+    /* 3. 第二页优化：减少下方空白感 */
+    .home-page2-content {
+        gap: 24px; /* 增加组件间的垂直间距 */
+        padding-bottom: 120px; /* 底部增加留白，避免被底栏遮挡 */
+    }
+    
+    .page2-app-grid {
+        grid-template-columns: repeat(2, 1fr); /* 2列布局，增加垂直占用，填补下方空白 */
+        gap: 20px 20px; /* 调整间距 */
+        margin-top: 10px;
+        padding-bottom: 100px; /* 底部增加留白 */
+    }
+
     /* 增大文字尺寸 */
     .widget-content {
         font-size: 14px; /* 从 12px 增大 */
