@@ -1611,15 +1611,16 @@ textarea.form-input {
 
     /* 3. 第二页优化：减少下方空白感 */
     .home-page2-content {
-        gap: 24px; /* 增加组件间的垂直间距 */
-        padding-bottom: 120px; /* 底部增加留白，避免被底栏遮挡 */
+        padding: 30px 20px 20px; /* 减少底部padding，让内容自然对齐 */
+        justify-content: space-between; /* 上下分布对齐 */
+        height: 100%; /* 确保填满容器 */
     }
     
     .page2-app-grid {
-        grid-template-columns: repeat(2, 1fr); /* 2列布局，增加垂直占用，填补下方空白 */
-        gap: 20px 20px; /* 调整间距 */
-        margin-top: 10px;
-        padding-bottom: 100px; /* 底部增加留白 */
+        grid-template-columns: repeat(4, 1fr); /* 恢复一行4个 */
+        gap: 20px 16px; /* 恢复原间距 */
+        margin-top: 20px; /* 增加顶部间距，让它不那么贴着上面的组件 */
+        padding-bottom: 0; 
     }
 
     /* 增大文字尺寸 */
