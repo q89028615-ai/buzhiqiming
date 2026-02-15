@@ -1651,16 +1651,16 @@ textarea.form-input {
         margin-bottom: 0px; /* 完全贴着下面 */
     }
 
-    /* APP 网格调整 - 强制往上提 */
+    /* APP 网格调整 - 稍微回调，不要贴太死 */
     .page2-app-grid {
         grid-template-columns: repeat(4, 1fr);
         gap: 20px 16px;
-        margin-top: -30px; /* 强制往上提！ */
-        padding-top: 0; /* 确保没有内边距撑开 */
+        margin-top: -10px; /* 从 -30px 回调到 -10px，稍微松一点 */
+        padding-top: 0;
         padding-bottom: 0;
         flex-shrink: 0;
-        position: relative; /* 允许使用 top 属性进行更激进的移动 */
-        top: -10px; /* 再往上提一点！ */
+        position: relative;
+        top: 0; /* 移除额外的 top 偏移 */
     }
 
     /* 增大文字尺寸 */
