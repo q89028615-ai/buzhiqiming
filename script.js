@@ -193,6 +193,107 @@ let db = null;
 const DB_NAME = 'YuanBaoPhoneDB';
 const DB_VERSION = 3;
 
+// ========== 长期记忆核心函数（必须在最前面定义）==========
+
+// 获取角色的长期记忆列表
+async function getLongTermMemories(characterId) {
+    try {
+        const key = `ltm_${characterId}`;
+        const data = await storageDB.getItem(key);
+        return data || [];
+    } catch (e) {
+        console.error('获取长期记忆失败:', e);
+        return [];
+    }
+}
+
+// 保存角色的长期记忆列表
+async function saveLongTermMemories(characterId, memories) {
+    try {
+        const key = `ltm_${characterId}`;
+        await storageDB.setItem(key, memories);
+    } catch (e) {
+        console.error('保存长期记忆失败:', e);
+    }
+}
+
+// 添加一条长期记忆
+async function addLongTermMemory(characterId, content, source = 'auto') {
+    const memories = await getLongTermMemories(characterId);
+    const memory = {
+        id: 'ltm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        content: content,
+        createdAt: new Date().toISOString(),
+        source: source // 'auto' 或 'manual'
+    };
+    memories.push(memory);
+    await saveLongTermMemories(characterId, memories);
+    return memory;
+}
+
+// 删除一条长期记忆
+async function deleteLongTermMemory(characterId, memoryId) {
+    const memories = await getLongTermMemories(characterId);
+    const filtered = memories.filter(m => m.id !== memoryId);
+    await saveLongTermMemories(characterId, filtered);
+}
+
+// 编辑一条长期记忆
+async function editLongTermMemory(characterId, memoryId, newContent) {
+    const memories = await getLongTermMemories(characterId);
+    const memory = memories.find(m => m.id === memoryId);
+    if (memory) {
+        memory.content = newContent;
+        memory.editedAt = new Date().toISOString();
+        await saveLongTermMemories(characterId, memories);
+    }
+}
+
+// 渲染长期记忆列表
+async function renderLongTermMemoryList() {
+    console.log('=== renderLongTermMemoryList 开始 ===');
+    console.log('currentChatCharacter:', currentChatCharacter);
+    
+    if (!currentChatCharacter) {
+        console.error('currentChatCharacter 为空！');
+        return;
+    }
+
+    const container = document.getElementById('longTermMemoryList');
+    console.log('container:', container);
+    
+    const memories = await getLongTermMemories(currentChatCharacter.id);
+    console.log('memories:', memories);
+
+    if (memories.length === 0) {
+        container.innerHTML = '<div class="ltm-empty">暂无长期记忆</div>';
+        console.log('没有记忆，显示空状态');
+        return;
+    }
+
+    // 按时间倒序显示
+    const sorted = [...memories].reverse();
+    container.innerHTML = sorted.map(m => {
+        const time = new Date(m.createdAt).toLocaleString('zh-CN');
+        const sourceLabel = m.source === 'manual' ? '[手动]' : m.source === 'condense' ? '[精简]' : '[自动]';
+        const editedLabel = m.editedAt ? ' (已编辑)' : '';
+        return `
+            <div class="ltm-item" data-ltm-id="${m.id}">
+                <div class="ltm-item-time">${sourceLabel} ${time}${editedLabel}</div>
+                <div class="ltm-item-content">${escapeHtml(m.content)}</div>
+                <div class="ltm-item-actions">
+                    <button class="ltm-action-btn" onclick="startEditLongTermMemory('${m.id}')">编辑</button>
+                    <button class="ltm-action-btn danger" onclick="confirmDeleteLongTermMemory('${m.id}')">删除</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    console.log('=== renderLongTermMemoryList 完成，已渲染', sorted.length, '条记忆 ===');
+}
+
+// ========== IndexedDB 存储管理系统 ==========
+
 // 初始化IndexedDB
 async function initIndexedDB() {
     return new Promise((resolve, reject) => {
@@ -2738,8 +2839,13 @@ async function renderActiveScheme() {
         if (!_scheme1Html) {
             _scheme1Html = widgetArea.innerHTML;
         }
-        widgetArea.innerHTML = getScheme2Html();
-        await loadScheme2Data();
+        // 确保函数已定义
+        if (typeof getScheme2Html === 'function') {
+            widgetArea.innerHTML = getScheme2Html();
+            await loadScheme2Data();
+        } else {
+            console.error('getScheme2Html函数未定义，请确保script2.js已正确加载');
+        }
     }
 }
 
@@ -4868,15 +4974,35 @@ function handleProviderChange() {
     const urlInput = document.getElementById('apiUrl');
     
     if (provider === 'custom') {
-        // 自定义模式：清空地址，允许用户自行输入
+        // 自定义模式：不清空地址，保留用户输入
         urlInput.disabled = false;
         urlInput.placeholder = '请输入自定义API地址';
-        urlInput.value = '';
+        
+        // 如果当前输入框是空的，尝试从数据库恢复自定义地址
+        if (!urlInput.value || urlInput.value.trim() === '') {
+            loadCustomApiUrl();
+        }
     } else {
         // 预设提供商：直接切换到对应的默认地址
         urlInput.value = apiUrls[provider] || '';
         urlInput.disabled = false;
         urlInput.placeholder = '输入API地址';
+    }
+}
+
+// 从数据库加载自定义API地址
+async function loadCustomApiUrl() {
+    try {
+        const settings = await storageDB.getItem('apiSettings');
+        if (settings && settings.provider === 'custom' && settings.apiUrl) {
+            const urlInput = document.getElementById('apiUrl');
+            if (urlInput && (!urlInput.value || urlInput.value.trim() === '')) {
+                urlInput.value = settings.apiUrl;
+                console.log('✅ 已恢复自定义API地址:', settings.apiUrl);
+            }
+        }
+    } catch (error) {
+        console.error('❌ 加载自定义API地址失败:', error);
     }
 }
 
@@ -5237,7 +5363,17 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (widgetArea) _scheme1Html = widgetArea.innerHTML;
         const activeScheme = getActiveSchemeId();
         if (activeScheme === 'scheme_2') {
-            await renderActiveScheme();
+            // 等待script2.js加载完成
+            if (typeof getScheme2Html === 'function') {
+                await renderActiveScheme();
+            } else {
+                // 如果函数还未定义，等待一小段时间后重试
+                setTimeout(async () => {
+                    if (typeof getScheme2Html === 'function') {
+                        await renderActiveScheme();
+                    }
+                }, 50);
+            }
         }
         
         console.log('应用初始化完成！');
@@ -5773,12 +5909,44 @@ async function saveAvatar() {
 // 加载保存的头像
 async function loadAvatar() {
     try {
-        const savedAvatar = await getImageFromDB('widgetAvatar');
-        if (savedAvatar) {
-            document.getElementById('avatarImage').src = savedAvatar;
-            document.getElementById('avatarImage').style.display = 'block';
-            document.getElementById('avatarPlaceholder').style.display = 'none';
-            console.log('头像已加载');
+        // 优先从 localStorage 的 chatUserData 加载用户头像
+        let avatarSrc = null;
+        
+        // 方案1：尝试从 localStorage 加载用户头像数据
+        try {
+            const savedUserData = localStorage.getItem('chatUserData');
+            if (savedUserData) {
+                const userData = JSON.parse(savedUserData);
+                if (userData.avatar) {
+                    avatarSrc = userData.avatar;
+                    console.log('从 localStorage 加载用户头像');
+                }
+            }
+        } catch (e) {
+            console.warn('从 localStorage 加载用户头像失败:', e);
+        }
+        
+        // 方案2：如果 localStorage 没有，再从 IndexedDB 加载小组件头像
+        if (!avatarSrc) {
+            avatarSrc = await getImageFromDB('widgetAvatar');
+            if (avatarSrc) {
+                console.log('从 IndexedDB 加载小组件头像');
+            }
+        }
+        
+        // 应用头像
+        if (avatarSrc) {
+            const avatarImage = document.getElementById('avatarImage');
+            const avatarPlaceholder = document.getElementById('avatarPlaceholder');
+            
+            if (avatarImage && avatarPlaceholder) {
+                avatarImage.src = avatarSrc;
+                avatarImage.style.display = 'block';
+                avatarPlaceholder.style.display = 'none';
+                console.log('头像已加载并显示');
+            }
+        } else {
+            console.log('未找到保存的头像');
         }
     } catch (error) {
         console.error('加载头像失败:', error);
@@ -8658,6 +8826,14 @@ function showCreateCharacterTypeDialog() {
             openImportSillyTavernCharacter();
         };
         
+        const docImportBtn = document.createElement('button');
+        docImportBtn.className = 'ios-dialog-button primary';
+        docImportBtn.textContent = '文档导入';
+        docImportBtn.onclick = () => {
+            closeDialog();
+            openDocumentImport();
+        };
+        
         const cancelBtn = document.createElement('button');
         cancelBtn.className = 'ios-dialog-button';
         cancelBtn.textContent = '取消';
@@ -8667,6 +8843,7 @@ function showCreateCharacterTypeDialog() {
         
         buttonsEl.appendChild(manualBtn);
         buttonsEl.appendChild(importBtn);
+        buttonsEl.appendChild(docImportBtn);
         buttonsEl.appendChild(cancelBtn);
         dialog.appendChild(titleEl);
         dialog.appendChild(messageEl);
@@ -9713,6 +9890,11 @@ async function openChatDetail(characterId) {
     
     // 滚动到底部
     scrollChatToBottom();
+    
+    // 初始化长按菜单
+    setTimeout(() => {
+        initMsgContextMenu();
+    }, 300);
 }
 
 // 加载聊天历史消息
@@ -9720,8 +9902,9 @@ async function loadChatMessages(characterId) {
     try {
         const container = document.getElementById('chatMessagesContainer');
         
-        // 清空现有消息
+        // 清空现有消息（这会移除事件监听器，所以需要重置初始化标志）
         container.innerHTML = '';
+        container._msgMenuInited = false;
         
         // 从数据库获取该角色的所有消息
         const allChats = await getAllChatsFromDB();
@@ -9755,6 +9938,12 @@ function closeChatDetail() {
     document.getElementById('chatDetailPage').style.display = 'none';
     // AI调用已使用捕获的角色引用，可以安全清空全局变量
     currentChatCharacter = null;
+    
+    // 清理长按菜单初始化标志，以便下次打开时重新初始化
+    const container = document.getElementById('chatMessagesContainer');
+    if (container) {
+        container._msgMenuInited = false;
+    }
 }
 
 // 显示角色信息
@@ -9817,6 +10006,11 @@ function openChatSettings() {
     document.getElementById('userNameInput').value = userData.name || '';
     document.getElementById('userDescInput').value = userData.description || '';
     
+    // 初始化银行卡转账设置
+    if (typeof initBankTransferSettings === 'function') {
+        initBankTransferSettings();
+    }
+    
     // 加载已绑定的世界书
     const boundWorldBookIds = currentChatCharacter.boundWorldBooks || [];
     updateBoundWorldBooksDisplay(boundWorldBookIds);
@@ -9875,6 +10069,495 @@ function switchChatSettingsTab(tabName) {
     const tabContent = document.getElementById(tabName + 'Tab');
     if (tabContent) {
         tabContent.classList.add('active');
+    }
+}
+
+// 长期记忆格式选择变化
+function onLongTermMemoryFormatChange() {
+    const select = document.getElementById('longTermMemoryFormatSelect');
+    const preview = document.getElementById('longTermMemoryFormatPreview');
+    const customGroup = document.getElementById('longTermMemoryCustomPromptGroup');
+    const customInput = document.getElementById('longTermMemoryCustomPromptInput');
+
+    const format = select.value;
+
+    if (format === 'custom') {
+        customGroup.style.display = 'block';
+        preview.textContent = '使用自定义提示词进行总结';
+        
+        // 如果输入框为空，自动填入日记式作为示例（需要从script2.js获取）
+        if (!customInput.value.trim() && typeof LTM_SIMPLE_PROMPTS !== 'undefined') {
+            customInput.value = LTM_SIMPLE_PROMPTS.diary;
+        }
+    } else {
+        customGroup.style.display = 'none';
+        // 显示预设格式的预览（需要从script2.js获取）
+        if (typeof LTM_FORMAT_TEMPLATES !== 'undefined' && LTM_FORMAT_TEMPLATES[format]) {
+            const template = LTM_FORMAT_TEMPLATES[format];
+            preview.textContent = `${template.name}：${template.description}`;
+        }
+    }
+}
+
+// 精简格式切换处理
+function onLtmCondenseFormatChange() {
+    const select = document.getElementById('ltmCondenseFormatSelect');
+    const preview = document.getElementById('ltmCondenseFormatPreview');
+    const customGroup = document.getElementById('ltmCondenseCustomPromptGroup');
+    const customInput = document.getElementById('ltmCondensePromptInput');
+
+    const format = select.value;
+
+    if (format === 'custom') {
+        customGroup.style.display = 'block';
+        preview.textContent = '使用自定义提示词进行精简';
+        
+        // 如果输入框为空，自动填入第一人称作为示例（需要从script2.js获取）
+        if (!customInput.value.trim() && typeof LTM_CONDENSE_FORMATS !== 'undefined') {
+            customInput.value = LTM_CONDENSE_FORMATS['first-person'].prompt;
+        }
+    } else {
+        customGroup.style.display = 'none';
+        // 显示预设格式的预览（需要从script2.js获取）
+        if (typeof LTM_CONDENSE_FORMATS !== 'undefined') {
+            const formatConfig = LTM_CONDENSE_FORMATS[format];
+            if (formatConfig) {
+                preview.textContent = formatConfig.preview;
+            }
+        }
+    }
+}
+
+// ========== 长期记忆相关函数 ==========
+// 这些函数在HTML中被直接调用，所以放在script.js中
+
+// 打开长期记忆管理库
+async function openLongTermMemoryManager() {
+    if (!currentChatCharacter) return;
+    document.getElementById('longTermMemoryPage').style.display = 'block';
+    if (typeof renderLongTermMemoryList === 'function') {
+        await renderLongTermMemoryList();
+    }
+}
+
+// 手动添加长期记忆
+async function addLongTermMemoryManual() {
+    if (!currentChatCharacter) {
+        console.error('没有当前角色');
+        return;
+    }
+
+    console.log('打开添加记忆弹窗，当前角色:', currentChatCharacter.name);
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10003;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'width:300px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:22px 24px 12px;text-align:center;';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:17px;font-weight:600;color:#333;';
+    title.textContent = '添加长期记忆';
+    header.appendChild(title);
+
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:8px 24px 16px;';
+    const textarea = document.createElement('textarea');
+    textarea.className = 'ltm-edit-textarea';
+    textarea.placeholder = '输入记忆内容...';
+    textarea.style.cssText += 'width:100%;min-height:100px;';
+    body.appendChild(textarea);
+
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:0 24px 20px;display:flex;gap:10px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'flex:1;padding:13px 0;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+
+    const saveBtn = document.createElement('button');
+    saveBtn.style.cssText = 'flex:1;padding:13px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;';
+    saveBtn.textContent = '保存';
+    saveBtn.onclick = async () => {
+        const content = textarea.value.trim();
+        if (!content) {
+            await showIosAlert('提示', '请输入记忆内容');
+            return;
+        }
+        
+        console.log('开始保存记忆:', content);
+        
+        try {
+            // 添加记忆
+            await addLongTermMemory(currentChatCharacter.id, content, 'manual');
+            console.log('记忆已添加到数据库');
+            
+            // 刷新列表
+            await renderLongTermMemoryList();
+            console.log('列表已刷新');
+            
+            // 关闭弹窗
+            closeDialog();
+            
+            showToast('已添加');
+        } catch (error) {
+            console.error('添加记忆失败:', error);
+            await showIosAlert('错误', '添加失败: ' + error.message);
+        }
+    };
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(saveBtn);
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        card.style.transform = 'scale(1) translateY(0)';
+        card.style.opacity = '1';
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeDialog();
+    });
+
+    setTimeout(() => textarea.focus(), 400);
+
+    function closeDialog() {
+        overlay.style.opacity = '0';
+        card.style.transform = 'scale(0.9) translateY(20px)';
+        card.style.opacity = '0';
+        setTimeout(() => { 
+            if (overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
+            }
+        }, 300);
+    }
+}
+
+// 开始精简模式
+function startCondenseMode() {
+    if (!currentChatCharacter) return;
+    if (typeof ltmCondenseMode !== 'undefined') {
+        ltmCondenseMode = true;
+    }
+    if (typeof ltmCondenseSelected !== 'undefined') {
+        ltmCondenseSelected.clear();
+    }
+    const btn = document.getElementById('ltmCondenseBtn');
+    if (btn) {
+        btn.textContent = '取消';
+        btn.onclick = exitCondenseMode;
+    }
+    if (typeof renderCondenseMemoryList === 'function') {
+        renderCondenseMemoryList();
+    }
+    if (typeof showCondenseBar === 'function') {
+        showCondenseBar();
+    }
+}
+
+// 退出精简模式
+function exitCondenseMode() {
+    if (typeof ltmCondenseMode !== 'undefined') {
+        ltmCondenseMode = false;
+    }
+    if (typeof ltmCondenseSelected !== 'undefined') {
+        ltmCondenseSelected.clear();
+    }
+    const btn = document.getElementById('ltmCondenseBtn');
+    if (btn) {
+        btn.textContent = '精简';
+        btn.onclick = startCondenseMode;
+    }
+    if (typeof removeCondenseBar === 'function') {
+        removeCondenseBar();
+    }
+    if (typeof renderLongTermMemoryList === 'function') {
+        renderLongTermMemoryList();
+    }
+}
+
+// 打开手动总结弹窗
+async function openManualSummaryModal() {
+    if (!currentChatCharacter) return;
+
+    // 获取当前角色的所有消息
+    const allChats = await getAllChatsFromDB();
+    const msgs = allChats.filter(m => m.characterId === currentChatCharacter.id);
+    msgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    if (msgs.length < 2) {
+        showIosAlert('提示', '消息太少，至少需要2条消息才能总结');
+        return;
+    }
+
+    const total = msgs.length;
+
+    // 获取真名
+    const charName = currentChatCharacter.name || '角色';
+    let userName = '用户';
+    try {
+        const uds = localStorage.getItem('chatUserData');
+        if (uds) { const ud = JSON.parse(uds); if (ud.name) userName = ud.name; }
+    } catch (e) {}
+
+    // 构建弹窗
+    const overlay = document.createElement('div');
+    overlay.id = 'manualSummaryOverlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10003;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'width:320px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);max-height:80vh;overflow-y:auto;';
+
+    // 标题
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:22px 24px 8px;text-align:center;';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:17px;font-weight:600;color:#333;';
+    title.textContent = '手动总结';
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size:12px;color:#aaa;margin-top:6px;';
+    subtitle.textContent = `当前共 ${total} 条消息，选择要总结的范围`;
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    // 范围选择区域
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:16px 24px;';
+
+    // 从第几条
+    const fromGroup = document.createElement('div');
+    fromGroup.style.cssText = 'margin-bottom:14px;';
+    const fromLabel = document.createElement('div');
+    fromLabel.style.cssText = 'font-size:13px;color:#666;margin-bottom:6px;';
+    fromLabel.textContent = '从第几条开始';
+    const fromRow = document.createElement('div');
+    fromRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
+    const fromInput = document.createElement('input');
+    fromInput.type = 'number';
+    fromInput.id = 'manualSummaryFrom';
+    fromInput.min = 1;
+    fromInput.max = total;
+    fromInput.value = Math.max(1, total - 19);
+    fromInput.style.cssText = 'flex:1;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;box-sizing:border-box;';
+    fromInput.onfocus = () => { fromInput.style.borderColor = '#007aff'; };
+    fromInput.onblur = () => { fromInput.style.borderColor = '#e0e0e0'; };
+    const fromHint = document.createElement('span');
+    fromHint.style.cssText = 'font-size:13px;color:#999;white-space:nowrap;';
+    fromHint.textContent = `/ ${total}`;
+    fromRow.appendChild(fromInput);
+    fromRow.appendChild(fromHint);
+    fromGroup.appendChild(fromLabel);
+    fromGroup.appendChild(fromRow);
+
+    // 到第几条
+    const toGroup = document.createElement('div');
+    toGroup.style.cssText = 'margin-bottom:14px;';
+    const toLabel = document.createElement('div');
+    toLabel.style.cssText = 'font-size:13px;color:#666;margin-bottom:6px;';
+    toLabel.textContent = '到第几条结束';
+    const toRow = document.createElement('div');
+    toRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
+    const toInput = document.createElement('input');
+    toInput.type = 'number';
+    toInput.id = 'manualSummaryTo';
+    toInput.min = 1;
+    toInput.max = total;
+    toInput.value = total;
+    toInput.style.cssText = 'flex:1;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;box-sizing:border-box;';
+    toInput.onfocus = () => { toInput.style.borderColor = '#007aff'; };
+    toInput.onblur = () => { toInput.style.borderColor = '#e0e0e0'; };
+    const toHint = document.createElement('span');
+    toHint.style.cssText = 'font-size:13px;color:#999;white-space:nowrap;';
+    toHint.textContent = `/ ${total}`;
+    toRow.appendChild(toInput);
+    toRow.appendChild(toHint);
+    toGroup.appendChild(toLabel);
+    toGroup.appendChild(toRow);
+
+    // 预览区域：显示选中范围的消息预览
+    const previewBox = document.createElement('div');
+    previewBox.id = 'manualSummaryPreview';
+    previewBox.style.cssText = 'background:#f8f8f8;border-radius:10px;padding:12px;max-height:150px;overflow-y:auto;font-size:12px;color:#666;line-height:1.6;margin-bottom:6px;';
+    previewBox.textContent = '加载预览中...';
+
+    // 更新预览的函数
+    function updatePreview() {
+        const from = Math.max(1, Math.min(total, parseInt(fromInput.value) || 1));
+        const to = Math.max(from, Math.min(total, parseInt(toInput.value) || total));
+        const selected = msgs.slice(from - 1, to);
+        const count = selected.length;
+        if (count === 0) {
+            previewBox.innerHTML = '<span style="color:#ccc;">无消息</span>';
+            return;
+        }
+        // 只显示前5条和后2条，中间省略
+        let lines = [];
+        const show = count <= 8 ? selected : [...selected.slice(0, 5), null, ...selected.slice(-2)];
+        show.forEach((m, i) => {
+            if (!m) {
+                lines.push('<div style="text-align:center;color:#ccc;padding:2px 0;">... 省略 ' + (count - 7) + ' 条 ...</div>');
+                return;
+            }
+            const role = m.type === 'user' ? userName : charName;
+            let text = m.content || '';
+            if (m.messageType === 'voice') text = '(语音)';
+            else if (m.messageType === 'sticker') text = '(表情包)';
+            else if (m.messageType === 'image') text = '(图片)';
+            else if (m.messageType === 'textImage') text = '(图文)';
+            else if (m.messageType === 'transfer') text = '(转账)';
+            else if (m.messageType === 'location') text = '(位置)';
+            if (text.length > 30) text = text.substring(0, 30) + '...';
+            lines.push(`<div style="padding:2px 0;">${role}: ${escapeHtml(text)}</div>`);
+        });
+        previewBox.innerHTML = `<div style="font-size:11px;color:#999;margin-bottom:6px;">已选 ${count} 条消息</div>` + lines.join('');
+    }
+
+    fromInput.oninput = updatePreview;
+    toInput.oninput = updatePreview;
+
+    body.appendChild(fromGroup);
+    body.appendChild(toGroup);
+    body.appendChild(previewBox);
+
+    // 按钮区域
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:8px 24px 20px;display:flex;gap:10px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'flex:1;padding:13px 0;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;transition:all 0.15s;';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeManualSummaryModal(overlay, card);
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.style.cssText = 'flex:1;padding:13px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#007aff;cursor:pointer;transition:all 0.15s;';
+    confirmBtn.textContent = '开始总结';
+    confirmBtn.onclick = () => {
+        if (typeof executeManualSummary === 'function') {
+            executeManualSummary(overlay, card, msgs);
+        }
+    };
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // 入场动画
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        card.style.transform = 'scale(1) translateY(0)';
+        card.style.opacity = '1';
+    });
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeManualSummaryModal(overlay, card);
+    });
+
+    // 初始预览
+    setTimeout(updatePreview, 50);
+}
+
+// 关闭手动总结弹窗
+function closeManualSummaryModal(overlay, card) {
+    overlay.style.opacity = '0';
+    card.style.transform = 'scale(0.9) translateY(20px)';
+    card.style.opacity = '0';
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+}
+
+// 关闭长期记忆管理库
+function closeLongTermMemoryManager() {
+    document.getElementById('longTermMemoryPage').style.display = 'none';
+}
+
+// 开始编辑长期记忆
+function startEditLongTermMemory(memoryId) {
+    const item = document.querySelector(`.ltm-item[data-ltm-id="${memoryId}"]`);
+    if (!item) return;
+
+    const contentEl = item.querySelector('.ltm-item-content');
+    const actionsEl = item.querySelector('.ltm-item-actions');
+    const originalContent = contentEl.textContent;
+
+    contentEl.innerHTML = `<textarea class="ltm-edit-textarea">${escapeHtml(originalContent)}</textarea>`;
+    actionsEl.innerHTML = `
+        <div class="ltm-edit-actions">
+            <button class="ltm-edit-btn" onclick="cancelEditLongTermMemory('${memoryId}', '${encodeURIComponent(originalContent)}')">取消</button>
+            <button class="ltm-edit-btn primary" onclick="saveEditLongTermMemory('${memoryId}')">保存</button>
+        </div>
+    `;
+
+    const textarea = contentEl.querySelector('textarea');
+    if (textarea) textarea.focus();
+}
+
+// 取消编辑长期记忆
+function cancelEditLongTermMemory(memoryId, encodedContent) {
+    const originalContent = decodeURIComponent(encodedContent);
+    const item = document.querySelector(`.ltm-item[data-ltm-id="${memoryId}"]`);
+    if (!item) return;
+
+    const contentEl = item.querySelector('.ltm-item-content');
+    const actionsEl = item.querySelector('.ltm-item-actions');
+
+    contentEl.textContent = originalContent;
+    actionsEl.innerHTML = `
+        <button class="ltm-action-btn" onclick="startEditLongTermMemory('${memoryId}')">编辑</button>
+        <button class="ltm-action-btn danger" onclick="confirmDeleteLongTermMemory('${memoryId}')">删除</button>
+    `;
+}
+
+// 保存编辑长期记忆
+async function saveEditLongTermMemory(memoryId) {
+    if (!currentChatCharacter) return;
+
+    const item = document.querySelector(`.ltm-item[data-ltm-id="${memoryId}"]`);
+    if (!item) return;
+
+    const textarea = item.querySelector('.ltm-edit-textarea');
+    if (!textarea) return;
+
+    const newContent = textarea.value.trim();
+    if (!newContent) {
+        showIosAlert('提示', '记忆内容不能为空');
+        return;
+    }
+
+    if (typeof editLongTermMemory === 'function') {
+        await editLongTermMemory(currentChatCharacter.id, memoryId, newContent);
+    }
+    if (typeof renderLongTermMemoryList === 'function') {
+        await renderLongTermMemoryList();
+    }
+    showToast('已保存');
+}
+
+// 确认删除长期记忆
+async function confirmDeleteLongTermMemory(memoryId) {
+    if (!currentChatCharacter) return;
+
+    const confirmed = await iosConfirm('确认删除这条长期记忆？');
+    if (confirmed) {
+        if (typeof deleteLongTermMemory === 'function') {
+            await deleteLongTermMemory(currentChatCharacter.id, memoryId);
+        }
+        if (typeof renderLongTermMemoryList === 'function') {
+            await renderLongTermMemoryList();
+        }
+        showToast('已删除');
     }
 }
 
@@ -10532,10 +11215,14 @@ async function showEmojiPicker() {
                 const transferRejectMatch = msg.match(/^\[transfer-reject\]$/);
                 // 检查是否是角色主动发送转账指令 [transfer:金额] 或 [transfer:金额:备注]
                 const transferSendMatch = msg.match(/^\[transfer:([\d.]+)(?::(.+))?\]$/);
+                // 检查是否是银行转账指令 [银行转账:金额:原因]
+                const bankTransferMatch = msg.match(/^\[银行转账:([\d.]+):(.+)\]$/);
                 // 检查是否是角色发送图片指令 [image:描述]
                 const charImageMatch = msg.match(/^\[image:(.+)\]$/);
                 // 检查是否是角色发送定位指令 [location:地址] 或 [location:地址:坐标] 或 [location:地址:坐标:距离]
                 const locationMatch = msg.match(/^\[location:([^:\]]+)(?::([^:\]]*))?(?::([^\]]*))?\]$/);
+                // 检查是否是引用消息指令 [quote:消息ID]
+                const quoteMatch = msg.match(/^\[quote:([^\]]+)\]$/);
                 let messageObj;
                 
                 if (stickerMatch && stickerMap[stickerMatch[1]]) {
@@ -10626,6 +11313,21 @@ async function showEmojiPicker() {
                         transferId: transferId,
                         transferStatus: 'pending'
                     };
+                } else if (bankTransferMatch) {
+                    // 角色发送银行转账
+                    const btAmount = Math.round(parseFloat(bankTransferMatch[1]) * 100) / 100;
+                    const btReason = bankTransferMatch[2] || '';
+                    if (!btAmount || btAmount <= 0 || isNaN(btAmount)) {
+                        continue; // 金额无效，跳过
+                    }
+                    // 执行银行转账（异步，不阻塞消息显示）
+                    if (typeof executeBankTransfer === 'function') {
+                        executeBankTransfer(btAmount, btReason).catch(err => {
+                            console.error('银行转账执行失败:', err);
+                        });
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
                 } else if (charImageMatch) {
                     // 角色发送图片消息（虚拟图片，显示为灰色占位+描述）
                     const imageDesc = charImageMatch[1];
@@ -10669,14 +11371,95 @@ async function showEmojiPicker() {
                         locationDistance: locDist,
                         locationUnit: locUnit
                     };
+                } else if (quoteMatch) {
+                    // 角色引用消息
+                    const quotedMsgId = quoteMatch[1].trim();
+                    // 从数据库查找被引用的消息
+                    const allChats = await getAllChatsFromDB();
+                    const quotedMsg = allChats.find(m => m.id === quotedMsgId && m.characterId === targetCharacterId);
+                    
+                    if (quotedMsg) {
+                        // 获取被引用消息的发送者名称
+                        let quotedSender = '';
+                        if (quotedMsg.type === 'user') {
+                            // 从 localStorage 读取用户真名
+                            try {
+                                const userDataStr = localStorage.getItem('chatUserData');
+                                if (userDataStr) {
+                                    const userData = JSON.parse(userDataStr);
+                                    quotedSender = userData.name || 'User';
+                                } else {
+                                    quotedSender = 'User';
+                                }
+                            } catch (e) {
+                                quotedSender = 'User';
+                            }
+                        } else {
+                            quotedSender = targetCharacter.remark || targetCharacter.name;
+                        }
+                        
+                        // 获取被引用消息的内容（简化显示）
+                        let quotedContent = quotedMsg.content || '';
+                        if (quotedMsg.messageType === 'sticker') quotedContent = '[表情包]';
+                        else if (quotedMsg.messageType === 'voice') quotedContent = '[语音消息]';
+                        else if (quotedMsg.messageType === 'image') quotedContent = '[图片]';
+                        else if (quotedMsg.messageType === 'textImage') quotedContent = '[图片]';
+                        else if (quotedMsg.messageType === 'transfer') quotedContent = '[转账]';
+                        else if (quotedMsg.messageType === 'location') quotedContent = '[位置]';
+                        else if (quotedMsg.messageType === 'bankTransfer') quotedContent = '[银行转账]';
+                        
+                        // 查找下一条消息作为回复内容
+                        let replyContent = '';
+                        if (i + 1 < messages.length) {
+                            const nextMsg = messages[i + 1];
+                            // 清洗下一条消息，去除可能的指令标记
+                            replyContent = nextMsg
+                                .replace(/\[sticker:[^\]]*\]/g, '')
+                                .replace(/\[voice:[^\]]*\]/g, '')
+                                .replace(/\[transfer[^\]]*\]/g, '')
+                                .replace(/\[银行转账:[^\]]*\]/g, '')
+                                .replace(/\[image:[^\]]*\]/g, '')
+                                .replace(/\[location:[^\]]*\]/g, '')
+                                .replace(/\[quote:[^\]]*\]/g, '')
+                                .trim();
+                            
+                            // 如果下一条是有效的回复内容，跳过下一条消息的处理
+                            if (replyContent) {
+                                i++; // 跳过下一条消息
+                            }
+                        }
+                        
+                        // 如果没有找到回复内容，使用默认文本
+                        if (!replyContent) {
+                            replyContent = '（引用了这条消息）';
+                        }
+                        
+                        messageObj = {
+                            id: Date.now().toString() + Math.random(),
+                            characterId: targetCharacterId,
+                            content: replyContent,
+                            type: 'char',
+                            timestamp: new Date().toISOString(),
+                            sender: 'char',
+                            messageType: 'quote',
+                            quotedMessageId: quotedMsgId,
+                            quotedSender: quotedSender,
+                            quotedContent: quotedContent
+                        };
+                    } else {
+                        // 找不到被引用的消息，跳过
+                        continue;
+                    }
                 } else {
                     // 普通文本消息 - 清洗未被处理的指令标记
                     let cleanMsg = msg
                         .replace(/\[sticker:[^\]]*\]/g, '')
                         .replace(/\[voice:[^\]]*\]/g, '')
                         .replace(/\[transfer[^\]]*\]/g, '')
+                        .replace(/\[银行转账:[^\]]*\]/g, '')
                         .replace(/\[image:[^\]]*\]/g, '')
                         .replace(/\[location:[^\]]*\]/g, '')
+                        .replace(/\[quote:[^\]]*\]/g, '')
                         .trim();
                     
                     // 清洗后为空则跳过（AI只发了一个无效指令）
@@ -10715,7 +11498,8 @@ async function showEmojiPicker() {
             const lastMsgTransferSend = lastMsg.match(/^\[transfer:[\d.]+(?::.+)?\]$/);
             const lastMsgImage = lastMsg.match(/^\[image:.+\]$/);
             const lastMsgLocation = lastMsg.match(/^\[location:[^\]]+\]$/);
-            targetCharacter.lastMessage = lastMsgSticker ? '[表情包]' : lastMsgVoice ? '[语音消息]' : (lastMsgTransfer || lastMsgTransferSend) ? '[转账]' : lastMsgImage ? '[图片]' : lastMsgLocation ? '[位置]' : lastMsg.substring(0, 50) + (lastMsg.length > 50 ? '...' : '');
+            const lastMsgQuote = lastMsg.match(/^\[quote:[^\]]+\]$/);
+            targetCharacter.lastMessage = lastMsgSticker ? '[表情包]' : lastMsgVoice ? '[语音消息]' : (lastMsgTransfer || lastMsgTransferSend) ? '[转账]' : lastMsgImage ? '[图片]' : lastMsgLocation ? '[位置]' : lastMsgQuote ? '[引用消息]' : lastMsg.substring(0, 50) + (lastMsg.length > 50 ? '...' : '');
             await saveChatCharacters();
             
             // 只有当用户仍在查看目标角色的聊天界面时才滚动
@@ -10879,8 +11663,26 @@ async function buildRolePlaySystemPrompt(targetCharacter) {
     
     const parts = [];
     
-    // 1. 核心人格浸入 - 用角色视角写，不用指令视角
-    parts.push(`你就是这个人。你在用手机跟人聊天，这是你日常生活的一部分。
+    // 0. 开头就强调输出格式
+    parts.push(`【重要：输出格式要求】
+你的回复必须是一个有效的 JSON 字符串数组格式，不能有任何其他内容。
+格式：["消息1", "消息2", "消息3"]
+- 必须用方括号 [] 包裹
+- 每条消息用双引号 "" 包裹
+- 多条消息之间用逗号分隔
+- 不要在 JSON 之外添加任何解释、说明或其他文字
+- 不要使用 markdown 代码块标记
+
+示例：
+正确：["你好啊", "在干嘛呢"]
+正确：["就一条消息"]
+错误：你好啊（这不是 JSON 格式）
+错误：\`\`\`json["你好"]\`\`\`（不要用代码块）
+错误：["你好"] 我想说的是...（不要在 JSON 外加文字）
+
+---
+
+你就是这个人。你在用手机跟人聊天，这是你日常生活的一部分。
 
 你是一个活生生的人，有血有肉。你今天经历了属于你自己的一天——可能起晚了，可能刚忙完一件事，可能正在吃东西或者发呆。你的生活不围绕这个聊天展开，聊天只是你生活里的一小部分。
 
@@ -10901,7 +11703,8 @@ async function buildRolePlaySystemPrompt(targetCharacter) {
 关于消息类型：
 - 对方有时候会发语音消息，语音消息会用「」括起来表示对方说的原话。语音是对方用嘴说出来的，不是打字的，所以语气可能更口语化、更随意。你听到语音后自然地回复就好，不需要特别提到"你发语音了"之类的，就像平时微信聊天收到语音一样正常回复。
 - 对方有时候会发表情包，你会看到表情包的含义描述。表情包代表对方当时的情绪或态度，你根据表情包的含义自然地理解对方的心情并回复就好，不需要刻意说"你发了个表情包"。
-- 对方有时候会发图片，你会看到图片内容的描述。你就当作真的看到了这张图片，自然地回应就好，不需要说"你发了张图片"之类的。`);
+- 对方有时候会发图片，你会看到图片内容的描述。你就当作真的看到了这张图片，自然地回应就好，不需要说"你发了张图片"之类的。
+- 对方有时候会引用你之前说过的话来回复。当你看到"（用户引用了你的消息："xxx"，以下是用户针对这条消息的回复）"这样的提示时，说明对方是专门针对你那条消息进行回复的。你要结合被引用的那条消息来理解对方的回复，这样才能准确理解对方的意思。引用代表对方想让你明确知道他在回复你的哪句话，所以你的回复要体现出你理解了这个关联。`);
     
     // 2. 角色人设
     if (character) {
@@ -11004,6 +11807,13 @@ ${character.description ? `\n${character.description}` : ''}
             }
         }
 
+        // 5.1 格式提醒（在介绍特殊功能前再次提醒）
+        parts.push(`\n【格式提醒】
+接下来会介绍一些特殊功能（表情包、语音、转账等），但无论你使用什么功能，你的最终回复格式必须是 JSON 数组：["消息1", "消息2"]
+每个特殊功能都是作为数组中的一个元素，不要破坏 JSON 格式。
+
+---`);
+
         const availableStickers = await getAvailableStickersForCharacter(character.id);
         if (availableStickers.length > 0) {
             const stickerList = availableStickers.map(s => s.name).join('、');
@@ -11045,6 +11855,32 @@ ${character.description ? `\n${character.description}` : ''}
 举例：你想给对方转52块钱并备注"请你喝奶茶"，就写 [transfer:52.0:请你喝奶茶]
 举例：你想转个红包不备注，就写 [transfer:6.66]`);
 
+    // 5.77 银行转账能力（条件注入）
+    const bankTransferSettings = JSON.parse(localStorage.getItem('bankTransferSettings') || '{}');
+    if (bankTransferSettings.enabled && bankTransferSettings.selectedCardIndex !== null && bankTransferSettings.selectedCardIndex !== undefined) {
+        const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+        const card = walletData.bankCards ? walletData.bankCards[bankTransferSettings.selectedCardIndex] : null;
+        
+        if (card) {
+            const cardNumber = card.number || card.cardNumber || '0000000000000000';
+            const last4 = cardNumber.slice(-4);
+            const cardInfo = `${card.name || '银行卡'} 尾号${last4}`;
+            
+            parts.push(`\n【银行转账功能】
+当你需要给对方转账，但金额比较大（比如几千、几万）或者超过了平台单笔限额时，你可以直接转到对方的银行卡。
+目标卡号：${cardInfo}
+使用格式：[银行转账:金额:原因]
+使用场景：
+- 大额转账（几千、几万元以上）
+- 超过平台单笔限额的转账
+- 其他需要走银行渠道的情况
+注意：小额转账（几百元以内）还是用普通的 [transfer:金额] 就好，银行转账主要用于大额。
+举例：需要转5000块钱：[银行转账:50000:这个月生活费]
+举例：转个大红包：[银行转账:8888888:新年快乐！]
+银行转账消息单独一条发，不要和文字混在同一条消息里。`);
+        }
+    }
+
     // 5.75 角色发送图片能力
     parts.push(`\n你可以发图片。当然你发的不是真实照片，而是描述一张图片的内容——对方会看到一张图片的样子，点开能看到你描述的内容。就像你拍了张照片发过去一样。
 什么时候发图片完全看你自己：比如你在吃好吃的想分享、看到有趣的东西想给对方看、自拍、拍风景、截图等等，都可以。
@@ -11066,6 +11902,17 @@ ${character.description ? `\n${character.description}` : ''}
 - 比如你想发一个带距离的定位：[location:东京塔:35.6586,139.7454:2100km]
 - 定位消息单独一条发，不要和文字混在同一条消息里
 - 不要滥用，在合适的场景自然地使用就好`);
+
+    // 5.77 角色引用消息能力
+    parts.push(`\n你可以引用对方说过的话来回复。就像微信里长按消息选择"引用"一样，你可以针对对方某条具体的消息进行回复。
+什么时候引用看你自己：比如对方说了好几件事你想针对其中一件回复、想回应对方之前说的某句话、或者对话跳跃了你想拉回之前的话题等等。
+要引用消息的时候，用这个格式：[quote:消息ID]
+- 消息ID就是对话历史里每条消息的id字段
+- 引用后，对方会看到你引用了TA的哪条消息
+- 引用消息单独一条发，不要和文字混在同一条消息里
+- 比如对方说"今天天气真好"（消息ID是msg_123），你想针对这句话回复，就发：[quote:msg_123]
+- 然后下一条消息再发你的回复内容
+- 不要滥用，在需要针对性回复时自然地使用就好`);
 
     // 5.8 时间感知
     if (character && character.timeAwareness !== false) {
@@ -11159,9 +12006,35 @@ ${timeDiffDetail}。现在是 ${hours}:${minutes}:${seconds}。
     }
 
     
-    // 6. 输出格式要求
-    parts.push(`\n回复格式：返回一个JSON字符串数组，每个元素是你发的一条消息。想发几条发几条，1条也行，5条也行，看你当时的状态。
-格式示例：["消息1", "消息2"] 或 ["就一条"]
+    // 6. 输出格式要求（结尾再次强调）
+    parts.push(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【最后再次强调：输出格式】
+
+你的回复必须严格遵守以下格式，这是系统要求，不可违反：
+
+1. 必须是有效的 JSON 数组格式
+2. 用方括号 [] 包裹所有消息
+3. 每条消息用双引号 "" 包裹
+4. 多条消息用逗号分隔
+5. 不要在 JSON 之外添加任何内容
+
+格式模板：["消息1", "消息2", "消息3"]
+
+你想发几条消息就发几条，1条也行，10条也行，完全看你的心情和聊天节奏。
+
+正确示例：
+- 发一条：["你好啊"]
+- 发多条：["你好啊", "在干嘛呢", "好久不见"]
+- 带表情包：["哈哈哈", "[sticker:开心]"]
+- 带语音：["[voice:你在干嘛呀]", "好久没联系了"]
+
+错误示例（绝对不要这样）：
+- ❌ 你好啊（没有 JSON 格式）
+- ❌ 你好啊，在干嘛呢（没有 JSON 格式）
+- ❌ \`\`\`json["你好"]\`\`\`（不要用代码块）
+- ❌ ["你好"] 我想说...（不要在 JSON 外加内容）
+
+记住：你的整个回复就是一个 JSON 数组，没有其他任何东西。
 
 现在，用你自己的方式回复对方：`);
     
@@ -11277,10 +12150,16 @@ async function callAIRolePlay(targetCharacter) {
         }
     ];
     
-    // 添加聊天历史（每条消息都带精确时间戳）
+    // 添加聊天历史（每条消息都带精确时间戳和ID）
     chatHistory.forEach(msg => {
         let content = msg.content;
         let imageData = null;
+        
+        // 生成消息ID标记（让AI知道每条消息的ID）
+        let idPrefix = '';
+        if (msg.id) {
+            idPrefix = `[id:${msg.id}] `;
+        }
         
         // 生成精确时间标记（精确到秒）
         let timePrefix = '';
@@ -11294,6 +12173,13 @@ async function callAIRolePlay(targetCharacter) {
             const s = String(msgTime.getSeconds()).padStart(2, '0');
             timePrefix = `[${y}年${mo}月${d}日 ${h}:${mi}:${s}] `;
         }
+        
+        // 检查是否有引用信息（用户引用了角色的消息）
+        let quotePrefix = '';
+        if (msg.quotedMessageId && msg.quotedSender && msg.quotedContent && msg.type === 'user') {
+            quotePrefix = `（用户引用了你的消息："${msg.quotedContent}"，以下是用户针对这条消息的回复）\n`;
+        }
+        
         // 语音消息
         if (msg.messageType === 'voice' && msg.voiceText) {
             if (msg.type === 'user') {
@@ -11384,9 +12270,27 @@ async function callAIRolePlay(targetCharacter) {
                 content = tag;
             }
         }
+        // 银行转账消息：转换为自然描述
+        if (msg.messageType === 'bankTransfer') {
+            const amount = msg.bankTransferAmount || 0;
+            const reason = msg.bankTransferReason || '';
+            const cardInfo = msg.bankTransferCard || '银行卡';
+            content = `（你刚刚通过银行向对方的${cardInfo}转账了${amount}元${reason ? '，原因：' + reason : ''}。）`;
+        }
+        // 引用消息：转换为自然描述
+        if (msg.messageType === 'quote') {
+            const quotedSender = msg.quotedSender || '对方';
+            const quotedContent = msg.quotedContent || '';
+            content = `（你刚刚引用了${quotedSender}的消息："${quotedContent}"。）`;
+        }
+        // 系统消息：作为客观事实添加到上下文，明确告知AI这不是任何人说的话
+        if (msg.messageType === 'systemNotice' || msg.type === 'system') {
+            // 使用特殊格式，让AI明确知道这是系统记录的客观事实
+            content = `（系统记录的客观事实：${msg.content}。注意：这不是你说的，也不是对方说的，这是系统自动记录的事实信息，供你了解当前情况。）`;
+        }
         const msgObj = {
-            role: msg.type === 'user' ? 'user' : 'assistant',
-            content: timePrefix + content
+            role: msg.type === 'user' ? 'user' : (msg.type === 'system' ? 'user' : 'assistant'),
+            content: idPrefix + timePrefix + quotePrefix + content
         };
         if (imageData) {
             msgObj._hasImage = true;
@@ -11812,10 +12716,12 @@ async function handleResend() {
             return;
         }
 
-        // 收集最后一条用户消息之后的所有角色消息（即本回合AI的回复）
+        // 收集最后一条用户消息之后的所有角色消息和系统消息（即本回合AI的回复和相关系统通知）
         const messagesToDelete = [];
         for (let i = lastUserMsgIndex + 1; i < characterMessages.length; i++) {
-            if (characterMessages[i].type === 'char' || characterMessages[i].sender === 'char') {
+            // 删除角色消息和系统消息
+            if (characterMessages[i].type === 'char' || characterMessages[i].sender === 'char' || 
+                characterMessages[i].type === 'system' || characterMessages[i].messageType === 'systemNotice') {
                 messagesToDelete.push(characterMessages[i]);
             }
         }
@@ -11839,12 +12745,14 @@ async function handleResend() {
 
         console.log(`重说：已删除 ${messagesToDelete.length} 条角色回复`);
 
-        // 从UI中移除这些消息（从底部移除对应数量的角色消息气泡）
+        // 从UI中移除这些消息（从底部移除对应数量的角色消息和系统消息）
         const container = document.getElementById('chatMessagesContainer');
         const allBubbles = container.querySelectorAll('.chat-message');
         let removed = 0;
         for (let i = allBubbles.length - 1; i >= 0 && removed < messagesToDelete.length; i--) {
-            if (allBubbles[i].classList.contains('chat-message-char')) {
+            // 删除角色消息和系统消息
+            if (allBubbles[i].classList.contains('chat-message-char') || 
+                allBubbles[i].classList.contains('chat-system-message')) {
                 allBubbles[i].remove();
                 removed++;
             }
@@ -14043,11 +14951,22 @@ async function sendMessage() {
         sender: 'user'
     };
     
+    // 检查是否有引用信息
+    const quoteBar = document.getElementById('chatQuoteBar');
+    if (quoteBar && quoteBar.style.display !== 'none' && quoteBar.dataset.quoteId) {
+        messageObj.quotedMessageId = quoteBar.dataset.quoteId;
+        messageObj.quotedSender = quoteBar.dataset.quoteSender;
+        messageObj.quotedContent = quoteBar.dataset.quoteText;
+    }
+    
     // 添加消息到界面
     appendMessageToChat(messageObj);
     
     // 清空输入框
     input.value = '';
+    
+    // 关闭引用条
+    closeQuoteBar();
     
     // 保存消息到数据库
     await saveMessageToDB(messageObj);
@@ -14062,11 +14981,6 @@ async function sendMessage() {
 // 保存消息到数据库
 async function saveMessageToDB(messageObj) {
     try {
-        // 在保存之前清理消息内容中的时间戳
-        if (messageObj.content && typeof messageObj.content === 'string') {
-            messageObj.content = messageObj.content.replace(/^\[\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}:\d{2}\]\s*/, '');
-        }
-        
         const transaction = db.transaction(['chats'], 'readwrite');
         const store = transaction.objectStore('chats');
         
@@ -14247,9 +15161,6 @@ function cleanMessageContent(content) {
     if (!content || typeof content !== 'string') return content || '';
     let text = content.trim();
     
-    // 移除消息开头的时间戳格式: [YYYY年M月D日 HH:MM:SS]
-    text = text.replace(/^\[\d{4}年\d{1,2}月\d{1,2}日\s+\d{1,2}:\d{2}:\d{2}\]\s*/, '');
-    
     // 检测多个JSON数组拼接格式: ["xxx"] ["yyy"]
     if (/^\["[^"]*"\](\s*\["[^"]*"\])+$/.test(text)) {
         const items = [];
@@ -14310,6 +15221,24 @@ function appendMessageToChat(messageObj) {
         appendLocationMessageToChat(messageObj);
         return;
     }
+
+    // 如果是银行转账消息，用专门的渲染函数
+    if (messageObj.messageType === 'bankTransfer') {
+        appendBankTransferMessageToChat(messageObj);
+        return;
+    }
+
+    // 如果是引用消息，用专门的渲染函数
+    if (messageObj.messageType === 'quote') {
+        appendQuoteMessageToChat(messageObj);
+        return;
+    }
+
+    // 如果是系统消息，用专门的渲染函数
+    if (messageObj.messageType === 'systemNotice' || messageObj.type === 'system') {
+        appendSystemMessageToChat(messageObj);
+        return;
+    }
     
     const container = document.getElementById('chatMessagesContainer');
     
@@ -14350,6 +15279,19 @@ function appendMessageToChat(messageObj) {
     messageEl.dataset.msgId = messageObj.id;
     messageEl.dataset.msgType = messageObj.type;
     
+    // 构建引用预览HTML（在气泡外面）
+    let quoteHtml = '';
+    if (messageObj.quotedMessageId && messageObj.quotedSender && messageObj.quotedContent) {
+        const quotedText = messageObj.quotedContent.length > 30 
+            ? messageObj.quotedContent.substring(0, 30) + '...' 
+            : messageObj.quotedContent;
+        quoteHtml = `
+            <div class="chat-quote-preview">
+                <span class="chat-quote-sender">${escapeHtml(messageObj.quotedSender)}</span>: ${escapeHtml(quotedText)}
+            </div>
+        `;
+    }
+    
     messageEl.innerHTML = `
         <div class="chat-message-avatar">
             ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
@@ -14358,6 +15300,7 @@ function appendMessageToChat(messageObj) {
             <div class="chat-message-bubble">
                 ${escapeHtml(cleanMessageContent(messageObj.content))}
             </div>
+            ${quoteHtml}
             <div class="chat-message-time">${time}</div>
         </div>
     `;
@@ -14374,11 +15317,24 @@ function formatMessageTime(date) {
     return `${hours}:${minutes}:${seconds}`;
 }
 
-// HTML转义
+// HTML转义（增强版：保留换行和多个空格）
 function escapeHtml(text) {
+    if (!text) return '';
+    
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    let html = div.innerHTML;
+    
+    // 把换行符转成<br>标签
+    html = html.replace(/\n/g, '<br>');
+    
+    // 把多个连续空格转成&nbsp;（保留格式）
+    html = html.replace(/ {2,}/g, match => '&nbsp;'.repeat(match.length));
+    
+    // 把单独的空格（在行首或<br>后）也转成&nbsp;，防止被折叠
+    html = html.replace(/(<br>|^) /g, '$1&nbsp;');
+    
+    return html;
 }
 
 // 滚动聊天到底部
@@ -15228,7 +16184,395 @@ function closeWorldBook() {
 
 // 添加世界书条目
 function addWorldBookItem() {
-    openWorldBookEdit();
+    showWorldBookCreateOptions();
+}
+
+// 显示创建世界书选项（手动创建 或 导入文档）
+function showWorldBookCreateOptions() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '300px';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '创建世界书';
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons vertical';
+    
+    // 手动创建按钮
+    const manualBtn = document.createElement('button');
+    manualBtn.className = 'ios-dialog-button';
+    manualBtn.textContent = '手动创建';
+    manualBtn.onclick = () => {
+        closeDialog();
+        openWorldBookEdit();
+    };
+    
+    // 导入文档按钮
+    const importBtn = document.createElement('button');
+    importBtn.className = 'ios-dialog-button';
+    importBtn.textContent = '导入文档';
+    importBtn.onclick = () => {
+        closeDialog();
+        openWorldBookImport();
+    };
+    
+    // 取消按钮
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    
+    buttonsEl.appendChild(manualBtn);
+    buttonsEl.appendChild(importBtn);
+    buttonsEl.appendChild(cancelBtn);
+    
+    dialog.appendChild(titleEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+        }, 300);
+    }
+}
+
+// 打开世界书导入界面
+function openWorldBookImport() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.docx,.zip';
+    input.multiple = true;
+    
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        try {
+            showToast('正在解析文件...');
+            const parsedEntries = await parseImportedFiles(files);
+            
+            if (parsedEntries.length === 0) {
+                await iosAlert('没有解析到有效内容', '提示');
+                return;
+            }
+            
+            // 显示确认界面
+            showImportConfirmDialog(parsedEntries);
+        } catch (error) {
+            console.error('文件解析失败:', error);
+            await iosAlert('文件解析失败: ' + error.message, '错误');
+        }
+    };
+    
+    input.click();
+}
+
+// 解析导入的文件
+async function parseImportedFiles(files) {
+    const entries = [];
+    
+    for (const file of files) {
+        try {
+            const fileName = file.name;
+            const fileExt = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+            
+            if (fileExt === '.txt') {
+                const content = await readTextFile(file);
+                if (content.trim()) {
+                    entries.push({
+                        id: Date.now() + Math.random(),
+                        fileName: fileName,
+                        content: content.trim(),
+                        comment: fileName.replace('.txt', ''),
+                        keys: [],
+                        enabled: true,
+                        selected: true
+                    });
+                }
+            } else if (fileExt === '.docx') {
+                const content = await readDocxFile(file);
+                if (content.trim()) {
+                    entries.push({
+                        id: Date.now() + Math.random(),
+                        fileName: fileName,
+                        content: content.trim(),
+                        comment: fileName.replace('.docx', ''),
+                        keys: [],
+                        enabled: true,
+                        selected: true
+                    });
+                }
+            } else if (fileExt === '.zip') {
+                const zipEntries = await readZipFile(file);
+                entries.push(...zipEntries);
+            }
+        } catch (error) {
+            console.error(`解析文件 ${file.name} 失败:`, error);
+        }
+    }
+    
+    return entries;
+}
+
+// 读取TXT文件
+function readTextFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsText(file, 'UTF-8');
+    });
+}
+
+// 读取DOCX文件
+async function readDocxFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const arrayBuffer = e.target.result;
+                const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                resolve(result.value);
+            } catch (error) {
+                reject(error);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// 读取ZIP文件
+async function readZipFile(file) {
+    const entries = [];
+    
+    try {
+        const zip = await JSZip.loadAsync(file);
+        
+        for (const [fileName, zipEntry] of Object.entries(zip.files)) {
+            if (zipEntry.dir) continue;
+            
+            const fileExt = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+            
+            if (fileExt === '.txt') {
+                const content = await zipEntry.async('text');
+                if (content.trim()) {
+                    entries.push({
+                        id: Date.now() + Math.random(),
+                        fileName: fileName,
+                        content: content.trim(),
+                        comment: fileName.replace('.txt', ''),
+                        keys: [],
+                        enabled: true,
+                        selected: true
+                    });
+                }
+            } else if (fileExt === '.docx') {
+                const arrayBuffer = await zipEntry.async('arraybuffer');
+                try {
+                    const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                    if (result.value.trim()) {
+                        entries.push({
+                            id: Date.now() + Math.random(),
+                            fileName: fileName,
+                            content: result.value.trim(),
+                            comment: fileName.replace('.docx', ''),
+                            keys: [],
+                            enabled: true,
+                            selected: true
+                        });
+                    }
+                } catch (error) {
+                    console.error(`解析ZIP中的DOCX文件 ${fileName} 失败:`, error);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('解析ZIP文件失败:', error);
+        throw error;
+    }
+    
+    return entries;
+}
+
+// 显示导入确认对话框
+function showImportConfirmDialog(entries) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10001';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '90%';
+    dialog.style.maxWidth = '500px';
+    dialog.style.maxHeight = '80vh';
+    dialog.style.display = 'flex';
+    dialog.style.flexDirection = 'column';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = `确认导入 (${entries.length}个文件)`;
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'ios-dialog-message';
+    messageEl.textContent = '请选择要导入的条目：';
+    messageEl.style.marginBottom = '12px';
+    
+    // 全选/取消全选按钮
+    const selectAllDiv = document.createElement('div');
+    selectAllDiv.style.cssText = 'padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e5e5;';
+    
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.textContent = '全选';
+    selectAllBtn.style.cssText = 'padding: 6px 12px; font-size: 13px; color: #007aff; background: transparent; border: 1px solid #007aff; border-radius: 6px; cursor: pointer;';
+    selectAllBtn.onclick = () => {
+        entries.forEach(e => e.selected = true);
+        renderEntryList();
+    };
+    
+    const deselectAllBtn = document.createElement('button');
+    deselectAllBtn.textContent = '取消全选';
+    deselectAllBtn.style.cssText = 'padding: 6px 12px; font-size: 13px; color: #666; background: transparent; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;';
+    deselectAllBtn.onclick = () => {
+        entries.forEach(e => e.selected = false);
+        renderEntryList();
+    };
+    
+    selectAllDiv.appendChild(selectAllBtn);
+    selectAllDiv.appendChild(deselectAllBtn);
+    
+    // 条目列表容器
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = 'flex: 1; overflow-y: auto; padding: 12px 16px; max-height: 400px;';
+    
+    function renderEntryList() {
+        listContainer.innerHTML = entries.map((entry, index) => {
+            const preview = entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '');
+            return `
+                <div style="background: ${entry.selected ? '#f0f8ff' : '#f8f8f8'}; border: 2px solid ${entry.selected ? '#007aff' : '#e5e5e5'}; border-radius: 10px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s;" onclick="toggleEntrySelection(${index})">
+                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <input type="checkbox" ${entry.selected ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 10px; cursor: pointer;" onclick="event.stopPropagation(); toggleEntrySelection(${index})">
+                        <div style="flex: 1;">
+                            <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px;">${escapeHtml(entry.fileName)}</div>
+                            <div style="font-size: 12px; color: #666;">${entry.content.length} 字符</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: #999; line-height: 1.4; background: white; padding: 8px; border-radius: 6px;">${escapeHtml(preview)}</div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    window.toggleEntrySelection = (index) => {
+        entries[index].selected = !entries[index].selected;
+        renderEntryList();
+    };
+    
+    renderEntryList();
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    buttonsEl.style.borderTop = '1px solid #e5e5e5';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'ios-dialog-button primary';
+    confirmBtn.textContent = '确认导入';
+    confirmBtn.onclick = () => {
+        const selectedEntries = entries.filter(e => e.selected);
+        if (selectedEntries.length === 0) {
+            showToast('请至少选择一个条目');
+            return;
+        }
+        closeDialog();
+        openWorldBookEditWithImportedEntries(selectedEntries);
+    };
+    
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(confirmBtn);
+    
+    dialog.appendChild(titleEl);
+    dialog.appendChild(messageEl);
+    dialog.appendChild(selectAllDiv);
+    dialog.appendChild(listContainer);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+            delete window.toggleEntrySelection;
+        }, 300);
+    }
+}
+
+// 打开世界书编辑界面并填充导入的条目
+function openWorldBookEditWithImportedEntries(importedEntries) {
+    const modal = document.getElementById('worldBookEditModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        
+        // 更新分组下拉框选项
+        updateGroupSelect();
+        
+        // 重置修改标记
+        worldBookFormChanged = false;
+        
+        // 清空表单
+        document.getElementById('worldBookName').value = '';
+        document.getElementById('worldBookGlobal').checked = false;
+        document.getElementById('worldBookPosition').value = 'middle';
+        document.getElementById('worldBookGroup').value = '默认';
+        delete document.getElementById('worldBookEditModal').dataset.editId;
+        
+        // 填充导入的条目
+        window._tempWorldBookEntries = importedEntries.map(entry => ({
+            id: entry.id,
+            keys: entry.keys || [],
+            content: entry.content,
+            comment: entry.comment,
+            enabled: entry.enabled !== false
+        }));
+        
+        renderWorldBookEntriesEditable();
+        
+        // 保存原始数据(空)
+        worldBookOriginalData = {
+            name: '',
+            content: '',
+            entries: null,
+            isGlobal: false,
+            position: 'middle',
+            group: '默认'
+        };
+        
+        // 添加输入监听
+        setupWorldBookFormListeners();
+        
+        showToast(`已导入 ${importedEntries.length} 个条目`);
+    }
 }
 
 // 打开世界书编辑弹窗
@@ -16984,5 +18328,472 @@ function showPhotoSourceMenu(title, callback, onReset) {
     function closeM() {
         overlay.classList.remove('show');
         setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 300);
+    }
+}
+
+
+
+// ========== 文档导入功能 ==========
+
+// 存储解析出的角色数据
+let parsedDocCharacters = [];
+
+// 打开文档导入界面
+function openDocumentImport() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.txt,.docx,.zip';
+    
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        showToast('正在解析文件...');
+        
+        try {
+            parsedDocCharacters = [];
+            
+            for (const file of files) {
+                await parseDocumentFile(file);
+            }
+            
+            if (parsedDocCharacters.length === 0) {
+                showIosAlert('提示', '未能从文件中解析出任何角色数据');
+                return;
+            }
+            
+            // 显示预览和选择界面
+            showDocCharacterPreview();
+            
+        } catch (error) {
+            console.error('文件解析失败:', error);
+            showIosAlert('错误', '文件解析失败：' + error.message);
+        }
+    };
+    
+    input.click();
+}
+
+// 解析文档文件
+async function parseDocumentFile(file) {
+    const fileName = file.name.toLowerCase();
+    
+    if (fileName.endsWith('.txt')) {
+        await parseTxtFile(file);
+    } else if (fileName.endsWith('.docx')) {
+        await parseDocxFile(file);
+    } else if (fileName.endsWith('.zip')) {
+        await parseZipFile(file);
+    }
+}
+
+// 解析 TXT 文件
+async function parseTxtFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            try {
+                const content = e.target.result;
+                const character = {
+                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    name: file.name.replace('.txt', ''),
+                    description: content.trim(),
+                    source: file.name,
+                    selected: true
+                };
+                
+                parsedDocCharacters.push(character);
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        reader.onerror = () => reject(new Error('读取文件失败'));
+        reader.readAsText(file, 'UTF-8');
+    });
+}
+
+// 解析 DOCX 文件
+async function parseDocxFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = async (e) => {
+            try {
+                const arrayBuffer = e.target.result;
+                
+                // 检查 mammoth 是否可用
+                if (typeof mammoth === 'undefined') {
+                    throw new Error('DOCX 解析库未加载，请刷新页面重试');
+                }
+                
+                // 使用 mammoth.js 解析 DOCX
+                const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                const content = result.value;
+                
+                if (!content || content.trim().length === 0) {
+                    console.warn('DOCX 文件为空:', file.name);
+                    resolve();
+                    return;
+                }
+                
+                const character = {
+                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    name: file.name.replace('.docx', ''),
+                    description: content.trim(),
+                    source: file.name,
+                    selected: true
+                };
+                
+                parsedDocCharacters.push(character);
+                resolve();
+            } catch (error) {
+                console.error('解析 DOCX 失败:', file.name, error);
+                // 不中断整个流程，只记录错误
+                showToast(`解析 ${file.name} 失败`);
+                resolve();
+            }
+        };
+        
+        reader.onerror = () => {
+            console.error('读取文件失败:', file.name);
+            showToast(`读取 ${file.name} 失败`);
+            resolve(); // 不中断整个流程
+        };
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// 解析 ZIP 文件
+async function parseZipFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = async (e) => {
+            try {
+                const arrayBuffer = e.target.result;
+                
+                // 检查 JSZip 是否可用
+                if (typeof JSZip === 'undefined') {
+                    // 动态加载 JSZip
+                    await loadJSZip();
+                }
+                
+                const zip = await JSZip.loadAsync(arrayBuffer);
+                
+                // 遍历压缩包中的文件
+                const promises = [];
+                zip.forEach((relativePath, zipEntry) => {
+                    const fileName = relativePath.toLowerCase();
+                    
+                    // 只处理 TXT 和 DOCX 文件，忽略文件夹
+                    if (!zipEntry.dir && (fileName.endsWith('.txt') || fileName.endsWith('.docx'))) {
+                        promises.push(parseZipEntry(zipEntry, relativePath));
+                    }
+                });
+                
+                if (promises.length === 0) {
+                    showToast(`${file.name} 中没有找到 TXT 或 DOCX 文件`);
+                }
+                
+                await Promise.all(promises);
+                resolve();
+                
+            } catch (error) {
+                console.error('解析 ZIP 失败:', file.name, error);
+                showToast(`解析 ${file.name} 失败`);
+                resolve(); // 不中断整个流程
+            }
+        };
+        
+        reader.onerror = () => {
+            console.error('读取文件失败:', file.name);
+            showToast(`读取 ${file.name} 失败`);
+            resolve(); // 不中断整个流程
+        };
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// 解析 ZIP 中的单个文件
+async function parseZipEntry(zipEntry, fileName) {
+    try {
+        if (fileName.toLowerCase().endsWith('.txt')) {
+            const content = await zipEntry.async('text');
+            
+            if (content && content.trim().length > 0) {
+                const character = {
+                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    name: fileName.replace('.txt', '').split('/').pop(),
+                    description: content.trim(),
+                    source: fileName,
+                    selected: true
+                };
+                
+                parsedDocCharacters.push(character);
+            }
+        } else if (fileName.toLowerCase().endsWith('.docx')) {
+            const arrayBuffer = await zipEntry.async('arraybuffer');
+            
+            // 使用 mammoth.js 解析 DOCX
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            const content = result.value;
+            
+            if (content && content.trim().length > 0) {
+                const character = {
+                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    name: fileName.replace('.docx', '').split('/').pop(),
+                    description: content.trim(),
+                    source: fileName,
+                    selected: true
+                };
+                
+                parsedDocCharacters.push(character);
+            }
+        }
+    } catch (error) {
+        console.error('解析 ZIP 条目失败:', fileName, error);
+    }
+}
+
+// 动态加载 JSZip 库
+function loadJSZip() {
+    return new Promise((resolve, reject) => {
+        if (window.JSZip) {
+            resolve();
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('加载 JSZip 库失败'));
+        document.head.appendChild(script);
+    });
+}
+
+// 显示角色预览和选择界面
+function showDocCharacterPreview() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.id = 'docCharacterPreviewOverlay';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.maxWidth = '90%';
+    dialog.style.maxHeight = '80vh';
+    dialog.style.overflow = 'hidden';
+    dialog.style.display = 'flex';
+    dialog.style.flexDirection = 'column';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = `已解析 ${parsedDocCharacters.length} 个角色`;
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'ios-dialog-message';
+    messageEl.textContent = '请选择要导入的角色';
+    messageEl.style.marginBottom = '15px';
+    
+    // 角色列表容器
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = 'flex: 1; overflow-y: auto; padding: 0 16px; max-height: 50vh;';
+    
+    // 渲染角色列表
+    parsedDocCharacters.forEach((char, index) => {
+        const charItem = document.createElement('div');
+        charItem.className = 'doc-char-preview-item';
+        charItem.onclick = () => toggleCharacterSelection(index, charItem);
+        
+        const header = document.createElement('div');
+        header.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 8px;';
+        
+        const checkbox = document.createElement('div');
+        checkbox.className = 'doc-char-checkbox' + (char.selected ? ' checked' : '');
+        checkbox.innerHTML = char.selected ? '<span style="color: white; font-size: 14px;">✓</span>' : '';
+        
+        const name = document.createElement('div');
+        name.className = 'doc-char-name';
+        name.textContent = char.name;
+        
+        const source = document.createElement('div');
+        source.className = 'doc-char-source';
+        source.textContent = char.source;
+        
+        header.appendChild(checkbox);
+        header.appendChild(name);
+        header.appendChild(source);
+        
+        const preview = document.createElement('div');
+        preview.className = 'doc-char-preview-text';
+        preview.textContent = char.description.substring(0, 150) + (char.description.length > 150 ? '...' : '');
+        
+        charItem.appendChild(header);
+        charItem.appendChild(preview);
+        listContainer.appendChild(charItem);
+    });
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    buttonsEl.style.marginTop = '15px';
+    
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.className = 'ios-dialog-button';
+    selectAllBtn.textContent = '全选';
+    selectAllBtn.onclick = () => toggleSelectAll(listContainer);
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDocCharacterPreview();
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'ios-dialog-button primary';
+    confirmBtn.textContent = '确认导入';
+    confirmBtn.onclick = () => confirmDocCharacterImport();
+    
+    buttonsEl.appendChild(selectAllBtn);
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(confirmBtn);
+    
+    dialog.appendChild(titleEl);
+    dialog.appendChild(messageEl);
+    dialog.appendChild(listContainer);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => {
+        overlay.classList.add('show');
+    }, 10);
+}
+
+// 切换角色选择状态
+function toggleCharacterSelection(index, element) {
+    parsedDocCharacters[index].selected = !parsedDocCharacters[index].selected;
+    
+    const checkbox = element.querySelector('.doc-char-checkbox');
+    if (parsedDocCharacters[index].selected) {
+        checkbox.classList.add('checked');
+        checkbox.innerHTML = '<span style="color: white; font-size: 14px;">✓</span>';
+    } else {
+        checkbox.classList.remove('checked');
+        checkbox.innerHTML = '';
+    }
+}
+
+// 全选/取消全选
+function toggleSelectAll(container) {
+    const allSelected = parsedDocCharacters.every(char => char.selected);
+    const newState = !allSelected;
+    
+    parsedDocCharacters.forEach(char => {
+        char.selected = newState;
+    });
+    
+    // 更新UI
+    const checkboxes = container.querySelectorAll('.doc-char-checkbox');
+    checkboxes.forEach(checkbox => {
+        if (newState) {
+            checkbox.classList.add('checked');
+            checkbox.innerHTML = '<span style="color: white; font-size: 14px;">✓</span>';
+        } else {
+            checkbox.classList.remove('checked');
+            checkbox.innerHTML = '';
+        }
+    });
+    
+    // 更新按钮文字
+    const selectAllBtn = document.querySelector('#docCharacterPreviewOverlay .ios-dialog-button');
+    if (selectAllBtn) {
+        selectAllBtn.textContent = newState ? '取消全选' : '全选';
+    }
+}
+
+// 关闭预览界面
+function closeDocCharacterPreview() {
+    const overlay = document.getElementById('docCharacterPreviewOverlay');
+    if (overlay) {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            document.body.removeChild(overlay);
+        }, 300);
+    }
+}
+
+// 确认导入选中的角色
+async function confirmDocCharacterImport() {
+    const selectedChars = parsedDocCharacters.filter(char => char.selected);
+    
+    if (selectedChars.length === 0) {
+        showIosAlert('提示', '请至少选择一个角色');
+        return;
+    }
+    
+    closeDocCharacterPreview();
+    
+    // 如果只选择了一个角色，直接打开编辑界面
+    if (selectedChars.length === 1) {
+        openAddChatCharacterWithData(selectedChars[0]);
+    } else {
+        // 多个角色，逐个导入
+        showToast('正在导入角色...');
+        
+        for (const char of selectedChars) {
+            await importDocCharacter(char);
+        }
+        
+        showToast(`成功导入 ${selectedChars.length} 个角色`);
+        
+        // 刷新角色列表
+        if (typeof renderChatCharacterList === 'function') {
+            renderChatCharacterList();
+        }
+    }
+}
+
+// 打开新增角色界面并填充数据
+function openAddChatCharacterWithData(charData) {
+    // 打开新增界面
+    openAddChatCharacter();
+    
+    // 填充数据
+    setTimeout(() => {
+        document.getElementById('chatCharacterNameInput').value = charData.name;
+        document.getElementById('chatCharacterDescInput').value = charData.description;
+        
+        // 可以添加备注说明来源
+        document.getElementById('chatCharacterRemarkInput').value = `从 ${charData.source} 导入`;
+    }, 100);
+}
+
+// 导入单个文档角色
+async function importDocCharacter(charData) {
+    try {
+        const character = {
+            id: 'char_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            name: charData.name,
+            remark: `从 ${charData.source} 导入`,
+            description: charData.description,
+            avatar: '', // 默认无头像
+            createTime: Date.now(),
+            lastMessageTime: 0,
+            category: '默认'
+        };
+        
+        // 保存到数据库
+        await saveChatCharacterToDB(character);
+        
+        // 更新内存中的角色列表
+        if (typeof chatCharacters !== 'undefined') {
+            chatCharacters.push(character);
+        }
+        
+    } catch (error) {
+        console.error('导入角色失败:', charData.name, error);
+        throw error;
     }
 }

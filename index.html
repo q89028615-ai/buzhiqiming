@@ -20,6 +20,8 @@
     <link rel="stylesheet" href="style.css">
     <!-- docx解析库 -->
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    <!-- ZIP解析库 -->
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
     <!-- 消息通知弹窗容器 -->
@@ -1511,6 +1513,14 @@
                     <div style="margin-top: 8px; font-size: 12px; color: #999;">
                         控制AI单次回复的最大长度，建议 512~8192
                     </div>
+                </div>
+
+                <!-- 保存模型参数按钮 -->
+                <button class="btn-primary" onclick="saveModelParams()" style="margin-top: 20px; background: #007bff; color: white; border: none;">
+                    保存模型参数
+                </button>
+                <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                    保存 Temperature、Top P 和 Max Tokens 设置
                 </div>
             </div>
 
@@ -3497,6 +3507,85 @@
             color: #c9a46a;
         }
 
+        /* 银行转账消息气泡 */
+        .chat-bank-transfer-bubble {
+            width: 260px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: #fff;
+            border-bottom-left-radius: 2px;
+        }
+        .chat-bank-transfer-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .chat-bank-transfer-icon {
+            width: 38px;
+            height: 38px;
+            background: rgba(255,255,255,0.25);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .chat-bank-transfer-icon svg {
+            color: #fff;
+        }
+        .chat-bank-transfer-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .chat-bank-transfer-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 3px;
+        }
+        .chat-bank-transfer-card {
+            font-size: 11px;
+            color: rgba(255,255,255,0.85);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chat-bank-transfer-body {
+            padding: 18px 16px;
+            background: #fff;
+            text-align: center;
+        }
+        .chat-bank-transfer-amount {
+            font-size: 32px;
+            font-weight: 700;
+            color: #333;
+            letter-spacing: -0.5px;
+            margin-bottom: 6px;
+        }
+        .chat-bank-transfer-reason {
+            font-size: 13px;
+            color: #666;
+            margin-top: 4px;
+        }
+        .chat-bank-transfer-footer {
+            background: #f8f9fa;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chat-bank-transfer-status {
+            font-size: 12px;
+            color: #28a745;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
         /* ========== 长按消息菜单 ========== */
         .msg-context-overlay {
             position: fixed;
@@ -5157,6 +5246,9 @@
                     <button class="wallet-balance-btn" onclick="walletRecharge()">充值</button>
                     <button class="wallet-balance-btn wallet-balance-btn-outline" onclick="walletWithdraw()">提现</button>
                 </div>
+                <div class="wallet-balance-actions" style="margin-top: 10px;">
+                    <button class="wallet-balance-btn wallet-balance-btn-outline" onclick="walletDirectRecharge()">直接充值</button>
+                </div>
             </div>
 
             <!-- 快捷功能区 -->
@@ -5713,6 +5805,51 @@
                         从人设库选择
                     </button>
                 </div>
+
+                <!-- 银行卡转账功能 -->
+                <div class="form-group" style="margin-top: 30px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                        <div>
+                            <div style="font-size: 15px; color: #333; font-weight: 500;">银行卡转账</div>
+                            <div style="font-size: 12px; color: #999; margin-top: 4px;">角色可以直接给你的银行卡转账</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="bankTransferToggle" onchange="toggleBankTransferFeature()">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                    
+                    <!-- 银行卡选择区域（默认隐藏） -->
+                    <div id="bankTransferCardSection" style="display: none; margin-top: 16px;">
+                        <label class="form-label">接收银行卡</label>
+                        
+                        <!-- 未选择状态 -->
+                        <div id="bankTransferNoCard" style="padding: 16px; background: #f8f8f8; border-radius: 12px; text-align: center;">
+                            <div style="font-size: 13px; color: #999; margin-bottom: 12px;">请从钱包中选择一张银行卡</div>
+                            <button class="btn-primary" onclick="openSelectBankCardForTransfer()" style="padding: 10px 24px; width: auto; margin: 0 auto;">
+                                选择银行卡
+                            </button>
+                        </div>
+                        
+                        <!-- 已选择状态 -->
+                        <div id="bankTransferSelectedCard" style="display: none; padding: 16px; background: #f8f8f8; border-radius: 12px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <div style="font-weight: 600; color: #333; font-size: 15px;" id="selectedCardName">招商银行</div>
+                                <button onclick="openSelectBankCardForTransfer()" style="padding: 4px 12px; font-size: 12px; color: #007bff; background: transparent; border: 1px solid #007bff; border-radius: 6px; cursor: pointer;">
+                                    更换
+                                </button>
+                            </div>
+                            <div style="font-size: 13px; color: #666; margin-bottom: 4px;" id="selectedCardNumber">**** **** **** 1234</div>
+                            <div style="font-size: 12px; color: #999;" id="selectedCardBalance">余额: ¥0.00</div>
+                        </div>
+                        
+                        <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffeaa7;">
+                            <div style="font-size: 12px; color: #856404; line-height: 1.5;">
+                                💡 提示：角色转账会直接到这张卡，你会收到银行短信通知，卡内余额会自动增加。
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             </div>
 
@@ -5776,9 +5913,9 @@
                     <div class="form-group">
                         <label class="form-label">长期记忆提示词格式</label>
                         <select id="longTermMemoryFormatSelect" class="form-input" onchange="onLongTermMemoryFormatChange()">
-                            <option value="timeline">时间线式</option>
-                            <option value="timeline_emotion">时间线+情感标记</option>
-                            <option value="category">分类式</option>
+                            <option value="diary">日记式</option>
+                            <option value="narrative">旁白式</option>
+                            <option value="objective">客观记录式</option>
                             <option value="custom">自定义格式</option>
                         </select>
                         <div id="longTermMemoryFormatPreview" style="margin-top: 8px; font-size: 12px; color: #666; white-space: pre-wrap;"></div>
@@ -5786,17 +5923,28 @@
 
                     <div class="form-group" id="longTermMemoryCustomPromptGroup" style="display: none;">
                         <label class="form-label">自定义总结提示词</label>
-                        <textarea id="longTermMemoryCustomPromptInput" class="form-input" rows="4" placeholder="输入自定义的总结提示词...&#10;可用变量：{charName}=角色真名 {userName}=用户真名 {messages}=对话内容"></textarea>
+                        <textarea id="longTermMemoryCustomPromptInput" class="form-input" rows="4" placeholder="描述你想要的总结风格和要求..."></textarea>
                         <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                            自定义总结提示词。可用变量：{charName} 角色真名、{userName} 用户真名、{messages} 对话内容。留空则使用默认时间线格式。
+                            自定义总结风格。可以参考自动填入的示例修改，或完全自己编写。
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">精简总结提示词</label>
-                        <textarea id="ltmCondensePromptInput" class="form-input" rows="4" placeholder="输入精简总结的提示词...&#10;可用变量：{memories}=选中的记忆内容"></textarea>
+                        <label class="form-label">精简总结格式</label>
+                        <select id="ltmCondenseFormatSelect" class="form-input" onchange="onLtmCondenseFormatChange()">
+                            <option value="first-person">第一人称精简</option>
+                            <option value="third-person">第三人称精简</option>
+                            <option value="objective">客观记录式精简</option>
+                            <option value="custom">自定义格式</option>
+                        </select>
+                        <div id="ltmCondenseFormatPreview" style="margin-top: 8px; font-size: 12px; color: #666; white-space: pre-wrap;"></div>
+                    </div>
+
+                    <div class="form-group" id="ltmCondenseCustomPromptGroup" style="display: none;">
+                        <label class="form-label">自定义精简提示词</label>
+                        <textarea id="ltmCondensePromptInput" class="form-input" rows="4" placeholder="描述你想要的精简风格和要求..."></textarea>
                         <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                            精简功能使用的提示词，用于将多条记忆合并总结为一条。可用变量：{memories} 选中的记忆内容。留空则使用默认提示词。
+                            自定义精简风格。留空则使用默认提示词。
                         </div>
                     </div>
 
@@ -7189,6 +7337,11 @@
                     <svg width="10" height="18" viewBox="0 0 10 18" fill="none"><path d="M9 1L1 9L9 17" stroke="#007AFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </div>
                 <div class="sms-header-right">
+                    <div class="sms-header-compose" onclick="openContactsManager()" style="margin-right: 16px;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="#007AFF"/>
+                        </svg>
+                    </div>
                     <div class="sms-header-compose" onclick="openSmsCompose()">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="#007AFF"/><path d="M20.71 5.63l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83a1 1 0 000-1.41z" fill="#007AFF"/></svg>
                     </div>
@@ -7250,6 +7403,96 @@
                 </div>
                 <div class="sms-send-btn" id="smsSendBtn" onclick="sendSmsMessage()" style="display:none;">
                     <svg width="30" height="30" viewBox="0 0 30 30" fill="none"><circle cx="15" cy="15" r="15" fill="#34C759"/><path d="M10 15.5l4 4L20 12" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 联系人管理页面 ========== -->
+    <div class="settings-page" id="contactsManagerPage" style="display: none; z-index: 2004;">
+        <div class="sms-list-container">
+            <!-- 顶部栏 -->
+            <div class="sms-list-header">
+                <div class="sms-header-left" onclick="closeContactsManager()">
+                    <svg width="10" height="18" viewBox="0 0 10 18" fill="none"><path d="M9 1L1 9L9 17" stroke="#007AFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="sms-header-right">
+                    <button id="contactsSelectAllBtn" onclick="toggleSelectAllContacts()" style="display:none;margin-right:12px;padding:6px 12px;background:transparent;border:none;color:#007AFF;font-size:15px;cursor:pointer;">全选</button>
+                    <button id="contactsDeleteBtn" onclick="deleteSelectedContacts()" style="display:none;margin-right:12px;padding:6px 12px;background:transparent;border:none;color:#FF3B30;font-size:15px;cursor:pointer;">删除</button>
+                    <button id="contactsCancelBtn" onclick="exitContactsEditMode()" style="display:none;margin-right:12px;padding:6px 12px;background:transparent;border:none;color:#007AFF;font-size:15px;cursor:pointer;">完成</button>
+                    <button id="contactsEditBtn" onclick="enterContactsEditMode()" style="margin-right:12px;padding:6px 12px;background:transparent;border:none;color:#007AFF;font-size:15px;cursor:pointer;">编辑</button>
+                    <div class="sms-header-compose" onclick="openNewContact()">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="#007AFF"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+            <!-- 大标题 -->
+            <div class="sms-big-title">联系人</div>
+            <!-- 联系人列表 -->
+            <div class="sms-list" id="contactsList" style="padding-top: 10px;">
+                <div class="contacts-empty">
+                    <div class="contacts-empty-text">暂无联系人</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 联系人编辑器页面 ========== -->
+    <div class="settings-page" id="contactEditorPage" style="display: none; z-index: 2005;">
+        <div class="settings-content" style="max-width: 500px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeContactEditor()">←</div>
+                <div class="settings-title" id="contactEditorTitle">新建联系人</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <input type="hidden" id="contactEditorId">
+                
+                <!-- 头像 -->
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <div id="contactAvatarPreview" style="width: 100px; height: 100px; margin: 0 auto; border-radius: 50%; overflow: hidden; background: #f0f0f0; display: flex; align-items: center; justify-content: center; cursor: pointer;" onclick="selectContactAvatar()">
+                        <div class="contact-avatar-placeholder-large">+</div>
+                    </div>
+                    <div style="margin-top: 12px; display: flex; gap: 10px; justify-content: center;">
+                        <button class="btn-primary" onclick="selectContactAvatar()" style="padding: 8px 16px; font-size: 13px;">本地上传</button>
+                        <button class="btn-primary" onclick="inputContactAvatarUrl()" style="padding: 8px 16px; font-size: 13px; background: #6c757d;">URL</button>
+                    </div>
+                </div>
+                <input type="hidden" id="contactAvatarData">
+
+                <!-- 姓名 -->
+                <div class="form-group">
+                    <label class="form-label">姓名</label>
+                    <input type="text" class="form-input" id="contactNameInput" placeholder="输入姓名（可选）" maxlength="30">
+                </div>
+
+                <!-- 电话 -->
+                <div class="form-group">
+                    <label class="form-label">电话号码 <span style="color: #ff3b30;">*</span></label>
+                    <input type="tel" class="form-input" id="contactPhoneInput" placeholder="输入电话号码" maxlength="20">
+                </div>
+
+                <!-- 备注 -->
+                <div class="form-group">
+                    <label class="form-label">备注</label>
+                    <textarea class="form-input" id="contactNoteInput" placeholder="输入备注（可选）" rows="3" maxlength="100" style="resize: vertical;"></textarea>
+                </div>
+
+                <!-- 保存按钮 -->
+                <div style="margin-top: 30px;">
+                    <button class="btn-primary btn-save" onclick="saveContactFromEditor()" style="width: 100%;">
+                        保存联系人
+                    </button>
+                </div>
+
+                <!-- 保存并发送消息按钮 -->
+                <div style="margin-top: 12px;">
+                    <button class="btn-primary" onclick="saveAndMessageContact()" style="width: 100%; background: #34c759;">
+                        保存并发送消息
+                    </button>
                 </div>
             </div>
         </div>

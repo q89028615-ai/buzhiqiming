@@ -1,6 +1,503 @@
 // ========== script2.js - 扩展功能模块 ==========
 // 依赖 script.js 中的全局变量和函数
 
+// ========== 银行卡转账功能 ==========
+
+// 切换银行卡转账功能开关
+function toggleBankTransferFeature() {
+    const toggle = document.getElementById('bankTransferToggle');
+    const cardSection = document.getElementById('bankTransferCardSection');
+    
+    if (toggle.checked) {
+        // 开启功能
+        cardSection.style.display = 'block';
+        
+        // 检查钱包是否有银行卡
+        const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+        const cards = walletData.bankCards || [];
+        
+        if (cards.length === 0) {
+            showIosAlert('提示', '请先在钱包APP中添加银行卡');
+            toggle.checked = false;
+            cardSection.style.display = 'none';
+            return;
+        }
+        
+        // 保存开关状态
+        saveBankTransferSettings({ enabled: true });
+        
+        // 更新显示
+        updateBankTransferCardDisplay();
+    } else {
+        // 关闭功能
+        cardSection.style.display = 'none';
+        saveBankTransferSettings({ enabled: false });
+    }
+}
+
+// 保存银行卡转账设置
+function saveBankTransferSettings(settings) {
+    const current = JSON.parse(localStorage.getItem('bankTransferSettings') || '{}');
+    const updated = { ...current, ...settings };
+    localStorage.setItem('bankTransferSettings', JSON.stringify(updated));
+}
+
+// 获取银行卡转账设置
+function getBankTransferSettings() {
+    return JSON.parse(localStorage.getItem('bankTransferSettings') || '{}');
+}
+
+// 打开选择银行卡界面
+function openSelectBankCardForTransfer() {
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    const cards = walletData.bankCards || [];
+    
+    if (cards.length === 0) {
+        showIosAlert('提示', '请先在钱包APP中添加银行卡');
+        return;
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '320px';
+    dialog.style.maxHeight = '70vh';
+    dialog.style.overflowY = 'auto';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '选择接收银行卡';
+    
+    const msgEl = document.createElement('div');
+    msgEl.className = 'ios-dialog-message';
+    msgEl.textContent = '角色转账将直接到这张卡';
+    msgEl.style.marginBottom = '16px';
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons vertical';
+    buttonsEl.style.maxHeight = '400px';
+    buttonsEl.style.overflowY = 'auto';
+    
+    // 为每张卡创建一个按钮
+    cards.forEach((card, index) => {
+        const cardNumber = card.number || card.cardNumber || '0000000000000000';
+        const last4 = cardNumber.slice(-4);
+        const balance = card.balance || 0;
+        const cardName = card.name || '未命名银行卡';
+        
+        const btn = document.createElement('button');
+        btn.className = 'ios-dialog-button';
+        btn.style.textAlign = 'left';
+        btn.style.padding = '14px 16px';
+        btn.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="font-weight:600; font-size: 15px; color:#333;">${escapeHtml(cardName)}</div>
+                <div style="font-size:13px;color:#666;">**** **** **** ${last4}</div>
+                <div style="font-size:12px;color:#999;">余额: ¥${balance.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+            </div>
+        `;
+        btn.onclick = () => {
+            selectBankCardForTransfer(index);
+            closeDialog();
+        };
+        buttonsEl.appendChild(btn);
+    });
+    
+    // 取消按钮
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    buttonsEl.appendChild(cancelBtn);
+    
+    dialog.appendChild(titleEl);
+    dialog.appendChild(msgEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+        }, 300);
+    }
+}
+
+// 选择银行卡
+function selectBankCardForTransfer(cardIndex) {
+    saveBankTransferSettings({ selectedCardIndex: cardIndex });
+    updateBankTransferCardDisplay();
+    showToast('已选择银行卡');
+}
+
+// 更新银行卡显示
+function updateBankTransferCardDisplay() {
+    const settings = getBankTransferSettings();
+    const noCardDiv = document.getElementById('bankTransferNoCard');
+    const selectedCardDiv = document.getElementById('bankTransferSelectedCard');
+    
+    if (settings.selectedCardIndex === null || settings.selectedCardIndex === undefined) {
+        // 未选择
+        noCardDiv.style.display = 'block';
+        selectedCardDiv.style.display = 'none';
+    } else {
+        // 已选择
+        const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+        const card = walletData.bankCards[settings.selectedCardIndex];
+        
+        if (card) {
+            const cardNumber = card.number || card.cardNumber || '0000000000000000';
+            const last4 = cardNumber.slice(-4);
+            const balance = card.balance || 0;
+            
+            document.getElementById('selectedCardName').textContent = card.name || '未命名银行卡';
+            document.getElementById('selectedCardNumber').textContent = `**** **** **** ${last4}`;
+            document.getElementById('selectedCardBalance').textContent = `余额: ¥${balance.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            
+            noCardDiv.style.display = 'none';
+            selectedCardDiv.style.display = 'block';
+        } else {
+            // 卡不存在了，重置
+            saveBankTransferSettings({ selectedCardIndex: null });
+            noCardDiv.style.display = 'block';
+            selectedCardDiv.style.display = 'none';
+        }
+    }
+}
+
+// 初始化银行卡转账设置界面
+function initBankTransferSettings() {
+    const settings = getBankTransferSettings();
+    const toggle = document.getElementById('bankTransferToggle');
+    const cardSection = document.getElementById('bankTransferCardSection');
+    
+    if (toggle) {
+        toggle.checked = settings.enabled || false;
+        if (settings.enabled) {
+            cardSection.style.display = 'block';
+            updateBankTransferCardDisplay();
+        }
+    }
+}
+
+// 执行银行转账（AI触发）
+async function executeBankTransfer(amount, reason) {
+    const settings = getBankTransferSettings();
+    
+    // 检查功能是否开启
+    if (!settings.enabled || settings.selectedCardIndex === null || settings.selectedCardIndex === undefined) {
+        console.log('银行转账功能未开启或未选择银行卡');
+        return;
+    }
+    
+    // 获取钱包数据
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    const card = walletData.bankCards[settings.selectedCardIndex];
+    
+    if (!card) {
+        console.log('银行卡不存在');
+        return;
+    }
+    
+    // 直接增加银行卡余额
+    card.balance = Math.round((card.balance + amount) * 100) / 100;
+    localStorage.setItem('walletData', JSON.stringify(walletData));
+    
+    // 添加账单记录
+    addBillRecord('income', amount, `银行转账：${reason}`, 'bankcard', settings.selectedCardIndex);
+    
+    // 在聊天界面显示银行转账通知（立即显示）
+    await showBankTransferNotification(card, amount, reason);
+    
+    // 添加系统消息到聊天记录（告知AI转账详情，立即显示）
+    await addBankTransferSystemMessage(card, amount);
+    
+    // 发送银行短信通知（延迟4秒，等角色消息通知弹窗显示完）
+    sendBankTransferSms(card, amount, reason, true);
+    
+    // 更新钱包UI（如果钱包页面是打开的）
+    if (typeof updateWalletUI === 'function') {
+        updateWalletUI(walletData);
+    }
+    
+    // 更新设置界面的卡片显示
+    updateBankTransferCardDisplay();
+    
+    showToast(`收到银行转账 ¥${amount.toFixed(2)}`);
+}
+
+// 发送银行转账短信
+async function sendBankTransferSms(card, amount, reason, delayNotification = false) {
+    const now = new Date();
+    const dateStr = `${now.getMonth()+1}月${now.getDate()}日`;
+    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const cardNumber = card.number || card.cardNumber || '0000000000000000';
+    const last4 = cardNumber.slice(-4);
+    const cardType = card.type === 'credit' ? '信用卡' : '储蓄卡';
+    const bankName = card.name || '银行';
+    const balance = card.balance || 0;
+    
+    // 生成银行官方号码（95开头）
+    const bankPhone = generateBankPhone(bankName);
+    
+    // 银行短信格式：收入（不显示原因，只显示收支变化）
+    const smsText = `【${bankName}】您尾号${last4}的${cardType}于${dateStr}${timeStr}收入人民币${amount.toFixed(2)}元，余额${balance.toFixed(2)}元。`;
+    
+    // 添加到短信会话
+    if (!smsConversations[bankPhone]) {
+        smsConversations[bankPhone] = [];
+    }
+    
+    smsConversations[bankPhone].push({
+        text: smsText,
+        from: 'other',
+        time: now.toISOString()
+    });
+    
+    saveSmsData();
+    
+    // 取消隐藏（如果之前被隐藏了）
+    unhideSmsConversation(bankPhone);
+    
+    // 显示消息通知弹窗（标记为银行类型）
+    // 如果需要延迟（角色转账场景），等待消息通知队列处理完成后再显示
+    if (delayNotification) {
+        // 智能等待：等待所有角色消息通知弹窗显示完成
+        if (typeof waitForNotifQueueComplete === 'function') {
+            await waitForNotifQueueComplete();
+        }
+        showMessageNotification(bankName, smsText, bankPhone, 'bank');
+    } else {
+        // 立即显示（钱包充值/提现等场景）
+        showMessageNotification(bankName, smsText, bankPhone, 'bank');
+    }
+}
+
+// 在聊天界面显示银行转账消息
+async function showBankTransferNotification(card, amount, reason) {
+    if (!currentChatCharacter) return;
+    
+    const cardNumber = card.number || card.cardNumber || '0000000000000000';
+    const last4 = cardNumber.slice(-4);
+    
+    const messageObj = {
+        id: Date.now().toString() + Math.random(),
+        characterId: currentChatCharacter.id,
+        content: '[银行转账]',
+        type: 'char',
+        timestamp: new Date().toISOString(),
+        sender: 'char',
+        messageType: 'bankTransfer',
+        bankTransferAmount: amount,
+        bankTransferReason: reason,
+        bankTransferCard: `${card.name || '银行卡'} **** ${last4}`
+    };
+    
+    // 渲染到聊天界面
+    appendBankTransferMessageToChat(messageObj);
+    
+    // 保存到数据库
+    await saveMessageToDB(messageObj);
+    
+    // 更新聊天列表
+    await updateChatListLastMessage(currentChatCharacter.id, '[银行转账]', messageObj.timestamp);
+    
+    // 滚动到底部
+    scrollChatToBottom();
+}
+
+// 渲染银行转账消息到聊天界面
+function appendBankTransferMessageToChat(messageObj) {
+    const container = document.getElementById('chatMessagesContainer');
+    
+    const emptyMsg = container.querySelector('.chat-empty-message');
+    if (emptyMsg) emptyMsg.remove();
+    
+    // 获取角色头像
+    let avatar = '';
+    if (currentChatCharacter && currentChatCharacter.avatar) {
+        avatar = currentChatCharacter.avatar;
+    }
+    
+    const time = formatMessageTime(messageObj.timestamp);
+    const amount = messageObj.bankTransferAmount || 0;
+    const reason = messageObj.bankTransferReason || '';
+    const cardInfo = messageObj.bankTransferCard || '银行卡';
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'chat-message chat-message-char';
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = messageObj.type;
+    
+    messageEl.innerHTML = `
+        <div class="chat-message-avatar">
+            ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
+        </div>
+        <div class="chat-message-content">
+            <div class="chat-bank-transfer-bubble">
+                <div class="chat-bank-transfer-header">
+                    <div class="chat-bank-transfer-info">
+                        <div class="chat-bank-transfer-title">银行转账</div>
+                        <div class="chat-bank-transfer-card">${escapeHtml(cardInfo)}</div>
+                    </div>
+                </div>
+                <div class="chat-bank-transfer-body">
+                    <div class="chat-bank-transfer-amount">¥${amount.toFixed(2)}</div>
+                    ${reason ? `<div class="chat-bank-transfer-reason">${escapeHtml(reason)}</div>` : ''}
+                </div>
+                <div class="chat-bank-transfer-footer">
+                    <span class="chat-bank-transfer-status">已到账</span>
+                </div>
+            </div>
+            <div class="chat-message-time">${time}</div>
+        </div>
+    `;
+    
+    container.appendChild(messageEl);
+}
+
+// 添加银行转账系统消息（灰色提示，添加到上下文）
+async function addBankTransferSystemMessage(card, amount) {
+    console.log('🔔 addBankTransferSystemMessage 被调用', { card, amount, currentChatCharacter });
+    
+    if (!currentChatCharacter) {
+        console.error('❌ currentChatCharacter 为空，无法添加系统消息');
+        return;
+    }
+    
+    // 获取角色真名
+    const charName = currentChatCharacter.name || '角色';
+    
+    // 获取用户真名
+    let userName = '用户';
+    try {
+        const userDataStr = localStorage.getItem('chatUserData');
+        console.log('📋 userData字符串:', userDataStr);
+        if (userDataStr) {
+            const userData = JSON.parse(userDataStr);
+            console.log('📋 userData对象:', userData);
+            if (userData.name && userData.name.trim()) {
+                userName = userData.name.trim();
+            }
+        }
+    } catch (e) {
+        console.error('获取用户名失败:', e);
+    }
+    
+    console.log('👤 最终用户名:', userName);
+    
+    // 获取卡号信息
+    const cardNumber = card.number || card.cardNumber || '0000000000000000';
+    const last4 = cardNumber.slice(-4);
+    const cardName = card.name || '银行卡';
+    
+    // 构建系统消息内容
+    const systemContent = `${charName} 向 ${userName} 的${cardName}(尾号${last4})转账了 ¥${amount.toFixed(2)}`;
+    
+    console.log('📝 系统消息内容:', systemContent);
+    
+    const systemMessageObj = {
+        id: Date.now().toString() + Math.random() + '_system',
+        characterId: currentChatCharacter.id,
+        content: systemContent,
+        type: 'system',
+        timestamp: new Date().toISOString(),
+        sender: 'system',
+        messageType: 'systemNotice'
+    };
+    
+    console.log('💾 系统消息对象:', systemMessageObj);
+    
+    // 渲染到聊天界面
+    appendSystemMessageToChat(systemMessageObj);
+    
+    // 保存到数据库（添加到上下文）
+    await saveMessageToDB(systemMessageObj);
+    
+    console.log('✅ 系统消息已保存到数据库');
+    
+    // 滚动到底部
+    scrollChatToBottom();
+}
+
+// 渲染系统消息到聊天界面
+function appendSystemMessageToChat(messageObj) {
+    console.log('🎨 appendSystemMessageToChat 被调用', messageObj);
+    
+    const container = document.getElementById('chatMessagesContainer');
+    
+    if (!container) {
+        console.error('❌ chatMessagesContainer 不存在');
+        return;
+    }
+    
+    const emptyMsg = container.querySelector('.chat-empty-message');
+    if (emptyMsg) emptyMsg.remove();
+    
+    // 使用 chat-message 类让它能被长按菜单识别，同时保留 chat-system-message 用于样式
+    const messageEl = document.createElement('div');
+    messageEl.className = 'chat-message chat-system-message';
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = 'system';
+    
+    // 添加复选框（多选模式下显示）
+    const checkbox = document.createElement('div');
+    checkbox.className = 'msg-checkbox';
+    checkbox.onclick = (e) => {
+        e.stopPropagation();
+        toggleMsgSelection(messageObj.id);
+    };
+    
+    const contentWrapper = document.createElement('div');
+    contentWrapper.className = 'chat-system-message-content';
+    contentWrapper.textContent = messageObj.content;
+    
+    messageEl.appendChild(checkbox);
+    messageEl.appendChild(contentWrapper);
+    
+    console.log('➕ 系统消息元素已创建，准备添加到容器');
+    
+    container.appendChild(messageEl);
+    
+    console.log('✅ 系统消息已添加到聊天界面');
+}
+
+// ========== 模型参数保存功能 ==========
+
+// 单独保存模型参数
+async function saveModelParams() {
+    try {
+        // 读取现有设置
+        const settings = await storageDB.getItem('apiSettings') || {};
+        
+        // 只更新模型参数
+        settings.temperature = parseFloat(document.getElementById('temperatureSlider').value);
+        settings.topP = parseFloat(document.getElementById('topPSlider').value);
+        settings.maxTokens = parseInt(document.getElementById('maxTokensInput').value) || 2048;
+        
+        // 保存回数据库
+        await storageDB.setItem('apiSettings', settings);
+        
+        console.log('✅ 模型参数已保存:', {
+            temperature: settings.temperature,
+            topP: settings.topP,
+            maxTokens: settings.maxTokens
+        });
+        
+        showToast('模型参数已保存！');
+    } catch (error) {
+        console.error('❌ 保存模型参数失败:', error);
+        showToast('保存失败，请重试');
+    }
+}
+
 // ========== 定位消息功能 ==========
 
 // 打开定位输入弹窗
@@ -621,14 +1118,48 @@ async function sendTransferMessage() {
 
     // 扣款
     const data = JSON.parse(localStorage.getItem('walletData') || '{}');
-    if (paySource === 'balance') {
-        data.balance = Math.round((data.balance - amount) * 100) / 100;
-    } else if (paySource === 'huabei') {
-        data.huabeiUsed = Math.round((data.huabeiUsed + amount) * 100) / 100;
-    } else if (paySource === 'yuebao') {
-        data.yuebaoAmount = Math.round((data.yuebaoAmount - amount) * 100) / 100;
+    let sourceDisplayName = '';
+    let accountType = 'balance';
+    let accountIndex = null;
+    
+    if (typeof paySource === 'string') {
+        // 原有的支付方式：balance, huabei, yuebao
+        if (paySource === 'balance') {
+            data.balance = Math.round((data.balance - amount) * 100) / 100;
+            sourceDisplayName = '余额';
+            accountType = 'balance';
+        } else if (paySource === 'huabei') {
+            data.huabeiUsed = Math.round((data.huabeiUsed + amount) * 100) / 100;
+            sourceDisplayName = '花呗';
+            accountType = 'balance'; // 花呗暂时记录到余额账户
+        } else if (paySource === 'yuebao') {
+            data.yuebaoAmount = Math.round((data.yuebaoAmount - amount) * 100) / 100;
+            sourceDisplayName = '余额宝';
+            accountType = 'yuebao';
+        }
+        messageObj.transferSource = paySource;
+    } else if (paySource && paySource.type === 'bankcard') {
+        // 银行卡支付
+        const cardIndex = paySource.index;
+        const card = data.bankCards[cardIndex];
+        if (card) {
+            card.balance = Math.round((card.balance - amount) * 100) / 100;
+            sourceDisplayName = card.name || '银行卡';
+            accountType = 'bankcard';
+            accountIndex = cardIndex;
+            messageObj.transferSource = 'bankcard';
+            messageObj.transferBankCardIndex = cardIndex;
+            
+            // 发送银行转账支出短信
+            sendBankSms(card, 'transfer', amount);
+        }
     }
+    
     localStorage.setItem('walletData', JSON.stringify(data));
+    
+    // 添加账单记录
+    const remarkText = remark ? `转账：${remark}` : '转账';
+    addBillRecord('expense', amount, remarkText, accountType, accountIndex);
 
     // 渲染到聊天界面
     appendTransferMessageToChat(messageObj);
@@ -643,8 +1174,7 @@ async function sendTransferMessage() {
     scrollChatToBottom();
 
     // 来源提示
-    const sourceNames = { balance: '余额', huabei: '花呗', yuebao: '余额宝' };
-    showToast(`已通过${sourceNames[paySource]}转账 ¥${amount.toFixed(2)}`);
+    showToast(`已通过${sourceDisplayName}转账 ¥${amount.toFixed(2)}`);
 }
 
 // 转账来源选择弹窗
@@ -656,6 +1186,7 @@ function showTransferSourceChoice(amount) {
         const balanceOk = (data.balance || 0) >= amount;
         const huabeiOk = data.huabeiEnabled && ((data.huabeiTotal - data.huabeiUsed) >= amount) && !data.huabeiFrozen;
         const yuebaoOk = (data.yuebaoAmount || 0) >= amount;
+        const bankCards = data.bankCards || [];
 
         const overlay = document.createElement('div');
         overlay.className = 'ios-dialog-overlay';
@@ -663,6 +1194,8 @@ function showTransferSourceChoice(amount) {
         const dialog = document.createElement('div');
         dialog.className = 'ios-dialog';
         dialog.style.width = '300px';
+        dialog.style.maxHeight = '80vh';
+        dialog.style.overflowY = 'auto';
 
         const titleEl = document.createElement('div');
         titleEl.className = 'ios-dialog-title';
@@ -712,15 +1245,42 @@ function showTransferSourceChoice(amount) {
             close('yuebao');
         };
 
+        buttonsEl.appendChild(balBtn);
+        buttonsEl.appendChild(hbBtn);
+        buttonsEl.appendChild(ybBtn);
+
+        // 银行卡选项
+        if (bankCards.length > 0) {
+            bankCards.forEach((card, index) => {
+                const cardBalance = card.balance || 0;
+                const cardOk = cardBalance >= amount;
+                const cardNumber = card.number || card.cardNumber || '0000000000000000';
+                const last4 = cardNumber.slice(-4);
+                
+                const cardBtn = document.createElement('button');
+                cardBtn.className = 'ios-dialog-button' + (cardOk ? ' primary' : '');
+                cardBtn.style.opacity = cardOk ? '1' : '0.4';
+                cardBtn.style.textAlign = 'left';
+                cardBtn.style.padding = '12px 16px';
+                cardBtn.innerHTML = `
+                    <div style="font-weight:600;color:${cardOk ? '#333' : '#999'};margin-bottom:4px;">${escapeHtml(card.name || '银行卡')}</div>
+                    <div style="font-size:13px;color:#666;">**** **** **** ${last4}</div>
+                    <div style="font-size:13px;color:#999;margin-top:2px;">余额: ¥${fmt(cardBalance)}</div>
+                `;
+                cardBtn.onclick = () => {
+                    if (!cardOk) { showToast('银行卡余额不足'); return; }
+                    close({ type: 'bankcard', index: index });
+                };
+                buttonsEl.appendChild(cardBtn);
+            });
+        }
+
         // 取消
         const cancelBtn = document.createElement('button');
         cancelBtn.className = 'ios-dialog-button';
         cancelBtn.textContent = '取消';
         cancelBtn.onclick = () => close(null);
 
-        buttonsEl.appendChild(balBtn);
-        buttonsEl.appendChild(hbBtn);
-        buttonsEl.appendChild(ybBtn);
         buttonsEl.appendChild(cancelBtn);
         dialog.appendChild(titleEl);
         dialog.appendChild(msgEl);
@@ -1009,7 +1569,18 @@ function openTransferActionModal(transferId) {
         const lastMsgText = action === 'accepted' ? '[已收款]' : '[已退还]';
         await updateChatListLastMessage(currentChatCharacter.id, lastMsgText, responseMsg.timestamp);
 
-        // 7. 滚动到底部
+        // 7. 如果是收款，增加用户余额并添加账单记录
+        if (action === 'accepted' && tfAmount > 0) {
+            const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+            walletData.balance = Math.round((walletData.balance + tfAmount) * 100) / 100;
+            localStorage.setItem('walletData', JSON.stringify(walletData));
+            
+            // 添加账单记录
+            const remarkText = tfRemark ? `收款：${tfRemark}` : '收款';
+            addBillRecord('income', tfAmount, remarkText, 'balance');
+        }
+
+        // 8. 滚动到底部
         scrollChatToBottom();
 
         showToast(action === 'accepted' ? '已收款' : '已退还');
@@ -1019,52 +1590,61 @@ function openTransferActionModal(transferId) {
 
 // ========== 长期记忆功能 ==========
 
+// 简化版提示词（给用户看的纯文字版本，用于自定义格式的示例）
+const LTM_SIMPLE_PROMPTS = {
+    diary: `请用日记的方式总结对话。用"我"的口吻，像写日记一样自然、随意、有感情地记录。可以包含内心想法和感受。不要使用方括号、箭头等符号。150-200字左右，保持段落完整。`,
+    
+    narrative: `请用第三人称旁白的方式总结对话。像讲故事一样叙述，有情节、有细节、有情感描写。不要使用方括号、箭头等符号。150-200字左右，保持段落完整。`,
+    
+    objective: `请用客观中立的方式总结对话。像观察报告一样记录事实和行为，少带主观情感。不要使用方括号、箭头等符号。150-200字左右，保持段落完整。`
+};
+
 // 长期记忆提示词格式预设（{charName}和{userName}会在实际使用时替换为真名）
 const LTM_FORMAT_TEMPLATES = {
-    timeline: {
-        label: '时间线式',
-        preview: '示例：\n- [2026-02-08 下午] 我和小明聊了工作的事，他心情不太好，我安慰了他\n- [2026-02-09 上午] 我们聊了喜欢的电影，发现都喜欢科幻片',
-        summaryPrompt: `你是{charName}，请以你的第一人称视角，将以下你和{userName}的对话总结为一条简洁的长期记忆。要求：
-1. 用"我"指代{charName}（你自己），用"{userName}"指代对方
-2. 用一行文字概括这段对话的核心内容
-3. 格式为：[时间] 总结内容
-4. 时间使用对话发生的大致时间段（如：2026-02-08 下午）
-5. 总结要包含关键事件、话题、双方的态度
-6. 不超过100字
-7. 只输出总结内容，不要输出其他任何内容
-
-对话内容：
-{messages}`
-    },
-    timeline_emotion: {
-        label: '时间线+情感标记',
-        preview: '示例：\n- [2026-02-08 下午][低落->好转] 小明工作不顺，我耐心安慰了他，他心情好转了\n- [2026-02-09 上午][开心] 我们聊了喜欢的电影，气氛很轻松',
-        summaryPrompt: `你是{charName}，请以你的第一人称视角，将以下你和{userName}的对话总结为一条简洁的长期记忆。要求：
-1. 用"我"指代{charName}（你自己），用"{userName}"指代对方
-2. 用一行文字概括这段对话的核心内容
-3. 格式为：[时间][情感变化] 总结内容
-4. 时间使用对话发生的大致时间段（如：2026-02-08 下午）
-5. 情感标记反映对话中的情绪变化（如：开心、低落->好转、平静、兴奋）
-6. 总结要包含关键事件、话题、双方的态度和情感
-7. 不超过120字
+    diary: {
+        label: '日记式',
+        preview: '示例：\n今天下午和小明聊了工作的事。他心情不太好，看起来遇到了一些困难。我耐心地听他倾诉，尽力安慰他。后来我们聊到了电影，发现彼此都喜欢科幻片，气氛轻松了很多。感觉我们的关系又近了一步。',
+        summaryPrompt: `你是{charName}，请以你的第一人称视角，像写日记一样，将以下你和{userName}的对话总结为一段自然的文字记录。要求：
+1. 用"我"指代{charName}（你自己），用"{userName}"或对方的名字指代对方
+2. 用完整的句子和段落，像写日记一样自然、随意、有感情
+3. 可以包含你的内心想法、感受和观察
+4. 不要使用任何方括号[]、箭头->等符号标记
+5. 时间信息可以自然地融入叙述中（如"今天下午"、"刚才"）
+6. 总结要包含关键事件、话题、双方的情感和互动
+7. 150-200字左右，保持段落完整
 8. 只输出总结内容，不要输出其他任何内容
 
 对话内容：
 {messages}`
     },
-    category: {
-        label: '分类式',
-        preview: '示例：\n- [关于他] 小明喜欢科幻片、正在学画画\n- [我们的关系] 互相分享了兴趣爱好\n- [重要事件] 2026-02-08 小明心情低落，我安慰了他',
-        summaryPrompt: `你是{charName}，请以你的第一人称视角，将以下你和{userName}的对话总结为一条简洁的长期记忆。要求：
-1. 用"我"指代{charName}（你自己），用"{userName}"指代对方
-2. 按以下分类提取关键信息（没有的分类可以省略）：
-   [关于{userName}] {userName}透露的个人信息、喜好、习惯
-   [我们的关系] 我和{userName}之间关系的变化、互动质量
-   [重要事件] 发生的关键事件
-   [情感状态] 双方的情绪状态
-3. 每个分类一行，简洁明了
-4. 不超过150字
-5. 只输出总结内容，不要输出其他任何内容
+    narrative: {
+        label: '旁白式',
+        preview: '示例：\n2月8日下午，小明向她倾诉了工作上的烦恼。他的情绪有些低落，她耐心地陪伴和安慰他。第二天上午，两人聊起了喜欢的电影，发现都对科幻片情有独钟。这次交流让彼此的距离更近了一些，也让小明的心情好转了不少。',
+        summaryPrompt: `请以第三人称旁白的视角，像讲故事一样，将以下{charName}和{userName}的对话总结为一段自然的叙述文字。要求：
+1. 用第三人称称呼双方（用"他/她"或直接用名字）
+2. 像讲故事一样，有情节、有细节、有情感描写
+3. 保持一定的文学性和叙事感，但不要过于夸张
+4. 不要使用任何方括号[]、箭头->等符号标记
+5. 时间可以自然地融入叙述中（如"那天下午"、"随后"）
+6. 总结要包含关键事件、话题、双方的情感变化和互动
+7. 150-200字左右，保持段落完整
+8. 只输出总结内容，不要输出其他任何内容
+
+对话内容：
+{messages}`
+    },
+    objective: {
+        label: '客观记录式',
+        preview: '示例：\n这段时间里，小明分享了他在工作中遇到的困难和压力。通过交流，他得到了一些情感支持和建议。随后的对话中，双方发现了共同的兴趣爱好，包括对科幻电影的喜爱。这次交流促进了彼此的了解，也对小明的情绪状态产生了积极影响。',
+        summaryPrompt: `请以客观中立的视角，将以下{charName}和{userName}的对话总结为一段客观的记录文字。要求：
+1. 用客观、中立的语气描述
+2. 像观察报告一样记录事实和行为
+3. 少带主观情感色彩，多描述可观察的行为和事件
+4. 不要使用任何方括号[]、箭头->等符号标记
+5. 时间可以用"这段时间"、"期间"等词汇自然表达
+6. 总结要包含关键事件、话题、互动内容和影响
+7. 150-200字左右，保持段落完整，语言简洁但完整
+8. 只输出总结内容，不要输出其他任何内容
 
 对话内容：
 {messages}`
@@ -1218,16 +1798,16 @@ async function performAutoSummary(characterId, interval) {
     }).join('\n');
 
     // 获取总结提示词
-    const format = character.longTermMemoryFormat || 'timeline';
+    const format = character.longTermMemoryFormat || 'diary';
     let summaryPrompt;
 
     if (format === 'custom' && character.longTermMemoryCustomPrompt) {
-        summaryPrompt = character.longTermMemoryCustomPrompt
-            .replace(/\{messages\}/g, messagesText)
-            .replace(/\{charName\}/g, charName)
-            .replace(/\{userName\}/g, userName);
+        // 自定义格式：用户的纯文字提示词 + 自动附加对话内容
+        const userPrompt = character.longTermMemoryCustomPrompt.trim();
+        summaryPrompt = `${userPrompt}\n\n以下是需要总结的对话内容：\n${messagesText}`;
     } else {
-        const template = LTM_FORMAT_TEMPLATES[format] || LTM_FORMAT_TEMPLATES.timeline;
+        // 预设格式：使用模板
+        const template = LTM_FORMAT_TEMPLATES[format] || LTM_FORMAT_TEMPLATES.diary;
         summaryPrompt = template.summaryPrompt
             .replace(/\{messages\}/g, messagesText)
             .replace(/\{charName\}/g, charName)
@@ -1339,44 +1919,33 @@ async function buildLongTermMemoryPrompt(characterId) {
     return `\n[长期记忆 - 你（${charName}）和${userName}之前的重要经历和回忆]\n以下是你过去和${userName}交流中的重要记忆，这些是真实发生过的事，你应该自然地记得这些：\n${memoryTexts}`;
 }
 
-// 长期记忆格式选择变化
-function onLongTermMemoryFormatChange() {
-    const select = document.getElementById('longTermMemoryFormatSelect');
-    const preview = document.getElementById('longTermMemoryFormatPreview');
-    const customGroup = document.getElementById('longTermMemoryCustomPromptGroup');
-    const format = select.value;
-
-    if (format === 'custom') {
-        customGroup.style.display = 'block';
-        preview.textContent = '使用自定义提示词进行总结';
-    } else {
-        customGroup.style.display = 'none';
-        const template = LTM_FORMAT_TEMPLATES[format];
-        preview.textContent = template ? template.preview : '';
-    }
-}
+// 长期记忆格式选择变化（已移至script.js）
 
 // 打开长期记忆管理库
-async function openLongTermMemoryManager() {
-    if (!currentChatCharacter) return;
-    document.getElementById('longTermMemoryPage').style.display = 'block';
-    await renderLongTermMemoryList();
-}
+// 打开长期记忆管理库（已移至script.js）
 
 // 关闭长期记忆管理库
-function closeLongTermMemoryManager() {
-    document.getElementById('longTermMemoryPage').style.display = 'none';
-}
+// 关闭长期记忆管理库（已移至script.js）
 
 // 渲染长期记忆列表
 async function renderLongTermMemoryList() {
-    if (!currentChatCharacter) return;
+    console.log('=== renderLongTermMemoryList 开始 ===');
+    console.log('currentChatCharacter:', currentChatCharacter);
+    
+    if (!currentChatCharacter) {
+        console.error('currentChatCharacter 为空！');
+        return;
+    }
 
     const container = document.getElementById('longTermMemoryList');
+    console.log('container:', container);
+    
     const memories = await getLongTermMemories(currentChatCharacter.id);
+    console.log('memories:', memories);
 
     if (memories.length === 0) {
         container.innerHTML = '<div class="ltm-empty">暂无长期记忆</div>';
+        console.log('没有记忆，显示空状态');
         return;
     }
 
@@ -1397,153 +1966,19 @@ async function renderLongTermMemoryList() {
             </div>
         `;
     }).join('');
+    
+    console.log('=== renderLongTermMemoryList 完成，已渲染', sorted.length, '条记忆 ===');
 }
 
-// 手动添加长期记忆
-async function addLongTermMemoryManual() {
-    if (!currentChatCharacter) return;
+// 手动添加长期记忆（已移至script.js）
 
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10003;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
+// 开始编辑长期记忆（已移至script.js）
 
-    const card = document.createElement('div');
-    card.style.cssText = 'width:300px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);';
+// 取消编辑（已移至script.js）
 
-    const header = document.createElement('div');
-    header.style.cssText = 'padding:22px 24px 12px;text-align:center;';
-    const title = document.createElement('div');
-    title.style.cssText = 'font-size:17px;font-weight:600;color:#333;';
-    title.textContent = '添加长期记忆';
-    header.appendChild(title);
+// 保存编辑（已移至script.js）
 
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:8px 24px 16px;';
-    const textarea = document.createElement('textarea');
-    textarea.className = 'ltm-edit-textarea';
-    textarea.placeholder = '输入记忆内容...';
-    textarea.style.cssText += 'width:100%;min-height:100px;';
-    body.appendChild(textarea);
-
-    const footer = document.createElement('div');
-    footer.style.cssText = 'padding:0 24px 20px;display:flex;gap:10px;';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.style.cssText = 'flex:1;padding:13px 0;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeDialog();
-
-    const saveBtn = document.createElement('button');
-    saveBtn.style.cssText = 'flex:1;padding:13px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;';
-    saveBtn.textContent = '保存';
-    saveBtn.onclick = async () => {
-        const content = textarea.value.trim();
-        if (!content) {
-            showIosAlert('提示', '请输入记忆内容');
-            return;
-        }
-        await addLongTermMemory(currentChatCharacter.id, content, 'manual');
-        closeDialog();
-        await renderLongTermMemoryList();
-        showToast('已添加');
-    };
-
-    footer.appendChild(cancelBtn);
-    footer.appendChild(saveBtn);
-    card.appendChild(header);
-    card.appendChild(body);
-    card.appendChild(footer);
-    overlay.appendChild(card);
-    document.body.appendChild(overlay);
-
-    requestAnimationFrame(() => {
-        overlay.style.opacity = '1';
-        card.style.transform = 'scale(1) translateY(0)';
-        card.style.opacity = '1';
-    });
-
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeDialog();
-    });
-
-    setTimeout(() => textarea.focus(), 400);
-
-    function closeDialog() {
-        overlay.style.opacity = '0';
-        card.style.transform = 'scale(0.9) translateY(20px)';
-        card.style.opacity = '0';
-        setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
-    }
-}
-
-// 开始编辑长期记忆
-function startEditLongTermMemory(memoryId) {
-    const item = document.querySelector(`.ltm-item[data-ltm-id="${memoryId}"]`);
-    if (!item) return;
-
-    const contentEl = item.querySelector('.ltm-item-content');
-    const actionsEl = item.querySelector('.ltm-item-actions');
-    const originalContent = contentEl.textContent;
-
-    contentEl.innerHTML = `<textarea class="ltm-edit-textarea">${escapeHtml(originalContent)}</textarea>`;
-    actionsEl.innerHTML = `
-        <div class="ltm-edit-actions">
-            <button class="ltm-edit-btn" onclick="cancelEditLongTermMemory('${memoryId}', '${encodeURIComponent(originalContent)}')">取消</button>
-            <button class="ltm-edit-btn primary" onclick="saveEditLongTermMemory('${memoryId}')">保存</button>
-        </div>
-    `;
-
-    const textarea = contentEl.querySelector('textarea');
-    if (textarea) textarea.focus();
-}
-
-// 取消编辑
-function cancelEditLongTermMemory(memoryId, encodedContent) {
-    const originalContent = decodeURIComponent(encodedContent);
-    const item = document.querySelector(`.ltm-item[data-ltm-id="${memoryId}"]`);
-    if (!item) return;
-
-    const contentEl = item.querySelector('.ltm-item-content');
-    const actionsEl = item.querySelector('.ltm-item-actions');
-
-    contentEl.textContent = originalContent;
-    actionsEl.innerHTML = `
-        <button class="ltm-action-btn" onclick="startEditLongTermMemory('${memoryId}')">编辑</button>
-        <button class="ltm-action-btn danger" onclick="confirmDeleteLongTermMemory('${memoryId}')">删除</button>
-    `;
-}
-
-// 保存编辑
-async function saveEditLongTermMemory(memoryId) {
-    if (!currentChatCharacter) return;
-
-    const item = document.querySelector(`.ltm-item[data-ltm-id="${memoryId}"]`);
-    if (!item) return;
-
-    const textarea = item.querySelector('.ltm-edit-textarea');
-    if (!textarea) return;
-
-    const newContent = textarea.value.trim();
-    if (!newContent) {
-        showIosAlert('提示', '记忆内容不能为空');
-        return;
-    }
-
-    await editLongTermMemory(currentChatCharacter.id, memoryId, newContent);
-    await renderLongTermMemoryList();
-    showToast('已保存');
-}
-
-// 确认删除长期记忆
-async function confirmDeleteLongTermMemory(memoryId) {
-    if (!currentChatCharacter) return;
-
-    const confirmed = await iosConfirm('确认删除这条长期记忆？');
-    if (confirmed) {
-        await deleteLongTermMemory(currentChatCharacter.id, memoryId);
-        await renderLongTermMemoryList();
-        showToast('已删除');
-    }
-}
+// 确认删除长期记忆（已移至script.js）
 
 // 初始化长期记忆格式预览（打开设置时调用）
 function initLongTermMemorySettings() {
@@ -1558,11 +1993,16 @@ function initLongTermMemorySettings() {
     const customPrompt = currentChatCharacter.longTermMemoryCustomPrompt || '';
     document.getElementById('longTermMemoryCustomPromptInput').value = customPrompt;
 
+    // 加载精简格式设置
+    const condenseFormat = currentChatCharacter.ltmCondenseFormat || 'first-person';
+    document.getElementById('ltmCondenseFormatSelect').value = condenseFormat;
+
     const condensePrompt = currentChatCharacter.ltmCondensePrompt || '';
     document.getElementById('ltmCondensePromptInput').value = condensePrompt;
 
     // 触发格式预览更新
     onLongTermMemoryFormatChange();
+    onLtmCondenseFormatChange();
 }
 
 // 保存长期记忆设置（在saveChatSettings中调用）
@@ -1579,6 +2019,10 @@ function saveLongTermMemorySettings() {
     const customPrompt = document.getElementById('longTermMemoryCustomPromptInput').value.trim();
     currentChatCharacter.longTermMemoryCustomPrompt = customPrompt;
 
+    // 保存精简格式设置
+    const condenseFormat = document.getElementById('ltmCondenseFormatSelect').value;
+    currentChatCharacter.ltmCondenseFormat = condenseFormat;
+
     const condensePrompt = document.getElementById('ltmCondensePromptInput').value.trim();
     currentChatCharacter.ltmCondensePrompt = condensePrompt;
 }
@@ -1587,29 +2031,55 @@ function saveLongTermMemorySettings() {
 let ltmCondenseMode = false;
 let ltmCondenseSelected = new Set();
 
+// 精简提示词格式模板
+const LTM_CONDENSE_FORMATS = {
+    'first-person': {
+        name: '第一人称精简',
+        preview: '以"我"的视角总结记忆，保留情感和主观感受',
+        prompt: `请以第一人称（"我"）的视角，将以下多条记忆信息进行总结精简。要求：
+1. 合并重复内容，提取关键信息
+2. 保留重要的情感和主观感受
+3. 使用"我"的口吻叙述
+4. 语言简洁但完整
+5. 只输出总结后的内容，不要输出其他任何内容
+
+以下是需要精简的记忆内容：
+{memories}`
+    },
+    'third-person': {
+        name: '第三人称精简',
+        preview: '以旁观者视角客观总结记忆内容',
+        prompt: `请以第三人称的视角，将以下多条记忆信息进行总结精简。要求：
+1. 合并重复内容，提取关键信息
+2. 使用第三人称叙述（如"用户"、"他/她"等）
+3. 保持客观中立的叙述风格
+4. 语言简洁但完整
+5. 只输出总结后的内容，不要输出其他任何内容
+
+以下是需要精简的记忆内容：
+{memories}`
+    },
+    'objective': {
+        name: '客观记录式精简',
+        preview: '纯客观事实记录，去除主观描述',
+        prompt: `请以客观记录的方式，将以下多条记忆信息进行总结精简。要求：
+1. 只保留客观事实和关键信息
+2. 去除主观感受和情感描述
+3. 使用简洁的陈述句
+4. 按时间或逻辑顺序组织内容
+5. 只输出总结后的内容，不要输出其他任何内容
+
+以下是需要精简的记忆内容：
+{memories}`
+    }
+};
+
 const LTM_DEFAULT_CONDENSE_PROMPT = `请将以下多条记忆信息进行总结精简，合并重复内容，提取关键信息，生成一条简洁但完整的总结记忆。要求：保留所有重要信息，去除冗余，语言简洁明了。只输出总结后的内容，不要输出其他任何内容。
 
 以下是需要精简的记忆内容：
 {memories}`;
 
-function startCondenseMode() {
-    if (!currentChatCharacter) return;
-    ltmCondenseMode = true;
-    ltmCondenseSelected.clear();
-    document.getElementById('ltmCondenseBtn').textContent = '取消';
-    document.getElementById('ltmCondenseBtn').onclick = exitCondenseMode;
-    renderCondenseMemoryList();
-    showCondenseBar();
-}
-
-function exitCondenseMode() {
-    ltmCondenseMode = false;
-    ltmCondenseSelected.clear();
-    document.getElementById('ltmCondenseBtn').textContent = '精简';
-    document.getElementById('ltmCondenseBtn').onclick = startCondenseMode;
-    removeCondenseBar();
-    renderLongTermMemoryList();
-}
+// 退出精简模式（已移至script.js）
 
 function showCondenseBar() {
     removeCondenseBar();
@@ -1699,13 +2169,26 @@ async function performCondense() {
         return `记忆${i + 1} ${sourceLabel} ${time}:\n${m.content}`;
     }).join('\n\n');
 
-    // 获取精简提示词
-    const customCondensePrompt = currentChatCharacter.ltmCondensePrompt;
+    // 获取精简格式和提示词
+    const condenseFormat = currentChatCharacter.ltmCondenseFormat || 'first-person';
     let prompt;
-    if (customCondensePrompt && customCondensePrompt.trim()) {
-        prompt = customCondensePrompt.replace(/\{memories\}/g, memoriesText);
+
+    if (condenseFormat === 'custom') {
+        // 使用自定义提示词
+        const customCondensePrompt = currentChatCharacter.ltmCondensePrompt;
+        if (customCondensePrompt && customCondensePrompt.trim()) {
+            prompt = customCondensePrompt.replace(/\{memories\}/g, memoriesText);
+        } else {
+            prompt = LTM_DEFAULT_CONDENSE_PROMPT.replace(/\{memories\}/g, memoriesText);
+        }
     } else {
-        prompt = LTM_DEFAULT_CONDENSE_PROMPT.replace(/\{memories\}/g, memoriesText);
+        // 使用预设格式
+        const formatConfig = LTM_CONDENSE_FORMATS[condenseFormat];
+        if (formatConfig) {
+            prompt = formatConfig.prompt.replace(/\{memories\}/g, memoriesText);
+        } else {
+            prompt = LTM_DEFAULT_CONDENSE_PROMPT.replace(/\{memories\}/g, memoriesText);
+        }
     }
 
     // 显示loading
@@ -2036,7 +2519,6 @@ async function getSummaryApiSettings() {
     const mainSettings = await storageDB.getItem('apiSettings');
     return mainSettings;
 }
-
 
 // ========== 长按消息菜单功能 ==========
 
@@ -2408,31 +2890,31 @@ function enterMultiSelectMode(preSelectId, purpose) {
         if (target) toggleMsgSelect(target);
     }
 
-    // 顶部操作栏
+    // 顶部操作栏 - 根据用途显示不同按钮
     const topBar = document.createElement('div');
     topBar.className = 'msg-multiselect-bar';
     topBar.id = 'msgMultiselectBar';
-    topBar.innerHTML = `
-        <div class="ms-cancel" onclick="exitMultiSelectMode()">取消</div>
-        <div class="ms-title" id="msTitle">已选择 ${_multiSelectedIds.size} 条</div>
-        <div class="ms-select-all" onclick="toggleSelectAllMsgs()">全选</div>
-    `;
-    detailContainer.insertBefore(topBar, detailContainer.firstChild);
-
-    // 底部操作栏 - 根据用途显示不同按钮
-    const bottomBar = document.createElement('div');
-    bottomBar.className = 'msg-multiselect-bottom';
-    bottomBar.id = 'msgMultiselectBottom';
+    
     if (_multiSelectPurpose === 'forward') {
-        bottomBar.innerHTML = `
-            <button class="ms-forward-btn" id="msForwardBtn" disabled onclick="forwardSelectedMsgs()">转发</button>
+        topBar.innerHTML = `
+            <div class="ms-cancel" onclick="exitMultiSelectMode()">取消</div>
+            <div class="ms-title" id="msTitle">已选择 ${_multiSelectedIds.size} 条</div>
+            <div class="ms-select-all" onclick="toggleSelectAllMsgs()">全选</div>
+            <div class="ms-action-btn ms-forward-btn" id="msForwardBtn" onclick="forwardSelectedMsgs()">转发</div>
         `;
     } else {
-        bottomBar.innerHTML = `
-            <button class="ms-delete-btn" id="msDeleteBtn" disabled onclick="confirmMultiDelete()">删除</button>
+        topBar.innerHTML = `
+            <div class="ms-cancel" onclick="exitMultiSelectMode()">取消</div>
+            <div class="ms-title" id="msTitle">已选择 ${_multiSelectedIds.size} 条</div>
+            <div class="ms-select-all" onclick="toggleSelectAllMsgs()">全选</div>
+            <div class="ms-action-btn ms-delete-btn" id="msDeleteBtn" onclick="confirmMultiDelete()">删除</div>
         `;
     }
-    detailContainer.appendChild(bottomBar);
+    detailContainer.insertBefore(topBar, detailContainer.firstChild);
+
+    // 移除底部操作栏（不再需要）
+    const oldBottomBar = document.getElementById('msgMultiselectBottom');
+    if (oldBottomBar) oldBottomBar.remove();
 
     updateMultiSelectUI();
 }
@@ -2510,14 +2992,24 @@ function updateMultiSelectUI() {
 
     const btn = document.getElementById('msDeleteBtn');
     if (btn) {
-        btn.disabled = count === 0;
-        btn.textContent = count > 0 ? `删除 (${count})` : '删除';
+        if (count === 0) {
+            btn.classList.add('disabled');
+            btn.textContent = '删除';
+        } else {
+            btn.classList.remove('disabled');
+            btn.textContent = `删除 (${count})`;
+        }
     }
 
     const fwdBtn = document.getElementById('msForwardBtn');
     if (fwdBtn) {
-        fwdBtn.disabled = count === 0;
-        fwdBtn.textContent = count > 0 ? `转发 (${count})` : '转发';
+        if (count === 0) {
+            fwdBtn.classList.add('disabled');
+            fwdBtn.textContent = '转发';
+        } else {
+            fwdBtn.classList.remove('disabled');
+            fwdBtn.textContent = `转发 (${count})`;
+        }
     }
 }
 
@@ -2559,13 +3051,28 @@ function confirmMultiDelete() {
 
 // 编辑消息
 function handleMsgEdit(msgId, msgEl) {
-    // 获取当前消息内容
-    const bubble = msgEl.querySelector('.chat-message-bubble');
-    if (!bubble) {
-        showToast('该消息不支持编辑');
+    // 获取当前消息内容 - 支持所有类型的消息
+    let bubble = msgEl.querySelector('.chat-message-bubble');
+    let currentText = '';
+    
+    if (bubble) {
+        // 普通消息气泡
+        currentText = bubble.textContent.trim();
+    } else {
+        // 检查是否是系统消息
+        const systemContent = msgEl.querySelector('.chat-system-message-content');
+        if (systemContent) {
+            currentText = systemContent.textContent.trim();
+        } else {
+            // 其他特殊消息类型，尝试获取任何文本内容
+            currentText = msgEl.textContent.trim();
+        }
+    }
+    
+    if (!currentText) {
+        showToast('无法编辑该消息');
         return;
     }
-    const currentText = bubble.textContent.trim();
 
     // 创建编辑弹窗
     const overlay = document.createElement('div');
@@ -2636,8 +3143,17 @@ function handleMsgEdit(msgId, msgEl) {
                 };
                 req.onerror = () => resolve();
             });
-            // 更新界面
-            bubble.textContent = newText;
+            
+            // 更新界面 - 支持所有类型的消息
+            if (bubble) {
+                bubble.textContent = newText;
+            } else {
+                const systemContent = msgEl.querySelector('.chat-system-message-content');
+                if (systemContent) {
+                    systemContent.textContent = newText;
+                }
+            }
+            
             showToast('已编辑');
             // 编辑后刷新聊天列表预览
             renderChatList();
@@ -2844,13 +3360,27 @@ if (_origOpenChatDetail) {
         setTimeout(() => initMsgContextMenu(), 200);
     };
 }
-
-
 // ========== 消息通知弹窗功能 ==========
 
 // 通知弹窗队列
 let _notifQueue = [];
 let _notifProcessing = false;
+
+// 等待消息通知队列处理完成
+function waitForNotifQueueComplete() {
+    return new Promise((resolve) => {
+        // 检查队列是否为空且没有正在处理的通知
+        const checkQueue = () => {
+            if (_notifQueue.length === 0 && !_notifProcessing) {
+                resolve();
+            } else {
+                // 每100ms检查一次
+                setTimeout(checkQueue, 100);
+            }
+        };
+        checkQueue();
+    });
+}
 
 // 读取通知设置
 function getNotifSettings() {
@@ -3262,6 +3792,9 @@ if (_origSaveMessageToDB) {
 
 // ========== 对话统计功能 ==========
 
+// 全局变量：保存token分布详情
+let tokenDistributionData = null;
+
 // 估算文本的token数（粗略估算）
 function estimateTokenCount(text) {
     if (!text) return 0;
@@ -3288,29 +3821,72 @@ async function updateChatStats() {
 
         // 估算总token：模拟实际发送给API的完整内容
         let totalTokens = 0;
+        
+        // 三大分类统计
+        let tokenStats = {
+            systemPrompt: 0,      // 系统提示词
+            longTermMemory: 0,    // 长期记忆
+            shortTermMemory: 0,   // 短期记忆（聊天历史）
+            recentMessages: []
+        };
 
-        // 1. 系统提示词（人设、世界书、记忆等）
+        // 1. 系统提示词（包含所有提示词内容）
         try {
             const systemPrompt = await buildRolePlaySystemPrompt(currentChatCharacter);
-            totalTokens += estimateTokenCount(systemPrompt);
+            tokenStats.systemPrompt = estimateTokenCount(systemPrompt);
+            totalTokens += tokenStats.systemPrompt;
         } catch (e) {
             console.warn('估算系统提示词token失败:', e);
         }
 
-        // 2. 短期记忆范围内的聊天历史（和实际发送给API的一致）
+        // 2. 长期记忆（单独统计）
+        if (typeof buildLongTermMemoryPrompt === 'function') {
+            try {
+                const ltmPrompt = await buildLongTermMemoryPrompt(currentChatCharacter.id);
+                if (ltmPrompt) {
+                    tokenStats.longTermMemory = estimateTokenCount(ltmPrompt);
+                    // 长期记忆已经包含在系统提示词中，需要从系统提示词中减去避免重复计算
+                    tokenStats.systemPrompt -= tokenStats.longTermMemory;
+                }
+            } catch (e) {
+                console.warn('估算长期记忆token失败:', e);
+            }
+        }
+
+        // 3. 短期记忆（聊天历史）
         const memoryLimit = currentChatCharacter.shortTermMemory || 10;
         try {
             const recentMsgs = await getChatHistory(currentChatCharacter.id, memoryLimit);
             recentMsgs.forEach(m => {
-                totalTokens += estimateTokenCount(m.content || '');
-                if (m.voiceText) totalTokens += estimateTokenCount(m.voiceText);
-                if (m.textImageDesc) totalTokens += estimateTokenCount(m.textImageDesc);
-                if (m.transferRemark) totalTokens += estimateTokenCount(m.transferRemark);
-                if (m.locationAddress) totalTokens += estimateTokenCount(m.locationAddress);
+                let msgTokens = 0;
+                msgTokens += estimateTokenCount(m.content || '');
+                if (m.voiceText) msgTokens += estimateTokenCount(m.voiceText);
+                if (m.textImageDesc) msgTokens += estimateTokenCount(m.textImageDesc);
+                if (m.transferRemark) msgTokens += estimateTokenCount(m.transferRemark);
+                if (m.locationAddress) msgTokens += estimateTokenCount(m.locationAddress);
+                
+                tokenStats.shortTermMemory += msgTokens;
+                
+                // 保存最近8条消息的详情
+                if (tokenStats.recentMessages.length < 8) {
+                    tokenStats.recentMessages.push({
+                        content: m.content || '',
+                        tokens: msgTokens,
+                        type: m.type,
+                        timestamp: m.timestamp
+                    });
+                }
             });
+            totalTokens += tokenStats.shortTermMemory;
         } catch (e) {
             console.warn('估算聊天历史token失败:', e);
         }
+
+        // 保存token分布数据到全局变量
+        tokenDistributionData = {
+            total: totalTokens,
+            stats: tokenStats
+        };
 
         // 格式化数字显示
         const fmt = n => n >= 10000 ? (n / 10000).toFixed(1) + '万' : n.toLocaleString();
@@ -3323,7 +3899,15 @@ async function updateChatStats() {
         if (elTotal) elTotal.textContent = fmt(total);
         if (elUser) elUser.textContent = fmt(userCount);
         if (elChar) elChar.textContent = fmt(charCount);
-        if (elTokens) elTokens.textContent = fmt(totalTokens);
+        if (elTokens) {
+            elTokens.textContent = fmt(totalTokens);
+            // 添加点击事件（只添加一次）
+            if (!elTokens.dataset.clickListenerAdded) {
+                elTokens.style.cursor = 'pointer';
+                elTokens.onclick = showTokenDistribution;
+                elTokens.dataset.clickListenerAdded = 'true';
+            }
+        }
     } catch (e) {
         console.error('更新对话统计失败:', e);
     }
@@ -3366,168 +3950,161 @@ if (_origSaveMessageForStats) {
     };
 }
 
-
-// ========== 手动总结功能 ==========
-
-// 打开手动总结弹窗
-async function openManualSummaryModal() {
-    if (!currentChatCharacter) return;
-
-    // 获取当前角色的所有消息
-    const allChats = await getAllChatsFromDB();
-    const msgs = allChats.filter(m => m.characterId === currentChatCharacter.id);
-    msgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    if (msgs.length < 2) {
-        showIosAlert('提示', '消息太少，至少需要2条消息才能总结');
+// 显示Token分布弹窗
+function showTokenDistribution() {
+    if (!tokenDistributionData) {
+        showToast('暂无Token统计数据');
         return;
     }
 
-    const total = msgs.length;
+    const data = tokenDistributionData;
+    const total = data.total;
+    const stats = data.stats;
 
-    // 获取真名
-    const charName = currentChatCharacter.name || '角色';
-    let userName = '用户';
-    try {
-        const uds = localStorage.getItem('chatUserData');
-        if (uds) { const ud = JSON.parse(uds); if (ud.name) userName = ud.name; }
-    } catch (e) {}
+    const systemPercent = total > 0 ? ((stats.systemPrompt / total) * 100).toFixed(1) : 0;
+    const ltmPercent = total > 0 ? ((stats.longTermMemory / total) * 100).toFixed(1) : 0;
+    const stmPercent = total > 0 ? ((stats.shortTermMemory / total) * 100).toFixed(1) : 0;
 
-    // 构建弹窗
     const overlay = document.createElement('div');
-    overlay.id = 'manualSummaryOverlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10003;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
+    overlay.id = 'tokenDistOverlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
 
     const card = document.createElement('div');
-    card.style.cssText = 'width:320px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);max-height:80vh;overflow-y:auto;';
+    card.style.cssText = 'width:360px;max-width:90vw;max-height:85vh;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);display:flex;flex-direction:column;';
 
     // 标题
     const header = document.createElement('div');
-    header.style.cssText = 'padding:22px 24px 8px;text-align:center;';
+    header.style.cssText = 'padding:24px 24px 20px;text-align:center;border-bottom:1px solid #e8e8e8;flex-shrink:0;background:#fff;';
     const title = document.createElement('div');
-    title.style.cssText = 'font-size:17px;font-weight:600;color:#333;';
-    title.textContent = '手动总结';
+    title.style.cssText = 'font-size:18px;font-weight:600;color:#333;margin-bottom:8px;';
+    title.textContent = 'Token 分布详情';
     const subtitle = document.createElement('div');
-    subtitle.style.cssText = 'font-size:12px;color:#aaa;margin-top:6px;';
-    subtitle.textContent = `当前共 ${total} 条消息，选择要总结的范围`;
+    subtitle.style.cssText = 'font-size:32px;font-weight:700;color:#333;margin-bottom:4px;';
+    subtitle.textContent = total.toLocaleString();
+    const subtitleLabel = document.createElement('div');
+    subtitleLabel.style.cssText = 'font-size:13px;color:#999;';
+    subtitleLabel.textContent = 'tokens 总计';
     header.appendChild(title);
     header.appendChild(subtitle);
+    header.appendChild(subtitleLabel);
 
-    // 范围选择区域
+    // 内容区域（可滚动）
     const body = document.createElement('div');
-    body.style.cssText = 'padding:16px 24px;';
+    body.style.cssText = 'padding:24px;overflow-y:auto;flex:1;';
 
-    // 从第几条
-    const fromGroup = document.createElement('div');
-    fromGroup.style.cssText = 'margin-bottom:14px;';
-    const fromLabel = document.createElement('div');
-    fromLabel.style.cssText = 'font-size:13px;color:#666;margin-bottom:6px;';
-    fromLabel.textContent = '从第几条开始';
-    const fromRow = document.createElement('div');
-    fromRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
-    const fromInput = document.createElement('input');
-    fromInput.type = 'number';
-    fromInput.id = 'manualSummaryFrom';
-    fromInput.min = 1;
-    fromInput.max = total;
-    fromInput.value = Math.max(1, total - 19);
-    fromInput.style.cssText = 'flex:1;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;box-sizing:border-box;';
-    fromInput.onfocus = () => { fromInput.style.borderColor = '#007aff'; };
-    fromInput.onblur = () => { fromInput.style.borderColor = '#e0e0e0'; };
-    const fromHint = document.createElement('span');
-    fromHint.style.cssText = 'font-size:13px;color:#999;white-space:nowrap;';
-    fromHint.textContent = `/ ${total}`;
-    fromRow.appendChild(fromInput);
-    fromRow.appendChild(fromHint);
-    fromGroup.appendChild(fromLabel);
-    fromGroup.appendChild(fromRow);
+    // 系统提示词
+    const systemSection = document.createElement('div');
+    systemSection.style.cssText = 'margin-bottom:20px;';
+    systemSection.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:15px;color:#333;font-weight:600;">系统提示词</span>
+            <span style="font-size:15px;color:#333;font-weight:700;">${stats.systemPrompt.toLocaleString()} <span style="font-size:13px;color:#999;font-weight:500;">(${systemPercent}%)</span></span>
+        </div>
+        <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-bottom:8px;">
+            <div style="height:100%;background:#333;width:${systemPercent}%;transition:width 0.5s ease;"></div>
+        </div>
+        <div style="font-size:12px;color:#999;line-height:1.5;">包含角色人设、用户信息、世界书、功能说明等</div>
+    `;
+    body.appendChild(systemSection);
 
-    // 到第几条
-    const toGroup = document.createElement('div');
-    toGroup.style.cssText = 'margin-bottom:14px;';
-    const toLabel = document.createElement('div');
-    toLabel.style.cssText = 'font-size:13px;color:#666;margin-bottom:6px;';
-    toLabel.textContent = '到第几条结束';
-    const toRow = document.createElement('div');
-    toRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
-    const toInput = document.createElement('input');
-    toInput.type = 'number';
-    toInput.id = 'manualSummaryTo';
-    toInput.min = 1;
-    toInput.max = total;
-    toInput.value = total;
-    toInput.style.cssText = 'flex:1;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;box-sizing:border-box;';
-    toInput.onfocus = () => { toInput.style.borderColor = '#007aff'; };
-    toInput.onblur = () => { toInput.style.borderColor = '#e0e0e0'; };
-    const toHint = document.createElement('span');
-    toHint.style.cssText = 'font-size:13px;color:#999;white-space:nowrap;';
-    toHint.textContent = `/ ${total}`;
-    toRow.appendChild(toInput);
-    toRow.appendChild(toHint);
-    toGroup.appendChild(toLabel);
-    toGroup.appendChild(toRow);
-
-    // 预览区域：显示选中范围的消息预览
-    const previewBox = document.createElement('div');
-    previewBox.id = 'manualSummaryPreview';
-    previewBox.style.cssText = 'background:#f8f8f8;border-radius:10px;padding:12px;max-height:150px;overflow-y:auto;font-size:12px;color:#666;line-height:1.6;margin-bottom:6px;';
-    previewBox.textContent = '加载预览中...';
-
-    // 更新预览的函数
-    function updatePreview() {
-        const from = Math.max(1, Math.min(total, parseInt(fromInput.value) || 1));
-        const to = Math.max(from, Math.min(total, parseInt(toInput.value) || total));
-        const selected = msgs.slice(from - 1, to);
-        const count = selected.length;
-        if (count === 0) {
-            previewBox.innerHTML = '<span style="color:#ccc;">无消息</span>';
-            return;
-        }
-        // 只显示前5条和后2条，中间省略
-        let lines = [];
-        const show = count <= 8 ? selected : [...selected.slice(0, 5), null, ...selected.slice(-2)];
-        show.forEach((m, i) => {
-            if (!m) {
-                lines.push('<div style="text-align:center;color:#ccc;padding:2px 0;">... 省略 ' + (count - 7) + ' 条 ...</div>');
-                return;
-            }
-            const role = m.type === 'user' ? userName : charName;
-            let text = m.content || '';
-            if (m.messageType === 'voice') text = '(语音)';
-            else if (m.messageType === 'sticker') text = '(表情包)';
-            else if (m.messageType === 'image') text = '(图片)';
-            else if (m.messageType === 'textImage') text = '(图文)';
-            else if (m.messageType === 'transfer') text = '(转账)';
-            else if (m.messageType === 'location') text = '(位置)';
-            if (text.length > 30) text = text.substring(0, 30) + '...';
-            lines.push(`<div style="padding:2px 0;">${role} ${escapeHtml(text)}</div>`);
-        });
-        previewBox.innerHTML = `<div style="font-size:11px;color:#999;margin-bottom:6px;">已选 ${count} 条消息</div>` + lines.join('');
+    // 长期记忆
+    if (stats.longTermMemory > 0) {
+        const ltmSection = document.createElement('div');
+        ltmSection.style.cssText = 'margin-bottom:20px;';
+        ltmSection.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <span style="font-size:15px;color:#333;font-weight:600;">长期记忆</span>
+                <span style="font-size:15px;color:#333;font-weight:700;">${stats.longTermMemory.toLocaleString()} <span style="font-size:13px;color:#999;font-weight:500;">(${ltmPercent}%)</span></span>
+            </div>
+            <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-bottom:8px;">
+                <div style="height:100%;background:#666;width:${ltmPercent}%;transition:width 0.5s ease;"></div>
+            </div>
+            <div style="font-size:12px;color:#999;line-height:1.5;">AI记住的重要事件和关键信息</div>
+        `;
+        body.appendChild(ltmSection);
     }
 
-    fromInput.oninput = updatePreview;
-    toInput.oninput = updatePreview;
+    // 短期记忆（聊天历史）
+    const stmSection = document.createElement('div');
+    stmSection.style.cssText = 'margin-bottom:20px;';
+    stmSection.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:15px;color:#333;font-weight:600;">短期记忆</span>
+            <span style="font-size:15px;color:#333;font-weight:700;">${stats.shortTermMemory.toLocaleString()} <span style="font-size:13px;color:#999;font-weight:500;">(${stmPercent}%)</span></span>
+        </div>
+        <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-bottom:8px;">
+            <div style="height:100%;background:#999;width:${stmPercent}%;transition:width 0.5s ease;"></div>
+        </div>
+        <div style="font-size:12px;color:#999;line-height:1.5;">最近 ${currentChatCharacter.shortTermMemory || 10} 条对话内容</div>
+    `;
+    body.appendChild(stmSection);
 
-    body.appendChild(fromGroup);
-    body.appendChild(toGroup);
-    body.appendChild(previewBox);
+    // 最近消息详情
+    if (stats.recentMessages && stats.recentMessages.length > 0) {
+        const messagesTitle = document.createElement('div');
+        messagesTitle.style.cssText = 'font-size:14px;color:#666;font-weight:600;margin:24px 0 12px;padding-top:20px;border-top:1px solid #f0f0f0;';
+        messagesTitle.textContent = '最近消息明细';
+        body.appendChild(messagesTitle);
 
-    // 按钮区域
+        const messagesContainer = document.createElement('div');
+        messagesContainer.style.cssText = 'max-height:300px;overflow-y:auto;';
+
+        stats.recentMessages.forEach((msg, idx) => {
+            const msgItem = document.createElement('div');
+            msgItem.style.cssText = 'padding:12px;background:#f8f8f8;border-radius:10px;margin-bottom:10px;';
+            
+            const msgHeader = document.createElement('div');
+            msgHeader.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;';
+            
+            const msgType = document.createElement('span');
+            msgType.style.cssText = `font-size:12px;padding:4px 10px;border-radius:4px;font-weight:500;${msg.type === 'user' ? 'background:#e8e8e8;color:#333;' : 'background:#333;color:#fff;'}`;
+            msgType.textContent = msg.type === 'user' ? '用户' : '角色';
+            
+            const msgTokens = document.createElement('span');
+            msgTokens.style.cssText = 'font-size:13px;color:#333;font-weight:700;';
+            msgTokens.textContent = `${msg.tokens} tokens`;
+            
+            msgHeader.appendChild(msgType);
+            msgHeader.appendChild(msgTokens);
+            
+            const msgContent = document.createElement('div');
+            msgContent.style.cssText = 'font-size:13px;color:#666;line-height:1.5;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;';
+            msgContent.textContent = msg.content || '[特殊消息]';
+            
+            msgItem.appendChild(msgHeader);
+            msgItem.appendChild(msgContent);
+            messagesContainer.appendChild(msgItem);
+        });
+
+        body.appendChild(messagesContainer);
+    }
+
+    // 提示信息
+    const tipSection = document.createElement('div');
+    tipSection.style.cssText = 'margin-top:20px;padding:14px;background:#f8f8f8;border-radius:10px;border:1px solid #e8e8e8;';
+    tipSection.innerHTML = `
+        <div style="font-size:12px;color:#666;line-height:1.6;">
+            <div style="font-weight:600;margin-bottom:8px;color:#333;">说明</div>
+            <div style="margin-bottom:4px;">• Token数为粗略估算，实际消耗可能略有差异</div>
+            <div style="margin-bottom:4px;">• 系统提示词包含角色设定、功能说明等固定内容</div>
+            <div style="margin-bottom:4px;">• 长期记忆保存AI记住的重要信息</div>
+            <div>• 短期记忆是最近的对话历史，条数可在设置中调整</div>
+        </div>
+    `;
+    body.appendChild(tipSection);
+
+    // 底部按钮
     const footer = document.createElement('div');
-    footer.style.cssText = 'padding:8px 24px 20px;display:flex;gap:10px;';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.style.cssText = 'flex:1;padding:13px 0;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;transition:all 0.15s;';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeManualSummaryModal(overlay, card);
-
-    const confirmBtn = document.createElement('button');
-    confirmBtn.style.cssText = 'flex:1;padding:13px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#007aff;cursor:pointer;transition:all 0.15s;';
-    confirmBtn.textContent = '开始总结';
-    confirmBtn.onclick = () => executeManualSummary(overlay, card, msgs);
-
-    footer.appendChild(cancelBtn);
-    footer.appendChild(confirmBtn);
+    footer.style.cssText = 'padding:20px 24px;border-top:1px solid #e8e8e8;flex-shrink:0;';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.style.cssText = 'width:100%;padding:14px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;transition:all 0.2s;';
+    closeBtn.textContent = '关闭';
+    closeBtn.onmouseenter = () => closeBtn.style.background = '#555';
+    closeBtn.onmouseleave = () => closeBtn.style.background = '#333';
+    closeBtn.onclick = () => closeTokenDistModal(overlay, card);
+    
+    footer.appendChild(closeBtn);
 
     card.appendChild(header);
     card.appendChild(body);
@@ -3544,20 +4121,28 @@ async function openManualSummaryModal() {
 
     // 点击遮罩关闭
     overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeManualSummaryModal(overlay, card);
+        if (e.target === overlay) closeTokenDistModal(overlay, card);
     });
-
-    // 初始预览
-    setTimeout(updatePreview, 50);
 }
 
-// 关闭手动总结弹窗
-function closeManualSummaryModal(overlay, card) {
+// 关闭Token分布弹窗
+function closeTokenDistModal(overlay, card) {
     overlay.style.opacity = '0';
     card.style.transform = 'scale(0.9) translateY(20px)';
     card.style.opacity = '0';
-    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+    setTimeout(() => {
+        if (overlay.parentNode) {
+            document.body.removeChild(overlay);
+        }
+    }, 300);
 }
+
+
+// ========== 手动总结功能 ==========
+
+// 打开手动总结弹窗（已移至script.js）
+
+// 关闭手动总结弹窗（已移至script.js）
 
 // 执行手动总结
 async function executeManualSummary(overlay, card, allMsgs) {
@@ -3608,15 +4193,15 @@ async function executeManualSummary(overlay, card, allMsgs) {
         }).join('\n');
 
         // 获取总结提示词（复用角色设置的格式）
-        const format = character.longTermMemoryFormat || 'timeline';
+        const format = character.longTermMemoryFormat || 'diary';
         let summaryPrompt;
         if (format === 'custom' && character.longTermMemoryCustomPrompt) {
-            summaryPrompt = character.longTermMemoryCustomPrompt
-                .replace(/\{messages\}/g, messagesText)
-                .replace(/\{charName\}/g, charName)
-                .replace(/\{userName\}/g, userName);
+            // 自定义格式：用户的纯文字提示词 + 自动附加对话内容
+            const userPrompt = character.longTermMemoryCustomPrompt.trim();
+            summaryPrompt = `${userPrompt}\n\n以下是需要总结的对话内容：\n${messagesText}`;
         } else {
-            const template = LTM_FORMAT_TEMPLATES[format] || LTM_FORMAT_TEMPLATES.timeline;
+            // 预设格式：使用模板
+            const template = LTM_FORMAT_TEMPLATES[format] || LTM_FORMAT_TEMPLATES.diary;
             summaryPrompt = template.summaryPrompt
                 .replace(/\{messages\}/g, messagesText)
                 .replace(/\{charName\}/g, charName)
@@ -4623,17 +5208,118 @@ function walletRecharge() {
     if (isWalletFrozen()) {
         showIosAlert('操作受限', '您的钱包已被冻结（花呗逾期），充值后资金将优先用于还款。');
     }
+    
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const cards = data.bankCards || [];
+    
+    if (cards.length === 0) {
+        showIosAlert('提示', '请先添加银行卡');
+        return;
+    }
+    
+    // 选择银行卡
+    selectBankCardForRecharge(cards, data);
+}
+
+// 选择银行卡进行充值
+function selectBankCardForRecharge(cards, walletData) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.maxWidth = '320px';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '选择充值银行卡';
+    
+    const msgEl = document.createElement('div');
+    msgEl.className = 'ios-dialog-message';
+    msgEl.style.maxHeight = '300px';
+    msgEl.style.overflowY = 'auto';
+    
+    // 银行卡列表
+    msgEl.innerHTML = cards.map((card, index) => {
+        const cardNumber = card.number || card.cardNumber || '0000000000000000';
+        const last4 = cardNumber.slice(-4);
+        const balance = card.balance || 0;
+        return `
+            <div class="bank-card-select-item" onclick="confirmRechargeAmount(${index})" style="padding:12px;margin:8px 0;background:#f8f8f8;border-radius:10px;cursor:pointer;text-align:left;">
+                <div style="font-weight:600;color:#333;margin-bottom:4px;">${escapeHtml(card.name || '未命名银行卡')}</div>
+                <div style="font-size:13px;color:#666;">**** **** **** ${last4}</div>
+                <div style="font-size:13px;color:#999;margin-top:4px;">余额: ¥${balance.toFixed(2)}</div>
+            </div>
+        `;
+    }).join('');
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    
+    buttonsEl.appendChild(cancelBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(msgEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => document.body.removeChild(overlay), 300);
+    }
+    
+    // 将closeDialog函数暴露到全局
+    window.closeRechargeDialog = closeDialog;
+}
+
+// 确认充值金额
+function confirmRechargeAmount(cardIndex) {
+    window.closeRechargeDialog();
+    
     iosPrompt('充值金额', '', (val) => {
         const amount = parseFloat(val);
         if (isNaN(amount) || amount <= 0) {
             showIosAlert('提示', '请输入有效金额');
             return;
         }
+        
         const data = JSON.parse(localStorage.getItem('walletData'));
+        const card = data.bankCards[cardIndex];
+        
+        if (!card) {
+            showIosAlert('提示', '银行卡不存在');
+            return;
+        }
+        
+        const cardBalance = card.balance || 0;
+        
+        if (cardBalance < amount) {
+            showIosAlert('提示', '银行卡余额不足');
+            return;
+        }
+        
+        // 扣除银行卡余额
+        card.balance = Math.round((cardBalance - amount) * 100) / 100;
+        // 增加钱包余额
         data.balance = Math.round((data.balance + amount) * 100) / 100;
         localStorage.setItem('walletData', JSON.stringify(data));
+        
+        // 添加账单记录
+        addBillRecord('income', amount, '充值', 'balance');
+        addBillRecord('expense', amount, '充值到钱包', 'bankcard', cardIndex);
+        
         updateWalletUI(data);
         showToast('充值成功 +' + amount.toFixed(2));
+        
+        // 发送银行短信
+        sendBankSms(card, 'recharge', amount);
     });
 }
 
@@ -4643,9 +5329,85 @@ function walletWithdraw() {
         showIosAlert('操作受限', '您的钱包已被冻结（花呗逾期），请先还清花呗欠款后再提现。');
         return;
     }
+    
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const cards = data.bankCards || [];
+    
+    if (cards.length === 0) {
+        showIosAlert('提示', '请先添加银行卡');
+        return;
+    }
+    
+    // 选择银行卡
+    selectBankCardForWithdraw(cards, data);
+}
+
+// 选择银行卡进行提现
+function selectBankCardForWithdraw(cards, walletData) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.maxWidth = '320px';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '选择提现银行卡';
+    
+    const msgEl = document.createElement('div');
+    msgEl.className = 'ios-dialog-message';
+    msgEl.style.maxHeight = '300px';
+    msgEl.style.overflowY = 'auto';
+    
+    // 银行卡列表
+    msgEl.innerHTML = cards.map((card, index) => {
+        const cardNumber = card.number || card.cardNumber || '0000000000000000';
+        const last4 = cardNumber.slice(-4);
+        const balance = card.balance || 0;
+        return `
+            <div class="bank-card-select-item" onclick="confirmWithdrawAmount(${index})" style="padding:12px;margin:8px 0;background:#f8f8f8;border-radius:10px;cursor:pointer;text-align:left;">
+                <div style="font-weight:600;color:#333;margin-bottom:4px;">${escapeHtml(card.name || '未命名银行卡')}</div>
+                <div style="font-size:13px;color:#666;">**** **** **** ${last4}</div>
+                <div style="font-size:13px;color:#999;margin-top:4px;">余额: ¥${balance.toFixed(2)}</div>
+            </div>
+        `;
+    }).join('');
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    
+    buttonsEl.appendChild(cancelBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(msgEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => document.body.removeChild(overlay), 300);
+    }
+    
+    // 将closeDialog函数暴露到全局
+    window.closeWithdrawDialog = closeDialog;
+}
+
+// 确认提现金额
+function confirmWithdrawAmount(cardIndex) {
+    window.closeWithdrawDialog();
+    
     iosPrompt('提现金额', '', (val) => {
         const amount = parseFloat(val);
         const data = JSON.parse(localStorage.getItem('walletData'));
+        
         if (isNaN(amount) || amount <= 0) {
             showIosAlert('提示', '请输入有效金额');
             return;
@@ -4654,11 +5416,198 @@ function walletWithdraw() {
             showIosAlert('提示', '余额不足');
             return;
         }
+        
+        const card = data.bankCards[cardIndex];
+        
+        if (!card) {
+            showIosAlert('提示', '银行卡不存在');
+            return;
+        }
+        
+        const cardBalance = card.balance || 0;
+        
+        // 扣除钱包余额
         data.balance = Math.round((data.balance - amount) * 100) / 100;
+        // 增加银行卡余额
+        card.balance = Math.round((cardBalance + amount) * 100) / 100;
         localStorage.setItem('walletData', JSON.stringify(data));
+        
+        // 添加账单记录
+        addBillRecord('expense', amount, '提现', 'balance');
+        addBillRecord('income', amount, '从钱包提现', 'bankcard', cardIndex);
+        
         updateWalletUI(data);
         showToast('提现成功 -' + amount.toFixed(2));
+        
+        // 发送银行短信
+        sendBankSms(card, 'withdraw', amount);
     });
+}
+
+// 直接充值（金手指功能）
+function walletDirectRecharge() {
+    if (isWalletFrozen()) {
+        showIosAlert('操作受限', '您的钱包已被冻结（花呗逾期），充值后资金将优先用于还款。');
+    }
+    
+    iosPrompt('直接充值金额', '', (val) => {
+        const amount = parseFloat(val);
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        
+        // 格式化金额（保留两位小数）
+        const formattedAmount = Math.round(amount * 100) / 100;
+        
+        // 直接增加钱包余额
+        const data = JSON.parse(localStorage.getItem('walletData'));
+        data.balance = Math.round((data.balance + formattedAmount) * 100) / 100;
+        localStorage.setItem('walletData', JSON.stringify(data));
+        
+        // 添加账单记录
+        addBillRecord('income', formattedAmount, '直接充值', 'balance');
+        
+        updateWalletUI(data);
+        showToast('直接充值成功 +' + formattedAmount.toFixed(2));
+    });
+}
+
+// 发送银行短信通知
+function sendBankSms(card, type, amount) {
+    const now = new Date();
+    const dateStr = `${now.getMonth() + 1}月${now.getDate()}日`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const cardNumber = card.number || card.cardNumber || '0000000000000000';
+    const last4 = cardNumber.slice(-4);
+    const cardType = card.type === 'credit' ? '信用卡' : '储蓄卡';
+    const bankName = card.name || '银行';
+    const balance = card.balance || 0;
+    
+    // 生成银行官方号码（95开头）
+    const bankPhone = generateBankPhone(bankName);
+    
+    // 生成短信内容
+    let smsText = '';
+    if (type === 'recharge') {
+        smsText = `【${bankName}】您尾号${last4}的${cardType}于${dateStr}${timeStr}支出人民币${amount.toFixed(2)}元，余额${balance.toFixed(2)}元。`;
+    } else if (type === 'withdraw') {
+        smsText = `【${bankName}】您尾号${last4}的${cardType}于${dateStr}${timeStr}收入人民币${amount.toFixed(2)}元，余额${balance.toFixed(2)}元。`;
+    } else if (type === 'transfer') {
+        smsText = `【${bankName}】您尾号${last4}的${cardType}于${dateStr}${timeStr}支出人民币${amount.toFixed(2)}元（转账），余额${balance.toFixed(2)}元。`;
+    }
+    
+    // 添加到短信会话
+    if (!smsConversations[bankPhone]) {
+        smsConversations[bankPhone] = [];
+    }
+    
+    smsConversations[bankPhone].push({
+        text: smsText,
+        from: 'other',
+        time: now.toISOString()
+    });
+    
+    saveSmsData();
+    
+    // 取消隐藏（如果之前被隐藏了）
+    unhideSmsConversation(bankPhone);
+    
+    // 显示消息通知弹窗（标记为银行类型）
+    showMessageNotification(bankName, smsText, bankPhone, 'bank');
+}
+
+// 生成银行官方号码
+function generateBankPhone(bankName) {
+    const bankPhones = {
+        '中国工商银行': '95588',
+        '中国农业银行': '95599',
+        '中国银行': '95566',
+        '中国建设银行': '95533',
+        '交通银行': '95559',
+        '招商银行': '95555',
+        '中信银行': '95558',
+        '光大银行': '95595',
+        '民生银行': '95568',
+        '浦发银行': '95528',
+        '兴业银行': '95561',
+        '平安银行': '95511',
+        '华夏银行': '95577',
+        '广发银行': '95508',
+        '邮储银行': '95580',
+        '北京银行': '95526',
+        '上海银行': '95594',
+        '江苏银行': '96098',
+        '南京银行': '95302',
+        '宁波银行': '95574'
+    };
+    
+    // 如果是已知银行，返回对应号码，否则生成一个95开头的号码
+    return bankPhones[bankName] || '95' + Math.floor(Math.random() * 900 + 100);
+}
+
+// 显示消息通知弹窗
+function showMessageNotification(senderName, message, phone, notifType = 'message') {
+    const container = document.getElementById('msgNotifContainer');
+    if (!container) return;
+    
+    // 检查是否有不同类型的通知（冲突检测）
+    const existingNotifs = container.querySelectorAll('.msg-notification');
+    if (existingNotifs.length > 0) {
+        const hasConflict = Array.from(existingNotifs).some(n => n.dataset.notifType !== notifType);
+        
+        if (hasConflict) {
+            // 有冲突：新消息覆盖旧消息，移除所有旧通知
+            existingNotifs.forEach(oldNotif => {
+                oldNotif.classList.remove('show');
+                setTimeout(() => oldNotif.remove(), 300);
+            });
+        } else {
+            // 无冲突：限制最多3个，移除最旧的
+            if (existingNotifs.length >= 3) {
+                const oldest = existingNotifs[0];
+                oldest.classList.remove('show');
+                setTimeout(() => oldest.remove(), 300);
+            }
+        }
+    }
+    
+    const notif = document.createElement('div');
+    notif.className = 'msg-notification';
+    notif.dataset.notifType = notifType; // 标记通知类型
+    
+    // 截取消息预览（最多50字）
+    const preview = message.length > 50 ? message.substring(0, 50) + '...' : message;
+    
+    notif.innerHTML = `
+        <div class="msg-notif-header">
+            <div class="msg-notif-app">信息</div>
+            <div class="msg-notif-time">现在</div>
+        </div>
+        <div class="msg-notif-body">
+            <div class="msg-notif-sender">${escapeHtml(senderName)}</div>
+            <div class="msg-notif-text">${escapeHtml(preview)}</div>
+        </div>
+    `;
+    
+    // 点击通知打开短信
+    notif.onclick = () => {
+        notif.classList.remove('show');
+        setTimeout(() => notif.remove(), 300);
+        openSmsApp();
+        setTimeout(() => openSmsDetail(phone), 100);
+    };
+    
+    container.appendChild(notif);
+    
+    // 显示动画
+    setTimeout(() => notif.classList.add('show'), 10);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        notif.classList.remove('show');
+        setTimeout(() => notif.remove(), 300);
+    }, 3000);
 }
 
 // 花呗详情
@@ -4861,12 +5810,16 @@ async function huabeiRepay() {
                 return;
             }
             data.balance = Math.round((data.balance - amount) * 100) / 100;
+            // 添加账单记录
+            addBillRecord('expense', amount, '花呗还款', 'balance');
         } else if (choice === 'yuebao') {
             if (amount > data.yuebaoAmount) {
                 showIosAlert('提示', '余额宝资金不足');
                 return;
             }
             data.yuebaoAmount = Math.round((data.yuebaoAmount - amount) * 100) / 100;
+            // 添加账单记录
+            addBillRecord('expense', amount, '花呗还款', 'yuebao');
         }
 
         data.huabeiUsed = Math.round((data.huabeiUsed - amount) * 100) / 100;
@@ -5217,6 +6170,119 @@ function showHuabeiActivateChoice() {
     });
 }
 
+// 显示人设选择器（用于花呗AI生成）
+async function showPersonaSelectorForHuabei() {
+    // 加载最新的人设数据
+    let allPersonas = [];
+    try {
+        const personasData = localStorage.getItem('personas');
+        if (personasData) {
+            allPersonas = JSON.parse(personasData);
+        }
+    } catch (e) {}
+    
+    if (allPersonas.length === 0) {
+        return null;
+    }
+    
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'ios-dialog-overlay';
+        
+        const dialog = document.createElement('div');
+        dialog.className = 'ios-dialog';
+        dialog.style.maxWidth = '90%';
+        dialog.style.width = '320px';
+        dialog.style.maxHeight = '70vh';
+        dialog.style.display = 'flex';
+        dialog.style.flexDirection = 'column';
+        
+        const titleEl = document.createElement('div');
+        titleEl.className = 'ios-dialog-title';
+        titleEl.textContent = '选择人设';
+        
+        const messageEl = document.createElement('div');
+        messageEl.className = 'ios-dialog-message';
+        messageEl.textContent = 'AI将根据所选人设评估额度';
+        messageEl.style.paddingBottom = '10px';
+        
+        // 人设列表容器
+        const listContainer = document.createElement('div');
+        listContainer.style.flex = '1';
+        listContainer.style.overflowY = 'auto';
+        listContainer.style.padding = '0 16px';
+        listContainer.style.margin = '10px 0';
+        listContainer.style.maxHeight = '40vh';
+        
+        // 渲染人设列表
+        allPersonas.forEach((persona) => {
+            const personaItem = document.createElement('div');
+            personaItem.style.padding = '12px';
+            personaItem.style.marginBottom = '8px';
+            personaItem.style.backgroundColor = '#f5f5f5';
+            personaItem.style.borderRadius = '8px';
+            personaItem.style.cursor = 'pointer';
+            personaItem.style.transition = 'background-color 0.2s';
+            
+            const idCardBadge = persona.isIdCard ? '<span style="display: inline-block; margin-left: 6px; padding: 2px 8px; background: #007bff; color: white; font-size: 10px; border-radius: 10px; font-weight: 500;">ID卡</span>' : '';
+            
+            personaItem.innerHTML = `
+                <div style="font-size: 15px; font-weight: 500; color: #333; margin-bottom: 4px;">${escapeHtml(persona.name || '未命名人设')}${idCardBadge}</div>
+                <div style="font-size: 12px; color: #666; line-height: 1.4; max-height: 3.6em; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                    ${escapeHtml(persona.description || '暂无描述')}
+                </div>
+            `;
+            
+            personaItem.onmouseover = () => {
+                personaItem.style.backgroundColor = '#e8e8e8';
+            };
+            
+            personaItem.onmouseout = () => {
+                personaItem.style.backgroundColor = '#f5f5f5';
+            };
+            
+            personaItem.onclick = () => {
+                closeDialog(persona);
+            };
+            
+            listContainer.appendChild(personaItem);
+        });
+        
+        const buttonsEl = document.createElement('div');
+        buttonsEl.className = 'ios-dialog-buttons';
+        
+        // 取消按钮
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'ios-dialog-button';
+        cancelBtn.textContent = '取消';
+        cancelBtn.onclick = () => {
+            closeDialog(null);
+        };
+        
+        buttonsEl.appendChild(cancelBtn);
+        
+        dialog.appendChild(titleEl);
+        dialog.appendChild(messageEl);
+        dialog.appendChild(listContainer);
+        dialog.appendChild(buttonsEl);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        
+        // 显示动画
+        setTimeout(() => {
+            overlay.classList.add('show');
+        }, 10);
+        
+        function closeDialog(result) {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                resolve(result);
+            }, 300);
+        }
+    });
+}
+
 // 通过AI API评估花呗额度
 async function getHuabeiQuotaFromAI() {
     // 获取API设置
@@ -5226,25 +6292,41 @@ async function getHuabeiQuotaFromAI() {
         return null;
     }
 
+    // 检查人设库是否有人设
+    let allPersonas = [];
+    try {
+        const personasData = localStorage.getItem('personas');
+        if (personasData) {
+            allPersonas = JSON.parse(personasData);
+        }
+    } catch (e) {}
+
+    if (allPersonas.length === 0) {
+        await showIosAlert('提示', '人设库为空，请先在"我的"页面添加人设后再使用AI生成');
+        return null;
+    }
+
+    // 让用户选择一个人设
+    const selectedPersona = await showPersonaSelectorForHuabei();
+    if (!selectedPersona) {
+        // 用户取消选择
+        return null;
+    }
+
     // 收集用户信息
-    let userDesc = '';
-    let userName = '';
+    let userDesc = selectedPersona.description || '';
+    let userName = selectedPersona.name || '';
+
+    // 也可以补充用户数据中的信息
     try {
         const userDataStr = localStorage.getItem('chatUserData');
         if (userDataStr) {
             const userData = JSON.parse(userDataStr);
-            userDesc = userData.description || '';
-            userName = userData.name || '';
-        }
-    } catch (e) {}
-
-    try {
-        const personasData = localStorage.getItem('personas');
-        if (personasData) {
-            const allPersonas = JSON.parse(personasData);
-            const idCard = allPersonas.find(p => p.isIdCard === true);
-            if (idCard && idCard.description) {
-                userDesc += '\n' + idCard.description;
+            if (userData.description) {
+                userDesc += '\n' + userData.description;
+            }
+            if (!userName && userData.name) {
+                userName = userData.name;
             }
         }
     } catch (e) {}
@@ -5393,6 +6475,11 @@ function calculateYuebaoInterest() {
         data.yuebaoEarn = Math.round(data.yuebaoAmount * dailyRate * 100) / 100; // 昨日收益（按1天算）
         data.yuebaoAmount = Math.round((data.yuebaoAmount + interest) * 100) / 100;
         data.yuebaoTotalEarn = Math.round(((data.yuebaoTotalEarn || 0) + interest) * 100) / 100;
+        
+        // 添加账单记录
+        if (interest > 0) {
+            addBillRecord('income', interest, `余额宝收益（${diffDays}天）`, 'yuebao');
+        }
     } else {
         // 首次，只记录日期，不产生利息
         data.yuebaoEarn = 0;
@@ -5528,6 +6615,11 @@ function transferToYuebao() {
             data.yuebaoLastUpdate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         }
         localStorage.setItem('walletData', JSON.stringify(data));
+        
+        // 添加账单记录
+        addBillRecord('expense', amount, '转入余额宝', 'balance');
+        addBillRecord('income', amount, '从钱包转入', 'yuebao');
+        
         showToast('转入成功 ¥' + amount.toFixed(2));
         // 如果详情页打开着就刷新
         const detailPage = document.getElementById('yuebaoDetailPage');
@@ -5561,6 +6653,11 @@ function transferFromYuebao() {
         d.yuebaoAmount = Math.round((d.yuebaoAmount - amount) * 100) / 100;
         d.balance = Math.round((d.balance + amount) * 100) / 100;
         localStorage.setItem('walletData', JSON.stringify(d));
+        
+        // 添加账单记录
+        addBillRecord('expense', amount, '转出到钱包', 'yuebao');
+        addBillRecord('income', amount, '从余额宝转出', 'balance');
+        
         showToast('转出成功 ¥' + amount.toFixed(2));
         const detailPage = document.getElementById('yuebaoDetailPage');
         if (detailPage && detailPage.classList.contains('active')) {
@@ -5583,7 +6680,7 @@ function openXiaohe() {
 
 // 账单
 function openWalletBills() {
-    showIosAlert('账单', '账单功能开发中，敬请期待');
+    showBillsPage();
 }
 
 // 生成随机银行卡号（16位）
@@ -6222,9 +7319,123 @@ function goToHomePage(page) {
 let smsConversations = JSON.parse(localStorage.getItem('smsConversations') || '{}');
 let currentSmsPhone = null;
 
+// 隐藏的短信会话列表
+let hiddenSmsConversations = JSON.parse(localStorage.getItem('hiddenSmsConversations') || '[]');
+
+// 联系人列表存储（完整的联系人对象数组）
+let contactsList = JSON.parse(localStorage.getItem('contactsList') || '[]');
+
 // 保存短信数据
 function saveSmsData() {
     localStorage.setItem('smsConversations', JSON.stringify(smsConversations));
+}
+
+// 保存隐藏列表
+function saveHiddenSmsList() {
+    localStorage.setItem('hiddenSmsConversations', JSON.stringify(hiddenSmsConversations));
+}
+
+// 检查会话是否被隐藏
+function isSmsHidden(phone) {
+    return hiddenSmsConversations.includes(phone);
+}
+
+// 隐藏短信会话
+function hideSmsConversation(phone) {
+    if (!isSmsHidden(phone)) {
+        hiddenSmsConversations.push(phone);
+        saveHiddenSmsList();
+    }
+}
+
+// 取消隐藏短信会话
+function unhideSmsConversation(phone) {
+    const index = hiddenSmsConversations.indexOf(phone);
+    if (index > -1) {
+        hiddenSmsConversations.splice(index, 1);
+        saveHiddenSmsList();
+    }
+}
+
+// 删除短信会话
+function deleteSmsConversation(phone) {
+    delete smsConversations[phone];
+    saveSmsData();
+    // 同时从隐藏列表中移除
+    unhideSmsConversation(phone);
+}
+
+// 保存联系人列表
+function saveContactsList() {
+    localStorage.setItem('contactsList', JSON.stringify(contactsList));
+}
+
+// 检查号码是否在联系人列表中
+function isInContacts(phone) {
+    return contactsList.some(contact => contact.phone === phone);
+}
+
+// 获取联系人信息
+function getContactByPhone(phone) {
+    return contactsList.find(contact => contact.phone === phone);
+}
+
+// 添加联系人（简单版本，只有号码）
+function addToContacts(phone) {
+    // 检查号码是否有效
+    if (!phone || phone === 'undefined' || phone === 'null') {
+        console.warn('无效的电话号码，跳过添加:', phone);
+        return false;
+    }
+    
+    if (!isInContacts(phone)) {
+        contactsList.push({
+            id: 'contact_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+            phone: phone,
+            name: '',
+            avatar: '',
+            note: '',
+            createTime: new Date().toISOString()
+        });
+        saveContactsList();
+        return true;
+    }
+    return false;
+}
+
+// 添加或更新联系人（完整版本）
+function saveContact(contactData) {
+    const existingIndex = contactsList.findIndex(c => c.id === contactData.id);
+    if (existingIndex > -1) {
+        // 更新现有联系人
+        contactsList[existingIndex] = contactData;
+    } else {
+        // 添加新联系人
+        contactsList.push(contactData);
+    }
+    saveContactsList();
+}
+
+// 从联系人中移除
+function removeFromContacts(phone) {
+    const index = contactsList.findIndex(c => c.phone === phone);
+    if (index > -1) {
+        contactsList.splice(index, 1);
+        saveContactsList();
+        return true;
+    }
+    return false;
+}
+
+// 删除联系人（通过ID）
+function deleteContactById(id) {
+    const index = contactsList.findIndex(c => c.id === id);
+    if (index > -1) {
+        contactsList.splice(index, 1);
+        saveContactsList();
+        return true;
+    }
+    return false;
 }
 
 // 打开短信应用
@@ -6240,10 +7451,353 @@ function closeSmsApp() {
     page.style.display = 'none';
 }
 
+// ========== 联系人管理功能 ==========
+
+// 打开联系人管理页面
+function openContactsManager() {
+    const page = document.getElementById('contactsManagerPage');
+    page.style.display = 'block';
+    renderContactsList();
+}
+
+// 关闭联系人管理页面
+function closeContactsManager() {
+    const page = document.getElementById('contactsManagerPage');
+    page.style.display = 'none';
+    // 退出编辑模式
+    exitContactsEditMode();
+}
+
+// 清理无效联系人（手动调用）
+function cleanupInvalidContacts() {
+    const beforeCount = contactsList.length;
+    contactsList = contactsList.filter(contact => {
+        return contact.phone && 
+               contact.phone !== 'undefined' && 
+               contact.phone !== 'null' && 
+               contact.phone.trim() !== '';
+    });
+    const afterCount = contactsList.length;
+    const removed = beforeCount - afterCount;
+    
+    if (removed > 0) {
+        saveContactsList();
+        renderContactsList();
+        showToast(`已清理 ${removed} 个无效联系人`);
+    } else {
+        showToast('没有发现无效联系人');
+    }
+}
+
+// 渲染联系人列表
+function renderContactsList() {
+    const list = document.getElementById('contactsList');
+    
+    // 清理无效的联系人（电话号码为空、undefined或null的）
+    contactsList = contactsList.filter(contact => {
+        return contact.phone && contact.phone !== 'undefined' && contact.phone !== 'null' && contact.phone.trim() !== '';
+    });
+    saveContactsList();
+    
+    if (contactsList.length === 0) {
+        list.innerHTML = '<div class="contacts-empty"><div class="contacts-empty-text">暂无联系人</div></div>';
+        return;
+    }
+
+    // 按创建时间倒序排序
+    const sorted = [...contactsList].sort((a, b) => {
+        return new Date(b.createTime).getTime() - new Date(a.createTime).getTime();
+    });
+
+    list.innerHTML = sorted.map(contact => {
+        const displayName = contact.name || contact.phone || '未知';
+        const firstChar = displayName ? displayName.charAt(0).toUpperCase() : '?';
+        const avatarHtml = contact.avatar ? 
+            `<img src="${contact.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar">` :
+            `<div class="contacts-avatar-placeholder">${firstChar}</div>`;
+        
+        return `<div class="contacts-list-item" data-contact-id="${contact.id}">
+            <div class="contacts-item-checkbox" style="display:none;">
+                <input type="checkbox" class="contact-checkbox" data-contact-id="${contact.id}">
+            </div>
+            <div class="contacts-item-content" onclick="openContactDetail('${contact.id}')">
+                <div class="contacts-list-avatar">${avatarHtml}</div>
+                <div class="contacts-list-info">
+                    <div class="contacts-list-name">${escapeHtml(displayName)}</div>
+                    <div class="contacts-list-phone">${escapeHtml(contact.phone || '')}</div>
+                    ${contact.note ? `<div class="contacts-list-note">${escapeHtml(contact.note)}</div>` : ''}
+                </div>
+            </div>
+            <div class="contacts-list-arrow">›</div>
+        </div>`;
+    }).join('');
+}
+
+// 进入编辑模式
+function enterContactsEditMode() {
+    document.getElementById('contactsEditBtn').style.display = 'none';
+    document.getElementById('contactsCancelBtn').style.display = 'block';
+    document.getElementById('contactsDeleteBtn').style.display = 'block';
+    document.getElementById('contactsSelectAllBtn').style.display = 'block';
+    
+    // 显示所有复选框
+    document.querySelectorAll('.contacts-item-checkbox').forEach(el => {
+        el.style.display = 'flex';
+    });
+    
+    // 隐藏箭头
+    document.querySelectorAll('.contacts-list-arrow').forEach(el => {
+        el.style.display = 'none';
+    });
+}
+
+// 退出编辑模式
+function exitContactsEditMode() {
+    document.getElementById('contactsEditBtn').style.display = 'block';
+    document.getElementById('contactsCancelBtn').style.display = 'none';
+    document.getElementById('contactsDeleteBtn').style.display = 'none';
+    document.getElementById('contactsSelectAllBtn').style.display = 'none';
+    
+    // 隐藏所有复选框并取消选中
+    document.querySelectorAll('.contacts-item-checkbox').forEach(el => {
+        el.style.display = 'none';
+        const checkbox = el.querySelector('input');
+        if (checkbox) checkbox.checked = false;
+    });
+    
+    // 显示箭头
+    document.querySelectorAll('.contacts-list-arrow').forEach(el => {
+        el.style.display = 'block';
+    });
+}
+
+// 全选/取消全选
+function toggleSelectAllContacts() {
+    const checkboxes = document.querySelectorAll('.contact-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+    });
+    
+    const btn = document.getElementById('contactsSelectAllBtn');
+    btn.textContent = allChecked ? '全选' : '取消全选';
+}
+
+// 删除选中的联系人
+async function deleteSelectedContacts() {
+    const checkboxes = document.querySelectorAll('.contact-checkbox:checked');
+    
+    if (checkboxes.length === 0) {
+        showToast('请选择要删除的联系人');
+        return;
+    }
+    
+    const confirmed = await iosConfirm(`确定要删除选中的 ${checkboxes.length} 个联系人吗？`, '删除联系人');
+    if (!confirmed) return;
+    
+    checkboxes.forEach(cb => {
+        const contactId = cb.dataset.contactId;
+        deleteContactById(contactId);
+    });
+    
+    showToast('已删除');
+    exitContactsEditMode();
+    renderContactsList();
+}
+
+// 打开新建联系人页面
+function openNewContact() {
+    openContactEditor(null);
+}
+
+// 打开联系人详情/编辑页面
+function openContactDetail(contactId) {
+    // 如果在编辑模式，不打开详情
+    if (document.getElementById('contactsCancelBtn').style.display !== 'none') {
+        return;
+    }
+    openContactEditor(contactId);
+}
+
+// 打开联系人编辑器
+function openContactEditor(contactId) {
+    const page = document.getElementById('contactEditorPage');
+    const isNew = !contactId;
+    
+    // 设置标题
+    document.getElementById('contactEditorTitle').textContent = isNew ? '新建联系人' : '编辑联系人';
+    
+    // 清空或填充表单
+    if (isNew) {
+        document.getElementById('contactEditorId').value = '';
+        document.getElementById('contactNameInput').value = '';
+        document.getElementById('contactPhoneInput').value = '';
+        document.getElementById('contactNoteInput').value = '';
+        document.getElementById('contactAvatarPreview').innerHTML = '<div class="contact-avatar-placeholder-large">+</div>';
+        document.getElementById('contactAvatarData').value = '';
+    } else {
+        const contact = contactsList.find(c => c.id === contactId);
+        if (!contact) return;
+        
+        document.getElementById('contactEditorId').value = contact.id;
+        document.getElementById('contactNameInput').value = contact.name || '';
+        document.getElementById('contactPhoneInput').value = contact.phone || '';
+        document.getElementById('contactNoteInput').value = contact.note || '';
+        document.getElementById('contactAvatarData').value = contact.avatar || '';
+        
+        if (contact.avatar) {
+            document.getElementById('contactAvatarPreview').innerHTML = 
+                `<img src="${contact.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar">`;
+        } else {
+            const displayName = contact.name || contact.phone || '?';
+            const firstChar = displayName ? displayName.charAt(0).toUpperCase() : '?';
+            document.getElementById('contactAvatarPreview').innerHTML = 
+                `<div class="contact-avatar-placeholder-large">${firstChar}</div>`;
+        }
+    }
+    
+    page.style.display = 'block';
+}
+
+// 关闭联系人编辑器
+function closeContactEditor() {
+    const page = document.getElementById('contactEditorPage');
+    page.style.display = 'none';
+}
+
+// 选择头像（本地上传）
+function selectContactAvatar() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            const imageData = await compressImage(file, {
+                maxWidth: 400,
+                maxHeight: 400,
+                quality: 0.8,
+                maxSizeKB: 200
+            });
+            
+            document.getElementById('contactAvatarData').value = imageData;
+            document.getElementById('contactAvatarPreview').innerHTML = 
+                `<img src="${imageData}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar">`;
+        } catch (err) {
+            console.error('图片处理失败:', err);
+            showToast('图片处理失败');
+        }
+    };
+    input.click();
+}
+
+// 输入头像URL
+function inputContactAvatarUrl() {
+    iosPrompt('输入头像URL', '', (url) => {
+        if (url && url.trim()) {
+            const avatarUrl = url.trim();
+            document.getElementById('contactAvatarData').value = avatarUrl;
+            document.getElementById('contactAvatarPreview').innerHTML = 
+                `<img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar" onerror="this.parentElement.innerHTML='<div class=\\'contact-avatar-placeholder-large\\'>!</div>'">`;
+        }
+    });
+}
+
+// 保存联系人
+function saveContactFromEditor() {
+    const id = document.getElementById('contactEditorId').value;
+    const name = document.getElementById('contactNameInput').value.trim();
+    const phone = document.getElementById('contactPhoneInput').value.trim();
+    const note = document.getElementById('contactNoteInput').value.trim();
+    const avatar = document.getElementById('contactAvatarData').value;
+    
+    if (!phone) {
+        showToast('请输入电话号码');
+        return;
+    }
+    
+    // 检查号码是否已存在（排除自己）
+    const existing = contactsList.find(c => c.phone === phone && c.id !== id);
+    if (existing) {
+        showToast('该号码已存在');
+        return;
+    }
+    
+    const contactData = {
+        id: id || 'contact_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        phone: phone,
+        name: name,
+        avatar: avatar,
+        note: note,
+        createTime: id ? (contactsList.find(c => c.id === id)?.createTime || new Date().toISOString()) : new Date().toISOString()
+    };
+    
+    saveContact(contactData);
+    showToast(id ? '已保存' : '已添加');
+    closeContactEditor();
+    renderContactsList();
+}
+
+// 保存联系人并发送消息
+function saveAndMessageContact() {
+    const id = document.getElementById('contactEditorId').value;
+    const name = document.getElementById('contactNameInput').value.trim();
+    const phone = document.getElementById('contactPhoneInput').value.trim();
+    const note = document.getElementById('contactNoteInput').value.trim();
+    const avatar = document.getElementById('contactAvatarData').value;
+    
+    if (!phone) {
+        showToast('请输入电话号码');
+        return;
+    }
+    
+    // 检查号码是否已存在（排除自己）
+    const existing = contactsList.find(c => c.phone === phone && c.id !== id);
+    if (existing) {
+        showToast('该号码已存在');
+        return;
+    }
+    
+    const contactData = {
+        id: id || 'contact_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        phone: phone,
+        name: name,
+        avatar: avatar,
+        note: note,
+        createTime: id ? (contactsList.find(c => c.id === id)?.createTime || new Date().toISOString()) : new Date().toISOString()
+    };
+    
+    saveContact(contactData);
+    
+    // 关闭编辑器和联系人管理页面
+    closeContactEditor();
+    closeContactsManager();
+    
+    // 如果该号码还没有短信会话，创建一个空会话
+    if (!smsConversations[phone]) {
+        smsConversations[phone] = [];
+        saveSmsData();
+    }
+    
+    // 取消隐藏（如果之前被隐藏了）
+    unhideSmsConversation(phone);
+    
+    // 刷新短信列表
+    renderSmsList();
+    
+    // 打开短信详情页
+    openSmsDetail(phone);
+    
+    showToast('已保存，可以开始发送消息');
+}
+
 // 渲染短信列表
 function renderSmsList() {
     const list = document.getElementById('smsList');
-    const keys = Object.keys(smsConversations);
+    const keys = Object.keys(smsConversations).filter(phone => !isSmsHidden(phone));
 
     if (keys.length === 0) {
         list.innerHTML = '<div class="sms-empty"><div class="sms-empty-text">暂无信息</div></div>';
@@ -6264,14 +7818,19 @@ function renderSmsList() {
         const last = msgs[msgs.length - 1];
         const timeStr = formatSmsTime(last.time);
         const preview = last.text.length > 30 ? last.text.substring(0, 30) + '...' : last.text;
+        
+        // 获取联系人信息
+        const contact = getContactByPhone(phone);
+        const displayName = contact?.name || phone || '未知';
+        const avatarHtml = contact?.avatar ? 
+            `<img src="${contact.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar">` :
+            `<img src="https://i.postimg.cc/Nf6f1665/CFEEC469058BDB0EAD269FB4D4FE5F6C.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar">`;
 
-        return `<div class="sms-list-item" onclick="openSmsDetail('${phone}')">
-            <div class="sms-list-avatar">
-                <img src="https://i.postimg.cc/Nf6f1665/CFEEC469058BDB0EAD269FB4D4FE5F6C.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" alt="avatar">
-            </div>
+        return `<div class="sms-list-item" data-phone="${phone}" onclick="openSmsDetail('${phone}')">
+            <div class="sms-list-avatar">${avatarHtml}</div>
             <div class="sms-list-info">
                 <div class="sms-list-top">
-                    <div class="sms-list-name">${escapeHtml(phone)}</div>
+                    <div class="sms-list-name">${escapeHtml(displayName)}</div>
                     <div class="sms-list-time">${timeStr}</div>
                 </div>
                 <div class="sms-list-preview">${escapeHtml(preview)}</div>
@@ -6279,6 +7838,139 @@ function renderSmsList() {
             <div class="sms-list-arrow">›</div>
         </div>`;
     }).join('');
+    
+    // 添加长按和右键事件监听
+    attachSmsItemContextMenu();
+}
+
+// 添加短信列表项的长按和右键事件
+function attachSmsItemContextMenu() {
+    const items = document.querySelectorAll('.sms-list-item');
+    
+    items.forEach(item => {
+        const phone = item.dataset.phone;
+        let longPressTimer = null;
+        
+        // 长按事件（移动端）
+        item.addEventListener('touchstart', (e) => {
+            longPressTimer = setTimeout(() => {
+                e.preventDefault();
+                showSmsContextMenu(phone, e.touches[0].clientX, e.touches[0].clientY);
+            }, 500); // 500ms 长按
+        });
+        
+        item.addEventListener('touchend', () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        });
+        
+        item.addEventListener('touchmove', () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        });
+        
+        // 右键事件（PC端）
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showSmsContextMenu(phone, e.clientX, e.clientY);
+        });
+    });
+}
+
+// 显示短信上下文菜单
+function showSmsContextMenu(phone, x, y) {
+    // 移除已存在的菜单
+    const existingMenu = document.getElementById('smsContextMenu');
+    if (existingMenu) existingMenu.remove();
+    
+    // 创建菜单
+    const menu = document.createElement('div');
+    menu.id = 'smsContextMenu';
+    menu.className = 'sms-context-menu';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    
+    const contact = getContactByPhone(phone);
+    const displayName = contact?.name || phone || '未知';
+    
+    menu.innerHTML = `
+        <div class="sms-context-menu-header">${escapeHtml(displayName)}</div>
+        <div class="sms-context-menu-item" onclick="hideSmsFromMenu('${phone}')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7z" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            <span>隐藏会话</span>
+        </div>
+        <div class="sms-context-menu-item danger" onclick="deleteSmsFromMenu('${phone}')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>删除会话</span>
+        </div>
+    `;
+    
+    document.body.appendChild(menu);
+    
+    // 调整位置，确保不超出屏幕
+    setTimeout(() => {
+        const rect = menu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+            menu.style.left = (window.innerWidth - rect.width - 10) + 'px';
+        }
+        if (rect.bottom > window.innerHeight) {
+            menu.style.top = (window.innerHeight - rect.height - 10) + 'px';
+        }
+    }, 0);
+    
+    // 显示动画
+    setTimeout(() => menu.classList.add('show'), 10);
+    
+    // 点击其他地方关闭菜单
+    setTimeout(() => {
+        document.addEventListener('click', closeSmsContextMenu);
+        document.addEventListener('touchstart', closeSmsContextMenu);
+    }, 100);
+}
+
+// 关闭上下文菜单
+function closeSmsContextMenu() {
+    const menu = document.getElementById('smsContextMenu');
+    if (menu) {
+        menu.classList.remove('show');
+        setTimeout(() => menu.remove(), 200);
+    }
+    document.removeEventListener('click', closeSmsContextMenu);
+    document.removeEventListener('touchstart', closeSmsContextMenu);
+}
+
+// 从菜单隐藏会话
+function hideSmsFromMenu(phone) {
+    closeSmsContextMenu();
+    hideSmsConversation(phone);
+    renderSmsList();
+    showToast('已隐藏会话');
+}
+
+// 从菜单删除会话
+async function deleteSmsFromMenu(phone) {
+    closeSmsContextMenu();
+    
+    const contact = getContactByPhone(phone);
+    const displayName = contact?.name || phone || '未知';
+    
+    const confirmed = await iosConfirm(`确定要删除与 ${displayName} 的所有消息吗？`, '删除会话');
+    if (!confirmed) return;
+    
+    deleteSmsConversation(phone);
+    renderSmsList();
+    showToast('已删除会话');
 }
 
 // 格式化短信时间
@@ -6367,8 +8059,14 @@ function renderSmsMessages() {
         </div>`;
     });
 
-    // 不在联系人提示
-    html += `<div class="sms-not-in-contacts">发件人不在你的联系人列表中。<br><a href="javascript:void(0)" onclick="showToast('功能开发中')">报告垃圾信息</a></div>`;
+    // 只对陌生号码（不在联系人列表中）显示"疑似垃圾信息"提示
+    if (!isInContacts(currentSmsPhone)) {
+        html += `<div class="sms-not-in-contacts">
+            发件人不在你的联系人列表中。<br>
+            <a href="javascript:void(0)" onclick="reportSpam('${currentSmsPhone}')">报告垃圾信息</a> | 
+            <a href="javascript:void(0)" onclick="addContactFromSms('${currentSmsPhone}')">添加到联系人</a>
+        </div>`;
+    }
 
     container.innerHTML = html;
 
@@ -6376,6 +8074,22 @@ function renderSmsMessages() {
     setTimeout(() => {
         container.scrollTop = container.scrollHeight;
     }, 50);
+}
+
+// 从短信界面添加联系人
+function addContactFromSms(phone) {
+    if (addToContacts(phone)) {
+        showToast('已添加到联系人');
+        renderSmsMessages(); // 重新渲染，隐藏提示
+    } else {
+        showToast('该号码已在联系人中');
+    }
+}
+
+// 报告垃圾信息
+function reportSpam(phone) {
+    showToast('已报告垃圾信息');
+    // 这里可以添加更多逻辑，比如标记为垃圾号码等
 }
 
 // 切换发送按钮显示
@@ -6407,6 +8121,11 @@ function sendSmsMessage() {
         from: 'user',
         time: new Date().toISOString()
     });
+
+    // 当用户发送消息时，自动将对方添加到联系人
+    if (!isInContacts(currentSmsPhone)) {
+        addToContacts(currentSmsPhone);
+    }
 
     saveSmsData();
     input.value = '';
@@ -6534,6 +8253,11 @@ function sendComposeMessage() {
         time: new Date().toISOString()
     });
 
+    // 当用户发送消息时，自动将对方添加到联系人
+    if (!isInContacts(phone)) {
+        addToContacts(phone);
+    }
+
     saveSmsData();
 
     // 关闭新建页，打开详情页
@@ -6570,3 +8294,659 @@ function openForum() {
 document.addEventListener('DOMContentLoaded', () => {
     initHomePageSwipe();
 });
+
+// ========== 账单功能 ==========
+
+// 显示账单页面
+function showBillsPage() {
+    const page = document.getElementById('billsPage');
+    if (!page) {
+        createBillsPage();
+    }
+    
+    // 初始化账单数据
+    initBillsData();
+    
+    // 渲染账单列表
+    renderBillsList();
+    
+    document.getElementById('billsPage').classList.add('active');
+}
+
+// 创建账单页面
+function createBillsPage() {
+    const page = document.createElement('div');
+    page.id = 'billsPage';
+    page.className = 'settings-page';
+    page.style.zIndex = '1500';
+    
+    page.innerHTML = `
+        <div class="wallet-page-inner">
+            <div class="wallet-header">
+                <div class="wallet-back-btn" onclick="closeBillsPage()">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </div>
+                <div class="wallet-header-title">账单</div>
+                <div style="width:40px;"></div>
+            </div>
+
+            <!-- 账户选择器 -->
+            <div style="margin:16px;padding:16px;background:#fff;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="showAccountSelector()">
+                    <div>
+                        <div style="font-size:12px;color:#999;margin-bottom:4px;">当前账户</div>
+                        <div id="currentAccountName" style="font-size:15px;font-weight:600;color:#333;">钱包余额</div>
+                    </div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+            </div>
+
+            <!-- 余额卡片 -->
+            <div style="margin:0 16px 16px;padding:20px;background:#fff;border-radius:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                <div style="text-align:center;margin-bottom:16px;">
+                    <div style="font-size:12px;color:#999;margin-bottom:6px;">账户余额</div>
+                    <div id="billsBalance" style="font-size:32px;font-weight:700;color:#333;">¥0.00</div>
+                </div>
+                <div style="display:flex;gap:12px;">
+                    <div style="flex:1;text-align:center;padding:12px;background:#f8f8f8;border-radius:12px;">
+                        <div style="font-size:11px;color:#999;margin-bottom:4px;">本月收入</div>
+                        <div id="billsIncome" style="font-size:16px;font-weight:600;color:#52c41a;">¥0.00</div>
+                    </div>
+                    <div style="flex:1;text-align:center;padding:12px;background:#f8f8f8;border-radius:12px;">
+                        <div style="font-size:11px;color:#999;margin-bottom:4px;">本月支出</div>
+                        <div id="billsExpense" style="font-size:16px;font-weight:600;color:#ff4d4f;">¥0.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 筛选器 -->
+            <div style="margin:0 16px 12px;display:flex;gap:8px;overflow-x:auto;padding:4px 0;">
+                <button class="bills-filter-btn active" data-type="all" onclick="filterBillsByType('all')">全部</button>
+                <button class="bills-filter-btn" data-type="income" onclick="filterBillsByType('income')">收入</button>
+                <button class="bills-filter-btn" data-type="expense" onclick="filterBillsByType('expense')">支出</button>
+                <button class="bills-filter-btn" onclick="showDatePicker()">
+                    <span id="dateFilterText">选择日期</span>
+                </button>
+            </div>
+
+            <!-- 账单列表 -->
+            <div id="billsListContainer" style="margin:0 16px 80px;"></div>
+        </div>
+    `;
+    
+    document.body.appendChild(page);
+}
+
+// 关闭账单页面
+function closeBillsPage() {
+    document.getElementById('billsPage').classList.remove('active');
+}
+
+// 初始化账单数据
+function initBillsData() {
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    
+    // 如果没有账单数据，初始化
+    if (!walletData.bills) {
+        walletData.bills = [];
+        localStorage.setItem('walletData', JSON.stringify(walletData));
+    }
+    
+    // 如果没有当前选中的账户，默认选择余额
+    if (!localStorage.getItem('currentBillAccount')) {
+        localStorage.setItem('currentBillAccount', JSON.stringify({ type: 'balance', name: '钱包余额' }));
+    }
+}
+
+// 添加账单记录
+function addBillRecord(type, amount, remark, accountType = 'balance', accountIndex = null) {
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    
+    if (!walletData.bills) {
+        walletData.bills = [];
+    }
+    
+    const bill = {
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: type, // 'income' 或 'expense'
+        amount: Math.round(amount * 100) / 100,
+        remark: remark || (type === 'income' ? '收入' : '支出'),
+        accountType: accountType, // 'balance', 'yuebao', 'bankcard'
+        accountIndex: accountIndex, // 银行卡索引（如果是银行卡）
+        timestamp: new Date().toISOString(),
+        status: 'completed' // 'completed', 'refunded', 'pending'
+    };
+    
+    walletData.bills.push(bill);
+    localStorage.setItem('walletData', JSON.stringify(walletData));
+    
+    return bill;
+}
+
+// 添加退款记录
+function addRefundRecord(originalBillId) {
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    
+    // 找到原始账单
+    const originalBill = walletData.bills.find(b => b.id === originalBillId);
+    if (!originalBill) return;
+    
+    // 标记原始账单为已退款
+    originalBill.status = 'refunded';
+    
+    // 创建退款记录
+    const refundBill = {
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        type: originalBill.type === 'expense' ? 'income' : 'expense',
+        amount: originalBill.amount,
+        remark: `退款：${originalBill.remark}`,
+        accountType: originalBill.accountType,
+        accountIndex: originalBill.accountIndex,
+        timestamp: new Date().toISOString(),
+        status: 'completed',
+        isRefund: true,
+        originalBillId: originalBillId
+    };
+    
+    walletData.bills.push(refundBill);
+    localStorage.setItem('walletData', JSON.stringify(walletData));
+    
+    return refundBill;
+}
+
+// 渲染账单列表
+function renderBillsList() {
+    const currentAccount = JSON.parse(localStorage.getItem('currentBillAccount') || '{"type":"balance","name":"钱包余额"}');
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    
+    // 更新账户名称
+    document.getElementById('currentAccountName').textContent = currentAccount.name;
+    
+    // 获取当前账户余额
+    let balance = 0;
+    if (currentAccount.type === 'balance') {
+        balance = walletData.balance || 0;
+    } else if (currentAccount.type === 'yuebao') {
+        balance = walletData.yuebaoAmount || 0;
+    } else if (currentAccount.type === 'bankcard' && currentAccount.index !== undefined) {
+        const card = walletData.bankCards?.[currentAccount.index];
+        balance = card?.balance || 0;
+    }
+    
+    document.getElementById('billsBalance').textContent = `¥${balance.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    
+    // 获取筛选条件
+    const filterType = document.querySelector('.bills-filter-btn.active')?.dataset.type || 'all';
+    const dateFilter = localStorage.getItem('billsDateFilter');
+    
+    // 筛选账单
+    let bills = (walletData.bills || []).filter(bill => {
+        // 账户筛选
+        if (currentAccount.type === 'balance' && bill.accountType !== 'balance') return false;
+        if (currentAccount.type === 'yuebao' && bill.accountType !== 'yuebao') return false;
+        if (currentAccount.type === 'bankcard' && (bill.accountType !== 'bankcard' || bill.accountIndex !== currentAccount.index)) return false;
+        
+        // 类型筛选
+        if (filterType !== 'all' && bill.type !== filterType) return false;
+        
+        // 日期筛选
+        if (dateFilter) {
+            const billDate = new Date(bill.timestamp);
+            const filter = JSON.parse(dateFilter);
+            
+            if (filter.year && billDate.getFullYear() !== filter.year) return false;
+            if (filter.month !== undefined && billDate.getMonth() !== filter.month) return false;
+            if (filter.date && billDate.getDate() !== filter.date) return false;
+        }
+        
+        return true;
+    });
+    
+    // 按时间倒序排序
+    bills.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    // 计算本月收支
+    const now = new Date();
+    const thisMonth = bills.filter(bill => {
+        const billDate = new Date(bill.timestamp);
+        return billDate.getFullYear() === now.getFullYear() && billDate.getMonth() === now.getMonth();
+    });
+    
+    const income = thisMonth.filter(b => b.type === 'income' && b.status === 'completed').reduce((sum, b) => sum + b.amount, 0);
+    const expense = thisMonth.filter(b => b.type === 'expense' && b.status === 'completed').reduce((sum, b) => sum + b.amount, 0);
+    
+    document.getElementById('billsIncome').textContent = `¥${income.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    document.getElementById('billsExpense').textContent = `¥${expense.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    
+    // 渲染列表
+    const container = document.getElementById('billsListContainer');
+    
+    if (bills.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center;padding:60px 20px;color:#999;">
+                <div style="font-size:48px;margin-bottom:12px;">📋</div>
+                <div style="font-size:14px;">暂无账单记录</div>
+            </div>
+        `;
+        return;
+    }
+    
+    // 按日期分组
+    const grouped = {};
+    bills.forEach(bill => {
+        const date = new Date(bill.timestamp);
+        const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        
+        if (!grouped[dateKey]) {
+            grouped[dateKey] = [];
+        }
+        grouped[dateKey].push(bill);
+    });
+    
+    // 渲染分组
+    let html = '';
+    Object.keys(grouped).sort((a, b) => b.localeCompare(a)).forEach(dateKey => {
+        const dateBills = grouped[dateKey];
+        const date = new Date(dateKey);
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        let dateLabel = dateKey;
+        if (dateKey === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`) {
+            dateLabel = '今天';
+        } else if (dateKey === `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`) {
+            dateLabel = '昨天';
+        } else {
+            dateLabel = `${date.getMonth() + 1}月${date.getDate()}日`;
+        }
+        
+        html += `
+            <div style="margin-bottom:20px;">
+                <div style="font-size:13px;font-weight:600;color:#666;margin-bottom:8px;padding:0 4px;">${dateLabel}</div>
+                <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        `;
+        
+        dateBills.forEach((bill, index) => {
+            const time = new Date(bill.timestamp);
+            const timeStr = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
+            const isIncome = bill.type === 'income';
+            const amountColor = isIncome ? '#52c41a' : '#333';
+            const amountPrefix = isIncome ? '+' : '-';
+            const statusText = bill.status === 'refunded' ? '（已退款）' : bill.isRefund ? '（退款）' : '';
+            
+            html += `
+                <div style="display:flex;align-items:center;padding:14px 16px;${index < dateBills.length - 1 ? 'border-bottom:1px solid #f5f5f5;' : ''}">
+                    <div style="flex:1;">
+                        <div style="font-size:14px;font-weight:500;color:#333;margin-bottom:2px;">${escapeHtml(bill.remark)}${statusText}</div>
+                        <div style="font-size:12px;color:#999;">${timeStr}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:16px;font-weight:600;color:${amountColor};">${amountPrefix}¥${bill.amount.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// 按类型筛选
+function filterBillsByType(type) {
+    // 更新按钮状态
+    document.querySelectorAll('.bills-filter-btn[data-type]').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`.bills-filter-btn[data-type="${type}"]`).classList.add('active');
+    
+    // 重新渲染
+    renderBillsList();
+}
+
+// 显示账户选择器
+function showAccountSelector() {
+    const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
+    const currentAccount = JSON.parse(localStorage.getItem('currentBillAccount') || '{"type":"balance"}');
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '300px';
+    dialog.style.maxHeight = '70vh';
+    dialog.style.overflowY = 'auto';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '选择账户';
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons vertical';
+    
+    // 钱包余额
+    const balanceBtn = document.createElement('button');
+    balanceBtn.className = 'ios-dialog-button' + (currentAccount.type === 'balance' ? ' primary' : '');
+    balanceBtn.innerHTML = `
+        <div style="text-align:left;padding:4px 0;">
+            <div style="font-weight:600;font-size:15px;color:#333;margin-bottom:2px;">钱包余额</div>
+            <div style="font-size:13px;color:#666;">¥${(walletData.balance || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+        </div>
+    `;
+    balanceBtn.onclick = () => {
+        selectAccount({ type: 'balance', name: '钱包余额' });
+        closeDialog();
+    };
+    buttonsEl.appendChild(balanceBtn);
+    
+    // 余额宝
+    if (walletData.yuebaoAmount > 0) {
+        const yuebaoBtn = document.createElement('button');
+        yuebaoBtn.className = 'ios-dialog-button' + (currentAccount.type === 'yuebao' ? ' primary' : '');
+        yuebaoBtn.innerHTML = `
+            <div style="text-align:left;padding:4px 0;">
+                <div style="font-weight:600;font-size:15px;color:#333;margin-bottom:2px;">余额宝</div>
+                <div style="font-size:13px;color:#666;">¥${walletData.yuebaoAmount.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+            </div>
+        `;
+        yuebaoBtn.onclick = () => {
+            selectAccount({ type: 'yuebao', name: '余额宝' });
+            closeDialog();
+        };
+        buttonsEl.appendChild(yuebaoBtn);
+    }
+    
+    // 银行卡
+    if (walletData.bankCards && walletData.bankCards.length > 0) {
+        walletData.bankCards.forEach((card, index) => {
+            const cardNumber = card.number || card.cardNumber || '0000000000000000';
+            const last4 = cardNumber.slice(-4);
+            const isSelected = currentAccount.type === 'bankcard' && currentAccount.index === index;
+            
+            const cardBtn = document.createElement('button');
+            cardBtn.className = 'ios-dialog-button' + (isSelected ? ' primary' : '');
+            cardBtn.innerHTML = `
+                <div style="text-align:left;padding:4px 0;">
+                    <div style="font-weight:600;font-size:15px;color:#333;margin-bottom:2px;">${escapeHtml(card.name || '银行卡')}</div>
+                    <div style="font-size:13px;color:#666;">**** ${last4} · ¥${(card.balance || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                </div>
+            `;
+            cardBtn.onclick = () => {
+                selectAccount({ type: 'bankcard', name: card.name || '银行卡', index: index });
+                closeDialog();
+            };
+            buttonsEl.appendChild(cardBtn);
+        });
+    }
+    
+    // 取消按钮
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    buttonsEl.appendChild(cancelBtn);
+    
+    dialog.appendChild(titleEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => document.body.removeChild(overlay), 300);
+    }
+}
+
+// 选择账户
+function selectAccount(account) {
+    localStorage.setItem('currentBillAccount', JSON.stringify(account));
+    renderBillsList();
+}
+
+// 显示日期选择器
+function showDatePicker() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '300px';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '选择日期';
+    
+    const formWrap = document.createElement('div');
+    formWrap.style.cssText = 'padding:12px 16px 16px;';
+    
+    // 年份选择
+    const yearLabel = document.createElement('div');
+    yearLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    yearLabel.textContent = '年份';
+    const yearSelect = document.createElement('select');
+    yearSelect.id = 'billYearSelect';
+    yearSelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;background:#fff;';
+    
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear; y >= currentYear - 10; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = `${y}年`;
+        yearSelect.appendChild(opt);
+    }
+    
+    // 月份选择
+    const monthLabel = document.createElement('div');
+    monthLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    monthLabel.textContent = '月份（可选）';
+    const monthSelect = document.createElement('select');
+    monthSelect.id = 'billMonthSelect';
+    monthSelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;margin-bottom:12px;background:#fff;';
+    
+    const allMonthOpt = document.createElement('option');
+    allMonthOpt.value = '';
+    allMonthOpt.textContent = '全年';
+    monthSelect.appendChild(allMonthOpt);
+    
+    for (let m = 1; m <= 12; m++) {
+        const opt = document.createElement('option');
+        opt.value = m - 1;
+        opt.textContent = `${m}月`;
+        monthSelect.appendChild(opt);
+    }
+    
+    // 日期选择
+    const dateLabel = document.createElement('div');
+    dateLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    dateLabel.textContent = '日期（可选）';
+    const dateSelect = document.createElement('select');
+    dateSelect.id = 'billDateSelect';
+    dateSelect.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;background:#fff;';
+    
+    const allDateOpt = document.createElement('option');
+    allDateOpt.value = '';
+    allDateOpt.textContent = '全月';
+    dateSelect.appendChild(allDateOpt);
+    
+    for (let d = 1; d <= 31; d++) {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = `${d}日`;
+        dateSelect.appendChild(opt);
+    }
+    
+    formWrap.appendChild(yearLabel);
+    formWrap.appendChild(yearSelect);
+    formWrap.appendChild(monthLabel);
+    formWrap.appendChild(monthSelect);
+    formWrap.appendChild(dateLabel);
+    formWrap.appendChild(dateSelect);
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'ios-dialog-button';
+    clearBtn.textContent = '清除筛选';
+    clearBtn.onclick = () => {
+        localStorage.removeItem('billsDateFilter');
+        document.getElementById('dateFilterText').textContent = '选择日期';
+        closeDialog();
+        renderBillsList();
+    };
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'ios-dialog-button primary';
+    confirmBtn.textContent = '确定';
+    confirmBtn.onclick = () => {
+        const year = parseInt(document.getElementById('billYearSelect').value);
+        const monthVal = document.getElementById('billMonthSelect').value;
+        const dateVal = document.getElementById('billDateSelect').value;
+        
+        const filter = { year };
+        if (monthVal !== '') filter.month = parseInt(monthVal);
+        if (dateVal !== '') filter.date = parseInt(dateVal);
+        
+        localStorage.setItem('billsDateFilter', JSON.stringify(filter));
+        
+        // 更新按钮文字
+        let text = `${year}年`;
+        if (filter.month !== undefined) text += `${filter.month + 1}月`;
+        if (filter.date) text += `${filter.date}日`;
+        document.getElementById('dateFilterText').textContent = text;
+        
+        closeDialog();
+        renderBillsList();
+    };
+    
+    buttonsEl.appendChild(clearBtn);
+    buttonsEl.appendChild(confirmBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(formWrap);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => document.body.removeChild(overlay), 300);
+    }
+}
+
+// 修改钱包充值函数，添加账单记录
+const originalRecharge = window.recharge;
+window.recharge = function() {
+    iosPrompt('充值金额', '', (val) => {
+        const amount = parseFloat(val);
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        const data = JSON.parse(localStorage.getItem('walletData'));
+        data.balance = Math.round((data.balance + amount) * 100) / 100;
+        localStorage.setItem('walletData', JSON.stringify(data));
+        
+        // 添加账单记录
+        addBillRecord('income', amount, '充值', 'balance');
+        
+        updateWalletUI(data);
+        showToast('充值成功 ¥' + amount.toFixed(2));
+    });
+};
+
+// 修改钱包提现函数，添加账单记录
+const originalWithdraw = window.withdraw;
+window.withdraw = function() {
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    if (data.balance <= 0) {
+        showToast('余额不足');
+        return;
+    }
+    const fmt = (n) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    iosPrompt(`提现金额（可用 ¥${fmt(data.balance)}）`, '', (val) => {
+        const amount = parseFloat(val);
+        const d = JSON.parse(localStorage.getItem('walletData'));
+        if (isNaN(amount) || amount <= 0) {
+            showIosAlert('提示', '请输入有效金额');
+            return;
+        }
+        if (amount > d.balance) {
+            showIosAlert('提示', '余额不足');
+            return;
+        }
+        d.balance = Math.round((d.balance - amount) * 100) / 100;
+        localStorage.setItem('walletData', JSON.stringify(d));
+        
+        // 添加账单记录
+        addBillRecord('expense', amount, '提现', 'balance');
+        
+        updateWalletUI(d);
+        showToast('提现成功 ¥' + amount.toFixed(2));
+    });
+};
+
+// 标记script2.js已加载完成
+window.script2Loaded = true;
+
+// ========== 引用消息功能 ==========
+
+// 渲染引用消息到聊天界面
+function appendQuoteMessageToChat(messageObj) {
+    const container = document.getElementById('chatMessagesContainer');
+
+    const emptyMsg = container.querySelector('.chat-empty-message');
+    if (emptyMsg) emptyMsg.remove();
+
+    // 获取角色头像
+    let avatar = '';
+    if (currentChatCharacter && currentChatCharacter.avatar) {
+        avatar = currentChatCharacter.avatar;
+    }
+
+    const time = formatMessageTime(messageObj.timestamp);
+    const quotedSender = messageObj.quotedSender || '未知';
+    const quotedContent = messageObj.quotedContent || '';
+    
+    // 构建引用预览HTML（和用户引用消息一样的样式）
+    const quotedText = quotedContent.length > 30 
+        ? quotedContent.substring(0, 30) + '...' 
+        : quotedContent;
+    const quoteHtml = `
+        <div class="chat-quote-preview">
+            <span class="chat-quote-sender">${escapeHtml(quotedSender)}</span>: ${escapeHtml(quotedText)}
+        </div>
+    `;
+
+    const messageEl = document.createElement('div');
+    messageEl.className = 'chat-message chat-message-char';
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = messageObj.type;
+
+    // 使用消息的实际内容作为回复内容
+    const replyContent = messageObj.content || '（引用了这条消息）';
+
+    messageEl.innerHTML = `
+        <div class="chat-message-avatar">
+            ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
+        </div>
+        <div class="chat-message-content">
+            <div class="chat-message-bubble">
+                ${escapeHtml(replyContent)}
+            </div>
+            ${quoteHtml}
+            <div class="chat-message-time">${time}</div>
+        </div>
+    `;
+
+    container.appendChild(messageEl);
+}
