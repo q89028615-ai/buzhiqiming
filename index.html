@@ -18,6 +18,9 @@
     <meta name="apple-mobile-web-app-title" content="小手机">
     
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="couple-avatar.css">
+    <!-- Chart.js 图表库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <!-- docx解析库 -->
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
     <!-- ZIP解析库 -->
@@ -5745,7 +5748,7 @@
                             <button class="avatar-btn-grid" onclick="document.getElementById('charAvatarFileInput').click()">本地上传</button>
                             <button class="avatar-btn-grid" onclick="showCharAvatarUrlInput()">URL上传</button>
                             <button class="avatar-btn-grid" onclick="showCharAvatarLibrary()">头像库</button>
-                            <button class="avatar-btn-grid" onclick="showCharAvatarFrame()">头像框</button>
+                            <button class="avatar-btn-grid" onclick="showCoupleAvatarLibrary()">情侣头像库</button>
                         </div>
                     </div>
                 </div>
@@ -5786,7 +5789,7 @@
                             <button class="avatar-btn-grid" onclick="document.getElementById('userAvatarFileInput').click()">本地上传</button>
                             <button class="avatar-btn-grid" onclick="showUserAvatarUrlInput()">URL上传</button>
                             <button class="avatar-btn-grid" onclick="showUserAvatarLibrary()">头像库</button>
-                            <button class="avatar-btn-grid" onclick="showUserAvatarFrame()">头像框</button>
+                            <button class="avatar-btn-grid" onclick="showCoupleAvatarLibrary()">情侣头像库</button>
                         </div>
                     </div>
                 </div>
@@ -5867,6 +5870,36 @@
                             </div>
                             <label class="ios-switch">
                                 <input type="checkbox" id="timeAwarenessToggle" checked>
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 特殊消息显示 -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">特殊消息显示</div>
+                    <div class="form-group">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 15px; color: #333;">显示系统卡片</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 4px;">开启后显示银行转账、更换头像等彩色卡片，关闭后只显示灰色系统消息</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="showSystemCardBubblesToggle" checked>
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 15px; color: #333;">情头模式</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 4px;">开启后角色可以看到并更换情侣头像库中的情头</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="coupleModeToggle" onchange="toggleCoupleMode()">
                                 <span class="ios-slider"></span>
                             </label>
                         </div>
@@ -5955,6 +5988,9 @@
                         <button class="data-action-btn secondary-btn" onclick="openManualSummaryModal()" style="margin-top: 8px;">
                             手动总结对话
                         </button>
+                        <button class="data-action-btn secondary-btn" onclick="openDiarySummaryModal()" style="margin-top: 8px;">
+                            日记总结
+                        </button>
                     </div>
                 </div>
 
@@ -6014,6 +6050,39 @@
                     </div>
                     <div style="margin-top: 10px; font-size: 12px; color: #aaa; text-align: center;">
                         Token数为粗略估算（中文≈1.5token/字，英文≈0.25token/词），实时更新
+                    </div>
+                </div>
+
+                <!-- 记忆库 -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">记忆库</div>
+                    <div style="margin-bottom: 12px;">
+                        <button class="data-action-btn" onclick="openSaveMemoryDialog()" style="width: 100%; background: #5856d6; color: #fff; border: none; border-radius: 10px; padding: 14px 0; font-size: 16px; font-weight: 500; cursor: pointer;">
+                            保存当前状态
+                        </button>
+                        <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                            保存当前所有聊天记录、设置、人设、表情包等
+                        </div>
+                    </div>
+                    
+                    <!-- 存档列表 -->
+                    <div id="memoryArchiveList" style="max-height: 300px; overflow-y: auto;">
+                        <!-- 存档项将动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 导出/导入聊天记录 -->
+                <div class="adv-section-card">
+                    <div class="form-group" style="margin: 0;">
+                        <button class="data-action-btn" onclick="exportChatHistory()" style="width: 100%; background: #007bff; color: #fff; border: none; border-radius: 10px; padding: 14px 0; font-size: 16px; font-weight: 500; cursor: pointer; margin-bottom: 10px;">
+                            导出个人聊天记录
+                        </button>
+                        <button class="data-action-btn" onclick="importChatHistory()" style="width: 100%; background: #34c759; color: #fff; border: none; border-radius: 10px; padding: 14px 0; font-size: 16px; font-weight: 500; cursor: pointer;">
+                            导入个人聊天记录
+                        </button>
+                        <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                            导出/导入与该角色的所有聊天记录
+                        </div>
                     </div>
                 </div>
 
@@ -6235,9 +6304,14 @@
                                 </div>
                                 <span class="chat-extend-label">语音通话</span>
                             </div>
-                            <div class="chat-extend-item chat-extend-item-placeholder">
-                                <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
-                                <span class="chat-extend-label"></span>
+                            <div class="chat-extend-item" onclick="stopApiCall()">
+                                <div class="chat-extend-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <rect x="9" y="9" width="6" height="6" fill="currentColor"/>
+                                    </svg>
+                                </div>
+                                <span class="chat-extend-label">停止调用</span>
                             </div>
                             <div class="chat-extend-item chat-extend-item-placeholder">
                                 <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
@@ -6805,21 +6879,37 @@
                     </div>
                 </div>
 
-                <!-- 图片数据统计 -->
+                <!-- 数据统计 -->
                 <div class="section-title" style="margin-top: 30px;">
-                    <span class="section-title-text">图片数据统计</span>
+                    <span class="section-title-text">数据统计</span>
                 </div>
 
                 <div class="form-group">
+                    <!-- 数据统计卡片 -->
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 15px;">
                         <div style="background: #ffffff; border: 2px solid #e5e5ea; padding: 18px; border-radius: 8px; text-align: center;">
                             <div style="font-size: 28px; font-weight: 600; color: #000; margin-bottom: 8px;" id="imageCount">0</div>
                             <div style="font-size: 12px; color: #999; font-weight: 500;">图片数量</div>
                         </div>
                         <div style="background: #ffffff; border: 2px solid #e5e5ea; padding: 18px; border-radius: 8px; text-align: center;">
-                            <div style="font-size: 28px; font-weight: 600; color: #000; margin-bottom: 8px;" id="totalSize">0 KB</div>
-                            <div style="font-size: 12px; color: #999; font-weight: 500;">图片总大小</div>
+                            <div style="font-size: 28px; font-weight: 600; color: #000; margin-bottom: 8px;" id="chatCount">0</div>
+                            <div style="font-size: 12px; color: #999; font-weight: 500;">聊天记录</div>
                         </div>
+                        <div style="background: #ffffff; border: 2px solid #e5e5ea; padding: 18px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 28px; font-weight: 600; color: #000; margin-bottom: 8px;" id="characterCount">0</div>
+                            <div style="font-size: 12px; color: #999; font-weight: 500;">聊天角色</div>
+                        </div>
+                        <div style="background: #ffffff; border: 2px solid #e5e5ea; padding: 18px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 28px; font-weight: 600; color: #000; margin-bottom: 8px;" id="fileCount">0</div>
+                            <div style="font-size: 12px; color: #999; font-weight: 500;">文件数量</div>
+                        </div>
+                    </div>
+
+                    <!-- 饼状图 -->
+                    <div style="background: #ffffff; border: 2px solid #e5e5ea; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="font-size: 14px; color: #333; font-weight: 500; margin-bottom: 15px; text-align: center;">数据分布</div>
+                        <canvas id="dataChart" style="max-width: 300px; max-height: 300px; margin: 0 auto; display: block;"></canvas>
+                        <div id="chartLegend" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; font-size: 12px;"></div>
                     </div>
 
                     <button class="data-action-btn secondary-btn" onclick="showDataDetails()">
@@ -6913,6 +7003,10 @@
                 <div class="form-group">
                     <button class="data-action-btn export-btn" onclick="showExportOptions()">
                         导出数据
+                    </button>
+                    
+                    <button class="data-action-btn" onclick="importBackupData()" style="background: #34c759; color: #fff; border: none;">
+                        导入备份
                     </button>
                     
                     <button class="data-action-btn secondary-btn" onclick="cleanRedundantData()">
@@ -7278,20 +7372,20 @@
                             </div>
                             <!-- 新增第二行：为了与第一页底部对齐，这里添加了4个占位APP -->
                             <div class="app-item" onclick="showToast('功能开发中')">
-                                <div class="app-icon" id="appIcon-calendar"><img src="https://i.postimg.cc/Px6myX5Z/png-(12).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="日历"></div>
-                                <div class="app-name" id="appName-calendar" data-default-name="日历">日历</div>
+                                <div class="app-icon" id="appIcon-calendar"><img src="https://i.postimg.cc/Px6myX5Z/png-(12).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="汽水音乐"></div>
+                                <div class="app-name" id="appName-calendar" data-default-name="汽水音乐">汽水音乐</div>
                             </div>
                             <div class="app-item" onclick="showToast('功能开发中')">
-                                <div class="app-icon" id="appIcon-album"><img src="https://i.postimg.cc/63HdcWpv/png-(15).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="相册"></div>
-                                <div class="app-name" id="appName-album" data-default-name="相册">相册</div>
+                                <div class="app-icon" id="appIcon-album"><img src="https://i.postimg.cc/63HdcWpv/png-(15).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="家园"></div>
+                                <div class="app-name" id="appName-album" data-default-name="家园">家园</div>
                             </div>
                             <div class="app-item" onclick="showToast('功能开发中')">
-                                <div class="app-icon" id="appIcon-memo"><img src="https://i.postimg.cc/LXyzD98J/png-(18).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="备忘录"></div>
-                                <div class="app-name" id="appName-memo" data-default-name="备忘录">备忘录</div>
+                                <div class="app-icon" id="appIcon-memo"><img src="https://i.postimg.cc/LXyzD98J/png-(18).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="月经"></div>
+                                <div class="app-name" id="appName-memo" data-default-name="月经">月经</div>
                             </div>
                             <div class="app-item" onclick="showToast('功能开发中')">
-                                <div class="app-icon" id="appIcon-settings"><img src="https://i.postimg.cc/1tWpBm3N/png-(26).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="设置"></div>
-                                <div class="app-name" id="appName-settings" data-default-name="设置">设置</div>
+                                <div class="app-icon" id="appIcon-settings"><img src="https://i.postimg.cc/1tWpBm3N/png-(26).png" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" alt="宠物"></div>
+                                <div class="app-name" id="appName-settings" data-default-name="宠物">宠物</div>
                             </div>
                         </div>
                     </div>
@@ -7501,8 +7595,10 @@
     <!-- 音频播放器（隐藏） -->
     <audio id="audioPlayer" style="display: none;"></audio>
 
+    <script src="prompts.js"></script>
     <script src="script.js"></script>
     <script src="script2.js"></script>
+    <script src="couple-avatar.js"></script>
     
     <!-- PWA Service Worker 注册和安装提示 -->
     <script>

@@ -4552,3 +4552,272 @@ input[type="range"]::-moz-range-track {
 .ios-dialog-buttons.vertical .ios-dialog-button {
     width: 100%;
 }
+
+/* 导入聊天记录选择界面样式 */
+.import-msg-item {
+    display: flex;
+    gap: 10px;
+    padding: 12px;
+    background: #f8f8f8;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.import-msg-item:hover {
+    background: #e8e8e8;
+}
+
+.import-msg-item:active {
+    background: #d8d8d8;
+}
+
+.import-msg-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 2px;
+    accent-color: #007bff;
+}
+
+#importMessageList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 20px;
+}
+
+#importMessageList::-webkit-scrollbar {
+    width: 6px;
+}
+
+#importMessageList::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#importMessageList::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
+}
+
+#importMessageList::-webkit-scrollbar-thumb:hover {
+    background: #999;
+}
+
+/* 记忆库存档样式 */
+.memory-archive-item {
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.2s;
+}
+
+.memory-archive-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.memory-archive-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.memory-archive-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    flex: 1;
+}
+
+.memory-archive-time {
+    font-size: 11px;
+    color: #999;
+}
+
+.memory-archive-info {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.memory-archive-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.memory-archive-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.memory-archive-btn.load {
+    background: #007bff;
+    color: #fff;
+}
+
+.memory-archive-btn.load:active {
+    background: #0056b3;
+    transform: scale(0.97);
+}
+
+.memory-archive-btn.delete {
+    background: #ff3b30;
+    color: #fff;
+}
+
+.memory-archive-btn.delete:active {
+    background: #d32f2f;
+    transform: scale(0.97);
+}
+
+.memory-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+    font-size: 14px;
+}
+
+.memory-empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+    display: none;
+}
+
+
+/* ========== 角色头像库样式 ========== */
+.char-avatar-item {
+    position: relative;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 10px;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.char-avatar-item:hover {
+    border-color: #999;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.char-avatar-item.selected {
+    border-color: #333;
+    background: #f8f8f8;
+}
+
+.char-avatar-checkbox {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d0d0d0;
+    border-radius: 4px;
+    background: #fff;
+    display: none;
+    z-index: 2;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.char-avatar-item.selected .char-avatar-checkbox {
+    background: #333;
+    border-color: #333;
+}
+
+/* iOS风格弹窗按钮垂直布局 */
+.ios-dialog-buttons.vertical {
+    flex-direction: column;
+    border-top: 1px solid #e0e0e0;
+}
+
+.ios-dialog-buttons.vertical .ios-dialog-button {
+    border-bottom: 1px solid #e0e0e0;
+    border-radius: 0;
+}
+
+.ios-dialog-buttons.vertical .ios-dialog-button:last-child {
+    border-bottom: none;
+}
+
+/* 头像更换卡片样式 - 简约版（与银行卡片统一） */
+.chat-avatar-change-bubble {
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    width: 240px;
+    border: 1px solid #e5e5e5;
+}
+
+.chat-avatar-change-header {
+    background: #4a4a4a !important;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.chat-avatar-change-icon {
+    display: none;
+}
+
+.chat-avatar-change-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    flex: 1;
+}
+
+.chat-avatar-change-body {
+    padding: 20px 14px;
+    text-align: center;
+    background: #fff;
+}
+
+.chat-avatar-change-preview {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin: 0 auto 12px;
+    background: #f0f0f0;
+    border: 2px solid #e5e5e5;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.chat-avatar-change-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.chat-avatar-change-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+}
+
+.chat-avatar-change-reason {
+    font-size: 12px;
+    color: #999;
+    margin-top: 8px;
+    line-height: 1.4;
+}

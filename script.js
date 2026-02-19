@@ -275,7 +275,7 @@ async function renderLongTermMemoryList() {
     const sorted = [...memories].reverse();
     container.innerHTML = sorted.map(m => {
         const time = new Date(m.createdAt).toLocaleString('zh-CN');
-        const sourceLabel = m.source === 'manual' ? '[手动]' : m.source === 'condense' ? '[精简]' : '[自动]';
+        const sourceLabel = m.source === 'manual' ? '[手动]' : m.source === 'condense' ? '[精简]' : m.source === 'diary' ? '[日记]' : '[自动]';
         const editedLabel = m.editedAt ? ' (已编辑)' : '';
         return `
             <div class="ltm-item" data-ltm-id="${m.id}">
@@ -1375,37 +1375,109 @@ function closeDataManagement() {
 }
 
 // 更新数据统计
+let dataChartInstance = null; // 保存图表实例
+
 async function updateDataStatistics() {
     try {
         const allImages = await getAllImagesFromDB();
+        const allChats = await getAllChatsFromDB();
+        const allFiles = await getAllFilesFromDB();
+        const allCharacters = await getAllChatCharactersFromDB();
+        
         const imageCount = allImages.length;
+        const chatCount = allChats.length;
+        const fileCount = allFiles.length;
+        const characterCount = allCharacters.length;
         
-        // 计算总大小（估算Base64大小）
-        let totalSizeBytes = 0;
-        allImages.forEach(img => {
-            if (img.data) {
-                // Base64 字符串长度 * 0.75 约等于原始字节数
-                const base64Length = img.data.length - (img.data.indexOf(',') + 1);
-                totalSizeBytes += base64Length * 0.75;
-            }
-        });
-        
-        const totalSizeKB = (totalSizeBytes / 1024).toFixed(2);
-        const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
-        
-        // 更新界面
+        // 更新界面数字
         document.getElementById('imageCount').textContent = imageCount;
+        document.getElementById('chatCount').textContent = chatCount;
+        document.getElementById('characterCount').textContent = characterCount;
+        document.getElementById('fileCount').textContent = fileCount;
         
-        if (totalSizeBytes < 1024 * 1024) {
-            document.getElementById('totalSize').textContent = `${totalSizeKB} KB`;
-        } else {
-            document.getElementById('totalSize').textContent = `${totalSizeMB} MB`;
-        }
+        // 绘制饼状图
+        renderDataChart(imageCount, chatCount, fileCount, characterCount);
         
-        console.log(` 数据统计: ${imageCount}张图片, ${totalSizeKB}KB`);
+        console.log(`📊 数据统计: ${imageCount}张图片, ${chatCount}条聊天, ${characterCount}个角色, ${fileCount}个文件`);
     } catch (error) {
         console.error('更新数据统计失败:', error);
     }
+}
+
+// 绘制数据饼状图
+function renderDataChart(imageCount, chatCount, fileCount, characterCount) {
+    const canvas = document.getElementById('dataChart');
+    const legendDiv = document.getElementById('chartLegend');
+    
+    if (!canvas) return;
+    
+    // 如果已有图表实例，先销毁
+    if (dataChartInstance) {
+        dataChartInstance.destroy();
+    }
+    
+    const ctx = canvas.getContext('2d');
+    
+    // 数据配置
+    const data = {
+        labels: ['图片', '聊天记录', '文件', '聊天角色'],
+        datasets: [{
+            data: [imageCount, chatCount, fileCount, characterCount],
+            backgroundColor: [
+                '#007aff',  // 蓝色 - 图片
+                '#34c759',  // 绿色 - 聊天
+                '#ff9500',  // 橙色 - 文件
+                '#af52de'   // 紫色 - 角色
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    };
+    
+    // 图表配置
+    const config = {
+        type: 'doughnut',
+        data: data,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    display: false // 隐藏默认图例，使用自定义图例
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    };
+    
+    // 创建图表
+    dataChartInstance = new Chart(ctx, config);
+    
+    // 创建自定义图例
+    const total = imageCount + chatCount + fileCount + characterCount;
+    const colors = ['#007aff', '#34c759', '#ff9500', '#af52de'];
+    const labels = ['图片', '聊天记录', '文件', '聊天角色'];
+    const values = [imageCount, chatCount, fileCount, characterCount];
+    
+    legendDiv.innerHTML = labels.map((label, index) => {
+        const percentage = total > 0 ? ((values[index] / total) * 100).toFixed(1) : 0;
+        return `
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 12px; height: 12px; background: ${colors[index]}; border-radius: 2px;"></div>
+                <span style="color: #666;">${label}: ${values[index]} (${percentage}%)</span>
+            </div>
+        `;
+    }).join('');
 }
 
 // 显示详细信息
@@ -1557,10 +1629,21 @@ async function exportBasic() {
         const allImages = await getAllImagesFromDB();
         const allChats = await getAllChatsFromDB();
         const allFiles = await getAllFilesFromDB();
+        const allCharacters = await getAllChatCharactersFromDB();
         const allSettings = getAllLocalStorageData();
         
+        // 获取所有角色的长期记忆
+        const allMemories = {};
+        for (const char of allCharacters) {
+            const memories = await getLongTermMemories(char.id);
+            if (memories && memories.length > 0) {
+                allMemories[char.id] = memories;
+            }
+        }
+        
         // 检查是否有数据
-        const hasData = allImages.length > 0 || allChats.length > 0 || allFiles.length > 0 || Object.keys(allSettings).length > 0;
+        const hasData = allImages.length > 0 || allChats.length > 0 || allFiles.length > 0 || 
+                       allCharacters.length > 0 || Object.keys(allSettings).length > 0;
         
         if (!hasData) {
             await iosAlert('暂无数据可导出', '提示');
@@ -1569,21 +1652,25 @@ async function exportBasic() {
         
         // 创建导出数据
         const exportData = {
-            version: '3.0',
+            version: '4.0',
             exportTime: new Date().toISOString(),
             appName: 'buzhiqiming',
             appNameCN: '不知其名',
-            description: 'Complete data backup',
+            description: 'Complete data backup with all features',
             data: {
                 images: allImages,
                 chats: allChats,
                 files: allFiles,
+                characters: allCharacters,
+                longTermMemories: allMemories,
                 localStorage: allSettings
             },
             statistics: {
                 imageCount: allImages.length,
                 chatCount: allChats.length,
                 fileCount: allFiles.length,
+                characterCount: allCharacters.length,
+                memoryCount: Object.values(allMemories).reduce((sum, arr) => sum + arr.length, 0),
                 settingCount: Object.keys(allSettings).length
             }
         };
@@ -1606,9 +1693,9 @@ async function exportBasic() {
         // 下载文件
         downloadFile(blob, `buzhiqiming_backup_${new Date().getTime()}.json`);
         
-        console.log('基本导出完成');
+        console.log('✅ 基本导出完成');
         await iosAlert(
-            `导出成功！\n\n图片: ${allImages.length}张\n聊天: ${allChats.length}条\n文件: ${allFiles.length}个\n设置: ${Object.keys(allSettings).length}项\n\n文件大小: ${fileSizeMB} MB`,
+            `导出成功！\n\n图片: ${allImages.length}张\n聊天: ${allChats.length}条\n角色: ${allCharacters.length}个\n记忆: ${exportData.statistics.memoryCount}条\n文件: ${allFiles.length}个\n设置: ${Object.keys(allSettings).length}项\n\n文件大小: ${fileSizeMB} MB`,
             '导出完成'
         );
         
@@ -1628,7 +1715,7 @@ async function exportBatch() {
         const allImages = await getAllImagesFromDB();
         if (allImages.length > 0) {
             const imagesData = {
-                version: '3.0',
+                version: '4.0',
                 type: 'images',
                 exportTime: new Date().toISOString(),
                 appName: 'buzhiqiming',
@@ -1637,14 +1724,14 @@ async function exportBatch() {
             const blob = new Blob([JSON.stringify(imagesData, null, 2)], { type: 'application/json' });
             downloadFile(blob, `buzhiqiming_images_${timestamp}.json`);
             fileCount++;
-            await sleep(500); // 延迟避免浏览器阻止多次下载
+            await sleep(500);
         }
         
         // 导出聊天
         const allChats = await getAllChatsFromDB();
         if (allChats.length > 0) {
             const chatsData = {
-                version: '3.0',
+                version: '4.0',
                 type: 'chats',
                 exportTime: new Date().toISOString(),
                 appName: 'buzhiqiming',
@@ -1656,11 +1743,49 @@ async function exportBatch() {
             await sleep(500);
         }
         
+        // 导出角色
+        const allCharacters = await getAllChatCharactersFromDB();
+        if (allCharacters.length > 0) {
+            const charactersData = {
+                version: '4.0',
+                type: 'characters',
+                exportTime: new Date().toISOString(),
+                appName: 'buzhiqiming',
+                data: allCharacters
+            };
+            const blob = new Blob([JSON.stringify(charactersData, null, 2)], { type: 'application/json' });
+            downloadFile(blob, `buzhiqiming_characters_${timestamp}.json`);
+            fileCount++;
+            await sleep(500);
+        }
+        
+        // 导出长期记忆
+        const allMemories = {};
+        for (const char of allCharacters) {
+            const memories = await getLongTermMemories(char.id);
+            if (memories && memories.length > 0) {
+                allMemories[char.id] = memories;
+            }
+        }
+        if (Object.keys(allMemories).length > 0) {
+            const memoriesData = {
+                version: '4.0',
+                type: 'memories',
+                exportTime: new Date().toISOString(),
+                appName: 'buzhiqiming',
+                data: allMemories
+            };
+            const blob = new Blob([JSON.stringify(memoriesData, null, 2)], { type: 'application/json' });
+            downloadFile(blob, `buzhiqiming_memories_${timestamp}.json`);
+            fileCount++;
+            await sleep(500);
+        }
+        
         // 导出文件
         const allFiles = await getAllFilesFromDB();
         if (allFiles.length > 0) {
             const filesData = {
-                version: '3.0',
+                version: '4.0',
                 type: 'files',
                 exportTime: new Date().toISOString(),
                 appName: 'buzhiqiming',
@@ -1676,7 +1801,7 @@ async function exportBatch() {
         const allSettings = getAllLocalStorageData();
         if (Object.keys(allSettings).length > 0) {
             const settingsData = {
-                version: '3.0',
+                version: '4.0',
                 type: 'settings',
                 exportTime: new Date().toISOString(),
                 appName: 'buzhiqiming',
@@ -1731,10 +1856,21 @@ async function exportCompress() {
         const allImages = await getAllImagesFromDB();
         const allChats = await getAllChatsFromDB();
         const allFiles = await getAllFilesFromDB();
+        const allCharacters = await getAllChatCharactersFromDB();
         const allSettings = getAllLocalStorageData();
         
+        // 获取所有角色的长期记忆
+        const allMemories = {};
+        for (const char of allCharacters) {
+            const memories = await getLongTermMemories(char.id);
+            if (memories && memories.length > 0) {
+                allMemories[char.id] = memories;
+            }
+        }
+        
         // 检查是否有数据
-        const hasData = allImages.length > 0 || allChats.length > 0 || allFiles.length > 0 || Object.keys(allSettings).length > 0;
+        const hasData = allImages.length > 0 || allChats.length > 0 || allFiles.length > 0 || 
+                       allCharacters.length > 0 || Object.keys(allSettings).length > 0;
         
         if (!hasData) {
             await iosAlert('暂无数据可导出', '提示');
@@ -1747,7 +1883,7 @@ async function exportCompress() {
         
         // 添加主数据文件
         const exportData = {
-            version: '3.0',
+            version: '4.0',
             exportTime: new Date().toISOString(),
             appName: 'buzhiqiming',
             appNameCN: '不知其名',
@@ -1756,6 +1892,8 @@ async function exportCompress() {
                 imageCount: allImages.length,
                 chatCount: allChats.length,
                 fileCount: allFiles.length,
+                characterCount: allCharacters.length,
+                memoryCount: Object.values(allMemories).reduce((sum, arr) => sum + arr.length, 0),
                 settingCount: Object.keys(allSettings).length
             }
         };
@@ -1768,6 +1906,12 @@ async function exportCompress() {
         }
         if (allChats.length > 0) {
             zip.file('chats.json', JSON.stringify(allChats, null, 2));
+        }
+        if (allCharacters.length > 0) {
+            zip.file('characters.json', JSON.stringify(allCharacters, null, 2));
+        }
+        if (Object.keys(allMemories).length > 0) {
+            zip.file('memories.json', JSON.stringify(allMemories, null, 2));
         }
         if (allFiles.length > 0) {
             zip.file('files.json', JSON.stringify(allFiles, null, 2));
@@ -1789,7 +1933,7 @@ async function exportCompress() {
         downloadFile(blob, `buzhiqiming_backup_${timestamp}.zip`);
         
         await iosAlert(
-            `压缩导出成功！\n\n图片: ${allImages.length}张\n聊天: ${allChats.length}条\n文件: ${allFiles.length}个\n设置: ${Object.keys(allSettings).length}项\n\n压缩后大小: ${fileSizeMB} MB`,
+            `压缩导出成功！\n\n图片: ${allImages.length}张\n聊天: ${allChats.length}条\n角色: ${allCharacters.length}个\n记忆: ${exportData.statistics.memoryCount}条\n文件: ${allFiles.length}个\n设置: ${Object.keys(allSettings).length}项\n\n压缩后大小: ${fileSizeMB} MB`,
             '导出完成'
         );
         
@@ -1843,6 +1987,447 @@ function downloadFile(blob, filename) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+// 辅助函数：延迟
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ==================== 导入备份数据功能 ====================
+
+// 导入备份数据
+async function importBackupData() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.zip';
+    
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        try {
+            const fileName = file.name.toLowerCase();
+            
+            if (fileName.endsWith('.zip')) {
+                // ZIP文件导入
+                await importFromZip(file);
+            } else if (fileName.endsWith('.json')) {
+                // JSON文件导入
+                await importFromJson(file);
+            } else {
+                await iosAlert('不支持的文件格式，请选择 .json 或 .zip 文件', '错误');
+            }
+        } catch (error) {
+            console.error('导入失败:', error);
+            await iosAlert('导入失败：' + error.message, '错误');
+        }
+    };
+    
+    input.click();
+}
+
+// 从JSON文件导入
+async function importFromJson(file) {
+    try {
+        const text = await file.text();
+        const importData = JSON.parse(text);
+        
+        // 验证数据格式
+        if (!importData.version || !importData.appName || importData.appName !== 'buzhiqiming') {
+            await iosAlert('文件格式不正确或不是本应用的备份文件', '错误');
+            return;
+        }
+        
+        // 显示导入选项
+        await showImportOptions(importData);
+        
+    } catch (error) {
+        console.error('解析JSON失败:', error);
+        await iosAlert('文件解析失败，请检查文件格式', '错误');
+    }
+}
+
+// 从ZIP文件导入
+async function importFromZip(file) {
+    try {
+        // 检查JSZip库
+        if (typeof JSZip === 'undefined') {
+            await iosAlert('需要加载 JSZip 库来解压文件，请稍候...', '提示');
+            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+            
+            if (typeof JSZip === 'undefined') {
+                await iosAlert('JSZip 库加载失败，请检查网络连接', '错误');
+                return;
+            }
+        }
+        
+        const zip = new JSZip();
+        const zipData = await zip.loadAsync(file);
+        
+        // 读取info.json
+        const infoFile = zipData.file('info.json');
+        if (!infoFile) {
+            await iosAlert('ZIP文件中缺少 info.json，可能不是有效的备份文件', '错误');
+            return;
+        }
+        
+        const infoText = await infoFile.async('text');
+        const info = JSON.parse(infoText);
+        
+        // 验证
+        if (!info.version || !info.appName || info.appName !== 'buzhiqiming') {
+            await iosAlert('不是本应用的备份文件', '错误');
+            return;
+        }
+        
+        // 读取各类数据
+        const importData = {
+            version: info.version,
+            appName: info.appName,
+            exportTime: info.exportTime,
+            data: {}
+        };
+        
+        // 读取images.json
+        const imagesFile = zipData.file('images.json');
+        if (imagesFile) {
+            const imagesText = await imagesFile.async('text');
+            importData.data.images = JSON.parse(imagesText);
+        }
+        
+        // 读取chats.json
+        const chatsFile = zipData.file('chats.json');
+        if (chatsFile) {
+            const chatsText = await chatsFile.async('text');
+            importData.data.chats = JSON.parse(chatsText);
+        }
+        
+        // 读取characters.json
+        const charactersFile = zipData.file('characters.json');
+        if (charactersFile) {
+            const charactersText = await charactersFile.async('text');
+            importData.data.characters = JSON.parse(charactersText);
+        }
+        
+        // 读取memories.json
+        const memoriesFile = zipData.file('memories.json');
+        if (memoriesFile) {
+            const memoriesText = await memoriesFile.async('text');
+            importData.data.longTermMemories = JSON.parse(memoriesText);
+        }
+        
+        // 读取files.json
+        const filesFile = zipData.file('files.json');
+        if (filesFile) {
+            const filesText = await filesFile.async('text');
+            importData.data.files = JSON.parse(filesText);
+        }
+        
+        // 读取settings.json
+        const settingsFile = zipData.file('settings.json');
+        if (settingsFile) {
+            const settingsText = await settingsFile.async('text');
+            importData.data.localStorage = JSON.parse(settingsText);
+        }
+        
+        // 显示导入选项
+        await showImportOptions(importData);
+        
+    } catch (error) {
+        console.error('解压ZIP失败:', error);
+        await iosAlert('ZIP文件解压失败：' + error.message, '错误');
+    }
+}
+
+// 显示导入选项对话框
+async function showImportOptions(importData) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'ios-dialog-overlay';
+        
+        const dialog = document.createElement('div');
+        dialog.className = 'ios-dialog';
+        dialog.style.maxWidth = '90%';
+        dialog.style.width = '340px';
+        
+        const titleEl = document.createElement('div');
+        titleEl.className = 'ios-dialog-title';
+        titleEl.textContent = '选择导入内容';
+        
+        const messageEl = document.createElement('div');
+        messageEl.className = 'ios-dialog-message';
+        
+        // 统计信息
+        const stats = [];
+        if (importData.data.images && importData.data.images.length > 0) {
+            stats.push(`${importData.data.images.length} 张图片`);
+        }
+        if (importData.data.chats && importData.data.chats.length > 0) {
+            stats.push(`${importData.data.chats.length} 条聊天`);
+        }
+        if (importData.data.characters && importData.data.characters.length > 0) {
+            stats.push(`${importData.data.characters.length} 个角色`);
+        }
+        if (importData.data.longTermMemories) {
+            const memCount = Object.values(importData.data.longTermMemories).reduce((sum, arr) => sum + arr.length, 0);
+            if (memCount > 0) stats.push(`${memCount} 条记忆`);
+        }
+        if (importData.data.files && importData.data.files.length > 0) {
+            stats.push(`${importData.data.files.length} 个文件`);
+        }
+        
+        messageEl.innerHTML = `
+            <div style="margin-bottom: 15px;">备份文件包含：</div>
+            <div style="font-size: 13px; color: #666; line-height: 1.8;">
+                ${stats.join('<br>')}
+            </div>
+            <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; font-size: 12px; color: #856404;">
+                ⚠️ 导入将覆盖现有数据，建议先导出当前数据备份
+            </div>
+        `;
+        
+        const buttonsEl = document.createElement('div');
+        buttonsEl.className = 'ios-dialog-buttons vertical';
+        
+        // 完整导入按钮
+        const fullBtn = document.createElement('button');
+        fullBtn.className = 'ios-dialog-button primary';
+        fullBtn.textContent = '完整导入（覆盖所有）';
+        fullBtn.onclick = async () => {
+            closeDialog();
+            await performImport(importData, 'full');
+        };
+        
+        // 合并导入按钮
+        const mergeBtn = document.createElement('button');
+        mergeBtn.className = 'ios-dialog-button';
+        mergeBtn.textContent = '合并导入（保留现有）';
+        mergeBtn.onclick = async () => {
+            closeDialog();
+            await performImport(importData, 'merge');
+        };
+        
+        // 取消按钮
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'ios-dialog-button';
+        cancelBtn.textContent = '取消';
+        cancelBtn.onclick = () => {
+            closeDialog();
+        };
+        
+        buttonsEl.appendChild(fullBtn);
+        buttonsEl.appendChild(mergeBtn);
+        buttonsEl.appendChild(cancelBtn);
+        
+        dialog.appendChild(titleEl);
+        dialog.appendChild(messageEl);
+        dialog.appendChild(buttonsEl);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        
+        setTimeout(() => {
+            overlay.classList.add('show');
+        }, 10);
+        
+        function closeDialog() {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                resolve();
+            }, 300);
+        }
+    });
+}
+
+// 执行导入
+async function performImport(importData, mode) {
+    try {
+        showToast('正在导入数据，请稍候...');
+        
+        let importedCount = {
+            images: 0,
+            chats: 0,
+            characters: 0,
+            memories: 0,
+            files: 0,
+            settings: 0
+        };
+        
+        // 导入图片
+        if (importData.data.images && importData.data.images.length > 0) {
+            if (mode === 'full') {
+                // 清空现有图片
+                const transaction = db.transaction(['images'], 'readwrite');
+                const store = transaction.objectStore('images');
+                await new Promise((resolve, reject) => {
+                    const request = store.clear();
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+            
+            // 导入图片
+            for (const img of importData.data.images) {
+                await saveImageToDB(img.id, img.data, img.type);
+                importedCount.images++;
+            }
+        }
+        
+        // 导入聊天记录
+        if (importData.data.chats && importData.data.chats.length > 0) {
+            if (mode === 'full') {
+                // 清空现有聊天
+                const transaction = db.transaction(['chats'], 'readwrite');
+                const store = transaction.objectStore('chats');
+                await new Promise((resolve, reject) => {
+                    const request = store.clear();
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+            
+            // 导入聊天
+            const transaction = db.transaction(['chats'], 'readwrite');
+            const store = transaction.objectStore('chats');
+            for (const chat of importData.data.chats) {
+                await new Promise((resolve, reject) => {
+                    const request = store.add(chat);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => {
+                        // 如果是合并模式且ID冲突，跳过
+                        if (mode === 'merge') {
+                            resolve();
+                        } else {
+                            reject(request.error);
+                        }
+                    };
+                });
+                importedCount.chats++;
+            }
+        }
+        
+        // 导入角色
+        if (importData.data.characters && importData.data.characters.length > 0) {
+            if (mode === 'full') {
+                // 清空现有角色
+                const transaction = db.transaction(['chatCharacters'], 'readwrite');
+                const store = transaction.objectStore('chatCharacters');
+                await new Promise((resolve, reject) => {
+                    const request = store.clear();
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+            
+            // 导入角色
+            for (const char of importData.data.characters) {
+                await saveChatCharacterToDB(char);
+                importedCount.characters++;
+            }
+        }
+        
+        // 导入长期记忆
+        if (importData.data.longTermMemories) {
+            for (const [charId, memories] of Object.entries(importData.data.longTermMemories)) {
+                if (mode === 'full') {
+                    // 覆盖模式：直接保存
+                    await saveLongTermMemories(charId, memories);
+                } else {
+                    // 合并模式：追加到现有记忆
+                    const existing = await getLongTermMemories(charId);
+                    const merged = [...existing, ...memories];
+                    await saveLongTermMemories(charId, merged);
+                }
+                importedCount.memories += memories.length;
+            }
+        }
+        
+        // 导入文件
+        if (importData.data.files && importData.data.files.length > 0) {
+            if (mode === 'full') {
+                // 清空现有文件
+                const transaction = db.transaction(['files'], 'readwrite');
+                const store = transaction.objectStore('files');
+                await new Promise((resolve, reject) => {
+                    const request = store.clear();
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+            
+            // 导入文件
+            const transaction = db.transaction(['files'], 'readwrite');
+            const store = transaction.objectStore('files');
+            for (const file of importData.data.files) {
+                await new Promise((resolve, reject) => {
+                    const request = store.put(file);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => {
+                        if (mode === 'merge') {
+                            resolve();
+                        } else {
+                            reject(request.error);
+                        }
+                    };
+                });
+                importedCount.files++;
+            }
+        }
+        
+        // 导入设置
+        if (importData.data.localStorage) {
+            if (mode === 'full') {
+                // 清空现有设置（保留一些关键设置）
+                const keysToKeep = ['lockScreenEnabled', 'lockPassword', 'lockGesture'];
+                const savedSettings = {};
+                keysToKeep.forEach(key => {
+                    const value = localStorage.getItem(key);
+                    if (value) savedSettings[key] = value;
+                });
+                
+                localStorage.clear();
+                
+                // 恢复保留的设置
+                Object.entries(savedSettings).forEach(([key, value]) => {
+                    localStorage.setItem(key, value);
+                });
+            }
+            
+            // 导入设置
+            Object.entries(importData.data.localStorage).forEach(([key, value]) => {
+                // 跳过一些敏感设置
+                if (mode === 'merge' && ['lockScreenEnabled', 'lockPassword', 'lockGesture'].includes(key)) {
+                    return;
+                }
+                localStorage.setItem(key, value);
+                importedCount.settings++;
+            });
+        }
+        
+        // 刷新界面
+        await updateDataStatistics();
+        await refreshStorageInfo();
+        
+        // 如果导入了角色，刷新聊天列表
+        if (importedCount.characters > 0) {
+            if (typeof loadChatCharacters === 'function') {
+                await loadChatCharacters();
+            }
+        }
+        
+        // 显示结果
+        await iosAlert(
+            `导入完成！\n\n图片: ${importedCount.images}张\n聊天: ${importedCount.chats}条\n角色: ${importedCount.characters}个\n记忆: ${importedCount.memories}条\n文件: ${importedCount.files}个\n设置: ${importedCount.settings}项\n\n${mode === 'full' ? '已覆盖所有数据' : '已合并到现有数据'}`,
+            '导入成功'
+        );
+        
+        console.log('✅ 导入完成:', importedCount);
+        
+    } catch (error) {
+        console.error('导入失败:', error);
+        await iosAlert('导入失败：' + error.message, '错误');
+    }
 }
 
 // 辅助函数：延迟
@@ -5895,6 +6480,23 @@ async function saveAvatar() {
         document.getElementById('avatarImage').style.display = 'block';
         document.getElementById('avatarPlaceholder').style.display = 'none';
         
+        // 实时更新聊天界面的用户头像
+        const chatUserAvatars = document.querySelectorAll('.chat-message-user .chat-avatar-img');
+        chatUserAvatars.forEach(img => {
+            img.src = tempAvatarData;
+        });
+        
+        // 更新聊天设置页面的用户头像
+        const userAvatarImage = document.getElementById('userAvatarImage');
+        if (userAvatarImage) {
+            userAvatarImage.src = tempAvatarData;
+            userAvatarImage.style.display = 'block';
+            const userAvatarPlaceholder = document.getElementById('userAvatarPlaceholder');
+            if (userAvatarPlaceholder) {
+                userAvatarPlaceholder.style.display = 'none';
+            }
+        }
+        
         alert('头像保存成功！');
         closeAvatarModal();
         
@@ -9595,6 +10197,10 @@ async function renderChatList() {
             else if (last.messageType === 'voice') previewText = '[语音消息]';
             else if (last.messageType === 'transfer') previewText = '[转账]';
             else if (last.messageType === 'location') previewText = '[位置]';
+            else if (last.messageType === 'bankTransfer') previewText = '[银行转账]';
+            else if (last.messageType === 'avatarChange') previewText = '[更换头像]';
+            else if (last.messageType === 'coupleAvatarChange') previewText = '[更换情头]';
+            else if (last.messageType === 'systemNotice') previewText = last.content || '';
             else previewText = (last.content || '').substring(0, 50);
             charLastMsgMap[char.id] = { text: previewText, time: last.timestamp };
         }
@@ -9873,6 +10479,24 @@ async function openChatDetail(characterId) {
     // 设置备注名称
     document.getElementById('chatDetailName').textContent = character.remark;
     
+    // 初始化用户头像（从 localStorage 加载）
+    const savedUserData = localStorage.getItem('chatUserData');
+    if (savedUserData) {
+        try {
+            const userData = JSON.parse(savedUserData);
+            const userAvatarImg = document.getElementById('userAvatarImage');
+            const userAvatarPlaceholder = document.getElementById('userAvatarPlaceholder');
+            
+            if (userData.avatar && userAvatarImg && userAvatarPlaceholder) {
+                userAvatarImg.src = userData.avatar;
+                userAvatarImg.style.display = 'block';
+                userAvatarPlaceholder.style.display = 'none';
+            }
+        } catch (e) {
+            console.error('加载用户头像失败:', e);
+        }
+    }
+    
     // 加载历史消息
     await loadChatMessages(characterId);
     
@@ -10032,6 +10656,21 @@ function openChatSettings() {
     // 加载时间感知设置（默认开启）
     const timeAwareness = currentChatCharacter.timeAwareness !== undefined ? currentChatCharacter.timeAwareness : true;
     document.getElementById('timeAwarenessToggle').checked = timeAwareness;
+    
+    // 加载系统卡片显示设置（默认开启）
+    const showSystemCardBubbles = localStorage.getItem('showSystemCardBubbles') !== 'false';
+    document.getElementById('showSystemCardBubblesToggle').checked = showSystemCardBubbles;
+    
+    // 加载情头模式设置（默认关闭）
+    if (typeof getCoupleMode === 'function') {
+        const coupleModeEnabled = getCoupleMode();
+        document.getElementById('coupleModeToggle').checked = coupleModeEnabled;
+    }
+    
+    // 加载记忆库存档列表
+    if (typeof renderMemoryArchiveList === 'function') {
+        renderMemoryArchiveList();
+    }
     
     // 显示设置界面
     document.getElementById('chatSettingsPage').style.display = 'block';
@@ -11082,6 +11721,10 @@ async function saveChatSettings() {
     // 保存时间感知设置
     currentChatCharacter.timeAwareness = document.getElementById('timeAwarenessToggle').checked;
     
+    // 保存系统卡片显示设置
+    const showSystemCardBubbles = document.getElementById('showSystemCardBubblesToggle').checked;
+    localStorage.setItem('showSystemCardBubbles', showSystemCardBubbles.toString());
+    
     // 保存长期记忆设置
     if (typeof saveLongTermMemorySettings === 'function') {
         saveLongTermMemorySettings();
@@ -11111,30 +11754,47 @@ async function saveChatSettings() {
     };
     localStorage.setItem('chatUserData', JSON.stringify(userData));
     
+    // 实时更新聊天界面的用户头像
+    if (userAvatar) {
+        const chatUserAvatars = document.querySelectorAll('.chat-message-user .chat-avatar-img');
+        chatUserAvatars.forEach(img => {
+            img.src = userAvatar;
+        });
+    }
+    
+    // 更新聊天详情页顶部的角色头像
+    const chatDetailAvatar = document.querySelector('.chat-detail-header .chat-avatar-img');
+    if (chatDetailAvatar && charAvatar) {
+        chatDetailAvatar.src = charAvatar;
+    }
+    
+    // 实时更新聊天消息中该角色的所有头像
+    if (charAvatar) {
+        const charAvatars = document.querySelectorAll('.chat-message-char .chat-avatar-img');
+        charAvatars.forEach(img => {
+            img.src = charAvatar;
+        });
+    }
+    
     // 关闭设置界面
     closeChatSettingsPage();
     
     showIosAlert('成功', '设置已保存');
 }
 
-// CHAR头像库（占位）
+// CHAR头像库（已废弃，使用角色专属头像库管理）
 function showCharAvatarLibrary() {
-    showIosAlert('提示', '头像库功能开发中');
+    // 直接跳转到角色专属头像库管理
+    if (typeof openAvatarLibraryManager === 'function') {
+        openAvatarLibraryManager();
+    } else {
+        showIosAlert('提示', '请先打开一个聊天');
+    }
 }
 
-// CHAR头像框（占位）
-function showCharAvatarFrame() {
-    showIosAlert('提示', '头像框功能开发中');
-}
-
-// USER头像库（占位）
-function showUserAvatarLibrary() {
-    showIosAlert('提示', '头像库功能开发中');
-}
-
-// USER头像框（占位）
-function showUserAvatarFrame() {
-    showIosAlert('提示', '头像框功能开发中');
+// 情侣头像库功能（在couple-avatar.js中实现）
+function showCoupleAvatarLibrary() {
+    openCoupleAvatarLibrary();
 }
 
 // 切换语音输入
@@ -11217,6 +11877,10 @@ async function showEmojiPicker() {
                 const transferSendMatch = msg.match(/^\[transfer:([\d.]+)(?::(.+))?\]$/);
                 // 检查是否是银行转账指令 [银行转账:金额:原因]
                 const bankTransferMatch = msg.match(/^\[银行转账:([\d.]+):(.+)\]$/);
+                // 检查是否是头像更换指令 [更换头像:头像名称] 或 [更换头像:头像名称:原因]
+                const avatarChangeMatch = msg.match(/^\[更换头像:([^:\]]+)(?::(.+))?\]$/);
+                // 检查是否是情头更换指令 [换情头:情头名称]
+                const coupleAvatarChangeMatch = msg.match(/^\[换情头:([^:\]]+)\]$/);
                 // 检查是否是角色发送图片指令 [image:描述]
                 const charImageMatch = msg.match(/^\[image:(.+)\]$/);
                 // 检查是否是角色发送定位指令 [location:地址] 或 [location:地址:坐标] 或 [location:地址:坐标:距离]
@@ -11328,6 +11992,29 @@ async function showEmojiPicker() {
                     }
                     // 跳过这条指令，不显示为普通消息
                     continue;
+                } else if (avatarChangeMatch) {
+                    // 角色更换头像
+                    const avatarName = avatarChangeMatch[1].trim();
+                    const reason = (avatarChangeMatch[2] || '').trim();
+                    // 执行头像更换（异步，不阻塞消息显示）
+                    if (typeof executeAvatarChange === 'function') {
+                        executeAvatarChange(avatarName, reason).catch(err => {
+                            console.error('头像更换执行失败:', err);
+                        });
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
+                } else if (coupleAvatarChangeMatch) {
+                    // 角色更换情头
+                    const coupleName = coupleAvatarChangeMatch[1].trim();
+                    // 执行情头更换（异步，不阻塞消息显示）
+                    if (typeof aiChangeCoupleAvatar === 'function') {
+                        aiChangeCoupleAvatar(coupleName).catch(err => {
+                            console.error('情头更换执行失败:', err);
+                        });
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
                 } else if (charImageMatch) {
                     // 角色发送图片消息（虚拟图片，显示为灰色占位+描述）
                     const imageDesc = charImageMatch[1];
@@ -11407,6 +12094,8 @@ async function showEmojiPicker() {
                         else if (quotedMsg.messageType === 'transfer') quotedContent = '[转账]';
                         else if (quotedMsg.messageType === 'location') quotedContent = '[位置]';
                         else if (quotedMsg.messageType === 'bankTransfer') quotedContent = '[银行转账]';
+                        else if (quotedMsg.messageType === 'avatarChange') quotedContent = '[更换头像]';
+                        else if (quotedMsg.messageType === 'coupleAvatarChange') quotedContent = '[更换情头]';
                         
                         // 查找下一条消息作为回复内容
                         let replyContent = '';
@@ -11538,63 +12227,8 @@ async function showEmojiPicker() {
 // ============================================================
 // 提示词模板系统
 // ============================================================
-// 
-// 【预留】提示词模板架构说明：
-// 1. PROMPT_TEMPLATES：内置提示词模板库，后续会预置十几种不同风格的提示词
-// 2. 用户可以自定义提示词模板，存储在 IndexedDB 中
-// 3. 每个角色可以选择使用哪个模板，或使用默认模板
-// 4. 模板通过 id 标识，type 区分内置(built-in)和用户自定义(custom)
-//
-// 模板结构：
-// {
-//   id: 'template_xxx',        // 唯一标识
-//   name: '模板名称',           // 显示名称
-//   description: '模板简介',    // 简短描述
-//   type: 'built-in' | 'custom', // 内置 or 用户自定义
-//   content: '提示词正文...',    // 提示词内容，支持变量占位符
-//   tags: ['标签1', '标签2'],   // 分类标签（可选）
-//   createdAt: timestamp,       // 创建时间
-//   updatedAt: timestamp        // 更新时间
-// }
-//
-// 支持的占位符变量（在content中使用）：
-// {{charName}}       - 角色名字
-// {{charRemark}}     - 角色备注
-// {{charDescription}} - 角色描述
-// {{userName}}       - 用户名字
-// {{userDescription}} - 用户描述
-// ============================================================
-
-// 内置提示词模板库 —— 后续在这里添加预设模板
-const PROMPT_TEMPLATES = [
-    {
-        id: 'default',
-        name: '默认 - 自然聊天',
-        description: '像真人一样自然地手机聊天，有生活感和情绪波动',
-        type: 'built-in',
-        // content 为空表示使用 buildRolePlaySystemPrompt 中的硬编码默认提示词
-        content: '',
-        tags: ['日常', '聊天']
-    }
-    // 【预留】后续内置模板示例：
-    // {
-    //     id: 'sweet',
-    //     name: '甜系恋人',
-    //     description: '温柔甜蜜的恋人聊天风格',
-    //     type: 'built-in',
-    //     content: '你的提示词内容...',
-    //     tags: ['恋爱', '甜']
-    // },
-    // {
-    //     id: 'cool',
-    //     name: '高冷御姐/男',
-    //     description: '话少但句句到位，偶尔毒舌',
-    //     type: 'built-in',
-    //     content: '你的提示词内容...',
-    //     tags: ['高冷', '毒舌']
-    // },
-    // ... 更多内置模板
-];
+// 提示词定义已移至 prompts.js 文件
+// 本文件保留提示词相关的辅助函数
 
 // 获取当前角色使用的提示词模板ID（默认返回'default'）
 function getCurrentPromptTemplateId() {
@@ -11913,6 +12547,52 @@ ${character.description ? `\n${character.description}` : ''}
 - 比如对方说"今天天气真好"（消息ID是msg_123），你想针对这句话回复，就发：[quote:msg_123]
 - 然后下一条消息再发你的回复内容
 - 不要滥用，在需要针对性回复时自然地使用就好`);
+
+    // 5.78 角色更换头像能力
+    // 检查角色是否有头像库
+    if (character) {
+        const avatarLibrary = await getCharacterAvatarLibrary(character.id);
+        if (avatarLibrary && avatarLibrary.length > 0) {
+            const avatarList = avatarLibrary.map(a => a.name).join('、');
+            parts.push(`\n你可以根据自己的心情、情绪或场景主动更换头像。
+你的头像库里有：${avatarList}
+要更换头像的时候，用这个格式：[更换头像:头像名称] 或 [更换头像:头像名称:原因]
+- 头像名称必须从上面列表里选，不能自己编
+- 支持模糊匹配，比如头像叫"生气的表情"，你写"生气"也能匹配到
+- 更换头像消息单独一条发，不要和文字混在同一条消息里
+- 原因是可选的，你可以写也可以不写
+- 什么时候换、换不换，完全看你自己的心情，不用刻意`);
+        }
+    }
+
+    // 5.79 情侣头像更换能力
+    if (typeof getCoupleMode === 'function' && getCoupleMode()) {
+        // 情头模式已开启
+        if (typeof getCoupleAvatarLibrary === 'function' && character && character.id) {
+            // 只获取当前角色的情头库
+            const coupleLibrary = await getCoupleAvatarLibrary(character.id);
+            // 只有当前角色有情头时才注入提示词
+            if (coupleLibrary && coupleLibrary.length > 0) {
+                const coupleList = coupleLibrary.map(c => `"${c.coupleName}"${c.description ? `（${c.description}）` : ''}`).join('、');
+                const currentCoupleId = typeof getCurrentCoupleId === 'function' ? getCurrentCoupleId() : null;
+                let currentCoupleName = '';
+                if (currentCoupleId) {
+                    const currentCouple = coupleLibrary.find(c => c.id === currentCoupleId);
+                    if (currentCouple) {
+                        currentCoupleName = currentCouple.coupleName;
+                    }
+                }
+                
+                parts.push(`\n你可以根据聊天氛围或用户要求更换情侣头像（会同时改变你和用户的头像）。
+你的情侣头像库里有：${coupleList}
+要更换情头的时候，用这个格式：[换情头:情头名称]
+- 情头名称必须从上面列表里选，不能自己编
+- 支持模糊匹配
+- 更换情头消息单独一条发，不要和文字混在同一条消息里
+- 什么时候换、换不换，完全看你自己的判断，不用刻意`);
+            }
+        }
+    }
 
     // 5.8 时间感知
     if (character && character.timeAwareness !== false) {
@@ -12277,6 +12957,12 @@ async function callAIRolePlay(targetCharacter) {
             const cardInfo = msg.bankTransferCard || '银行卡';
             content = `（你刚刚通过银行向对方的${cardInfo}转账了${amount}元${reason ? '，原因：' + reason : ''}。）`;
         }
+        // 头像更换消息：转换为自然描述
+        if (msg.messageType === 'avatarChange') {
+            const avatarName = msg.avatarChangeName || '';
+            const reason = msg.avatarChangeReason || '';
+            content = `（你刚刚更换了头像为"${avatarName}"${reason ? '，原因：' + reason : ''}。）`;
+        }
         // 引用消息：转换为自然描述
         if (msg.messageType === 'quote') {
             const quotedSender = msg.quotedSender || '对方';
@@ -12309,6 +12995,12 @@ async function callAIRolePlay(targetCharacter) {
     
     // 调用API
     try {
+        // 创建新的AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = new AbortController();
+        }
+        const signal = (typeof currentAbortController !== 'undefined') ? currentAbortController.signal : undefined;
+        
         let response;
         
         if (settings.provider === 'hakimi') {
@@ -12346,7 +13038,8 @@ async function callAIRolePlay(targetCharacter) {
                         topP: settings.topP !== undefined ? settings.topP : 0.95,
                         maxOutputTokens: settings.maxTokens || 2048
                     }
-                })
+                }),
+                signal: signal
             });
         } else if (settings.provider === 'claude') {
             // Claude API
@@ -12388,7 +13081,8 @@ async function callAIRolePlay(targetCharacter) {
                     temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
                     system: systemPrompt,
                     messages: claudeMessages
-                })
+                }),
+                signal: signal
             });
         } else {
             // OpenAI-compatible API (包括 DeepSeek 和 Custom)
@@ -12423,8 +13117,14 @@ async function callAIRolePlay(targetCharacter) {
                     messages: openaiMessages,
                     temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
                     max_tokens: settings.maxTokens || 2048
-                })
+                }),
+                signal: signal
             });
+        }
+        
+        // 清除AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = null;
         }
         
         if (!response.ok) {
@@ -12480,6 +13180,17 @@ async function callAIRolePlay(targetCharacter) {
             return cleanAIResponse(aiResponse);
         }
     } catch (error) {
+        // 清除AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = null;
+        }
+        
+        // 检查是否是用户中断
+        if (error.name === 'AbortError') {
+            console.log('API调用已被用户中断');
+            throw new Error('API调用已被用户中断');
+        }
+        
         console.error('API调用错误:', error);
         throw error;
     }
@@ -12756,6 +13467,15 @@ async function handleResend() {
                 allBubbles[i].remove();
                 removed++;
             }
+        }
+
+        // 立即更新聊天列表的预览消息
+        const lastMsg = await getLastMessageForCharacter(currentChatCharacter.id);
+        if (lastMsg) {
+            await updateChatListLastMessage(currentChatCharacter.id, lastMsg.text, lastMsg.time);
+        } else {
+            // 如果没有消息了，清空预览
+            await updateChatListLastMessage(currentChatCharacter.id, '', '');
         }
 
         // 关闭扩展面板
@@ -15003,6 +15723,10 @@ async function saveMessageToDB(messageObj) {
                         : messageObj.messageType === 'voice' ? '[语音消息]' 
                         : messageObj.messageType === 'transfer' ? '[转账]' 
                         : messageObj.messageType === 'location' ? '[位置]'
+                        : messageObj.messageType === 'bankTransfer' ? '[银行转账]'
+                        : messageObj.messageType === 'avatarChange' ? '[更换头像]'
+                        : messageObj.messageType === 'coupleAvatarChange' ? '[更换情头]'
+                        : messageObj.messageType === 'systemNotice' ? messageObj.content
                         : (messageObj.content || '').substring(0, 50);
                     character.lastMessage = previewText;
                     character.lastMessageTime = messageObj.timestamp || new Date().toISOString();
@@ -15031,6 +15755,10 @@ async function getLastMessageForCharacter(characterId) {
         else if (last.messageType === 'voice') previewText = '[语音消息]';
         else if (last.messageType === 'transfer') previewText = '[转账]';
         else if (last.messageType === 'location') previewText = '[位置]';
+        else if (last.messageType === 'bankTransfer') previewText = '[银行转账]';
+        else if (last.messageType === 'avatarChange') previewText = '[更换头像]';
+        else if (last.messageType === 'coupleAvatarChange') previewText = '[更换情头]';
+        else if (last.messageType === 'systemNotice') previewText = last.content || '';
         else previewText = (last.content || '').substring(0, 50);
         return { text: previewText, time: last.timestamp };
     } catch (e) {
@@ -15093,6 +15821,597 @@ async function clearAllChatMessages() {
     } catch (error) {
         console.error('清除聊天记录失败:', error);
         showToast('清除失败，请重试');
+    }
+}
+
+// 导出当前角色的聊天记录
+async function exportChatHistory() {
+    if (!currentChatCharacter) {
+        showIosAlert('提示', '请先选择一个角色');
+        return;
+    }
+
+    try {
+        const characterId = currentChatCharacter.id;
+        const characterName = currentChatCharacter.remark || currentChatCharacter.name || '未命名';
+        
+        // 1. 获取该角色的所有聊天记录
+        const allChats = await getAllChatsFromDB();
+        const characterChats = allChats.filter(c => c.characterId === characterId);
+
+        if (characterChats.length === 0) {
+            const confirmed = await iosConfirm(
+                '当前角色没有聊天记录，是否仍要导出角色设置和表情包？',
+                '提示'
+            );
+            if (!confirmed) return;
+        }
+
+        // 2. 获取角色的长期记忆
+        const longTermMemories = await getLongTermMemories(characterId);
+
+        // 3. 获取角色专属表情包
+        const allImages = await getAllImagesFromDB();
+        const characterStickers = allImages.filter(img => 
+            img.type === 'charSticker' && 
+            img.characterIds && 
+            img.characterIds.includes(characterId)
+        );
+
+        // 4. 获取角色设置
+        const characterSettings = {
+            id: currentChatCharacter.id,
+            name: currentChatCharacter.name,
+            remark: currentChatCharacter.remark,
+            description: currentChatCharacter.description,
+            avatar: currentChatCharacter.avatar,
+            shortTermMemory: currentChatCharacter.shortTermMemory,
+            timeAwareness: currentChatCharacter.timeAwareness,
+            longTermMemoryInterval: currentChatCharacter.longTermMemoryInterval,
+            longTermMemoryFormat: currentChatCharacter.longTermMemoryFormat,
+            longTermMemoryCustomPrompt: currentChatCharacter.longTermMemoryCustomPrompt,
+            ltmCondenseFormat: currentChatCharacter.ltmCondenseFormat,
+            ltmCondenseCustomPrompt: currentChatCharacter.ltmCondenseCustomPrompt,
+            mountedChatIds: currentChatCharacter.mountedChatIds,
+            createTime: currentChatCharacter.createTime
+        };
+
+        // 5. 获取记忆库存档
+        let memoryArchives = [];
+        if (typeof getMemoryArchives === 'function') {
+            const allArchives = await getMemoryArchives();
+            // 只导出与当前角色相关的存档
+            memoryArchives = allArchives.filter(archive => archive.characterId === characterId);
+        }
+
+        // 构建导出数据
+        const exportData = {
+            version: '3.0', // 升级版本号以支持记忆库
+            exportTime: new Date().toISOString(),
+            characterSettings: characterSettings,
+            messageCount: characterChats.length,
+            messages: characterChats,
+            longTermMemories: longTermMemories,
+            characterStickers: characterStickers.map(s => ({
+                id: s.id,
+                name: s.name,
+                data: s.data,
+                category: s.category,
+                characterIds: s.characterIds,
+                accessType: s.accessType
+            })),
+            memoryArchives: memoryArchives // 新增：记忆库存档
+        };
+
+        // 转换为JSON字符串
+        const jsonStr = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        
+        // 创建下载链接
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `聊天记录_${characterName}_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        const summary = [
+            `聊天记录: ${characterChats.length} 条`,
+            `长期记忆: ${longTermMemories.length} 条`,
+            `专属表情包: ${characterStickers.length} 个`,
+            `记忆库存档: ${memoryArchives.length} 个`
+        ].join('\n');
+        
+        showToast(`导出成功！\n${summary}`);
+    } catch (error) {
+        console.error('导出聊天记录失败:', error);
+        showIosAlert('错误', '导出失败，请重试');
+    }
+}
+
+// 导入聊天记录
+async function importChatHistory() {
+    if (!currentChatCharacter) {
+        showIosAlert('提示', '请先选择一个角色');
+        return;
+    }
+
+    // 创建文件选择器
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            // 读取文件内容
+            const text = await file.text();
+            const importData = JSON.parse(text);
+
+            // 验证数据格式
+            if (!importData.version || !importData.messages || !Array.isArray(importData.messages)) {
+                showIosAlert('错误', '文件格式不正确');
+                return;
+            }
+
+            // 显示选择界面
+            showImportSelectionDialog(importData);
+        } catch (error) {
+            console.error('导入聊天记录失败:', error);
+            showIosAlert('错误', '导入失败，请检查文件格式');
+        }
+    };
+
+    input.click();
+}
+
+// 显示导入选择对话框
+function showImportSelectionDialog(importData) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10003';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.cssText = 'width: 90%; max-width: 500px; max-height: 85vh; display: flex; flex-direction: column;';
+    
+    // 标题
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.style.padding = '20px 20px 10px';
+    titleEl.textContent = '选择要导入的内容';
+    
+    // 副标题 - 显示导入数据的统计
+    const subtitleEl = document.createElement('div');
+    subtitleEl.className = 'ios-dialog-message';
+    subtitleEl.style.cssText = 'padding: 0 20px 10px; font-size: 13px; color: #666;';
+    const stats = [];
+    if (importData.messages && importData.messages.length > 0) {
+        stats.push(`${importData.messages.length} 条消息`);
+    }
+    if (importData.longTermMemories && importData.longTermMemories.length > 0) {
+        stats.push(`${importData.longTermMemories.length} 条长期记忆`);
+    }
+    if (importData.characterStickers && importData.characterStickers.length > 0) {
+        stats.push(`${importData.characterStickers.length} 个表情包`);
+    }
+    if (importData.memoryArchives && importData.memoryArchives.length > 0) {
+        stats.push(`${importData.memoryArchives.length} 个记忆库存档`);
+    }
+    subtitleEl.textContent = `文件包含: ${stats.join('、')}`;
+    
+    // 导入选项区域
+    const optionsContainer = document.createElement('div');
+    optionsContainer.style.cssText = 'padding: 15px 20px; border-top: 1px solid #e5e5ea; border-bottom: 1px solid #e5e5ea; background: #f8f8f8;';
+    
+    // 角色设置选项
+    if (importData.characterSettings) {
+        const settingsOption = createImportOption(
+            'importSettings',
+            '导入角色设置',
+            '包括短期记忆、长期记忆设置、时间感知等',
+            true
+        );
+        optionsContainer.appendChild(settingsOption);
+    }
+    
+    // 长期记忆选项
+    if (importData.longTermMemories && importData.longTermMemories.length > 0) {
+        const memoriesOption = createImportOption(
+            'importMemories',
+            '导入长期记忆',
+            `${importData.longTermMemories.length} 条记忆`,
+            true
+        );
+        optionsContainer.appendChild(memoriesOption);
+    }
+    
+    // 表情包选项
+    if (importData.characterStickers && importData.characterStickers.length > 0) {
+        const stickersOption = createImportOption(
+            'importStickers',
+            '导入角色专属表情包',
+            `${importData.characterStickers.length} 个表情包`,
+            true
+        );
+        optionsContainer.appendChild(stickersOption);
+    }
+    
+    // 记忆库选项
+    if (importData.memoryArchives && importData.memoryArchives.length > 0) {
+        const archivesOption = createImportOption(
+            'importArchives',
+            '导入记忆库存档',
+            `${importData.memoryArchives.length} 个存档`,
+            true
+        );
+        optionsContainer.appendChild(archivesOption);
+    }
+    
+    // 消息选择区域
+    let messageList = null;
+    if (importData.messages && importData.messages.length > 0) {
+        const messagesHeader = document.createElement('div');
+        messagesHeader.style.cssText = 'padding: 10px 20px; border-top: 1px solid #e5e5ea; display: flex; justify-content: space-between; align-items: center; background: #f8f8f8;';
+        
+        const messagesTitle = document.createElement('div');
+        messagesTitle.style.cssText = 'font-size: 14px; font-weight: 600; color: #333;';
+        messagesTitle.textContent = '选择要导入的消息';
+        
+        const selectAllContainer = document.createElement('div');
+        selectAllContainer.style.cssText = 'display: flex; gap: 8px;';
+        
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.textContent = '全选';
+        selectAllBtn.style.cssText = 'padding: 4px 12px; background: #007bff; color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer;';
+        selectAllBtn.onclick = () => toggleSelectAll(true);
+        
+        const deselectAllBtn = document.createElement('button');
+        deselectAllBtn.textContent = '取消';
+        deselectAllBtn.style.cssText = 'padding: 4px 12px; background: #6c757d; color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer;';
+        deselectAllBtn.onclick = () => toggleSelectAll(false);
+        
+        selectAllContainer.appendChild(selectAllBtn);
+        selectAllContainer.appendChild(deselectAllBtn);
+        
+        messagesHeader.appendChild(messagesTitle);
+        messagesHeader.appendChild(selectAllContainer);
+        
+        // 消息列表容器
+        messageList = document.createElement('div');
+        messageList.id = 'importMessageList';
+        messageList.style.cssText = 'flex: 1; overflow-y: auto; padding: 10px 20px; min-height: 200px; max-height: 300px;';
+        
+        // 渲染消息列表
+        importData.messages.forEach((msg, index) => {
+            const msgItem = document.createElement('div');
+            msgItem.className = 'import-msg-item';
+            msgItem.style.cssText = 'display: flex; gap: 10px; padding: 12px; background: #f8f8f8; border-radius: 10px; margin-bottom: 8px; cursor: pointer; transition: background 0.2s;';
+            msgItem.dataset.index = index;
+            
+            // 复选框
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+            checkbox.className = 'import-msg-checkbox';
+            checkbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; margin-top: 2px;';
+            checkbox.onclick = (e) => {
+                e.stopPropagation();
+                updateSelectedCount();
+            };
+            
+            // 消息内容
+            const msgContent = document.createElement('div');
+            msgContent.style.cssText = 'flex: 1; min-width: 0;';
+            
+            const msgHeader = document.createElement('div');
+            msgHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;';
+            
+            const senderLabel = document.createElement('span');
+            senderLabel.style.cssText = 'font-size: 12px; font-weight: 600; color: ' + (msg.type === 'user' ? '#007bff' : '#34c759') + ';';
+            senderLabel.textContent = msg.type === 'user' ? '用户' : '角色';
+            
+            const timeLabel = document.createElement('span');
+            timeLabel.style.cssText = 'font-size: 11px; color: #999;';
+            timeLabel.textContent = formatMessageTime(msg.timestamp);
+            
+            msgHeader.appendChild(senderLabel);
+            msgHeader.appendChild(timeLabel);
+            
+            const msgText = document.createElement('div');
+            msgText.style.cssText = 'font-size: 13px; color: #333; word-break: break-word; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;';
+            msgText.textContent = msg.content || '[无内容]';
+            
+            msgContent.appendChild(msgHeader);
+            msgContent.appendChild(msgText);
+            
+            msgItem.appendChild(checkbox);
+            msgItem.appendChild(msgContent);
+            
+            // 点击整个项目切换选中状态
+            msgItem.onclick = () => {
+                checkbox.checked = !checkbox.checked;
+                updateSelectedCount();
+            };
+            
+            msgItem.onmouseenter = () => {
+                msgItem.style.background = '#e8e8e8';
+            };
+            msgItem.onmouseleave = () => {
+                msgItem.style.background = '#f8f8f8';
+            };
+            
+            messageList.appendChild(msgItem);
+        });
+    }
+    
+    // 选中计数
+    const selectedCount = document.createElement('div');
+    selectedCount.id = 'importSelectedCount';
+    selectedCount.style.cssText = 'padding: 8px 20px; font-size: 12px; color: #666; text-align: center; border-top: 1px solid #e5e5ea; background: #f8f8f8;';
+    updateSelectedCount();
+    
+    // 按钮区域
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    buttonsEl.style.borderTop = '1px solid #e5e5ea';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    
+    const importBtn = document.createElement('button');
+    importBtn.className = 'ios-dialog-button primary';
+    importBtn.textContent = '开始导入';
+    importBtn.onclick = () => executeImport(importData);
+    
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(importBtn);
+    
+    dialog.appendChild(titleEl);
+    dialog.appendChild(subtitleEl);
+    dialog.appendChild(optionsContainer);
+    if (messageList) {
+        const messagesHeader = optionsContainer.nextSibling;
+        dialog.appendChild(messagesHeader || createMessagesHeader());
+        dialog.appendChild(messageList);
+    }
+    dialog.appendChild(selectedCount);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    // 创建导入选项
+    function createImportOption(id, title, description, checked) {
+        const option = document.createElement('div');
+        option.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #e5e5ea;';
+        
+        const textContainer = document.createElement('div');
+        textContainer.style.cssText = 'flex: 1;';
+        
+        const titleEl = document.createElement('div');
+        titleEl.style.cssText = 'font-size: 14px; font-weight: 500; color: #333; margin-bottom: 2px;';
+        titleEl.textContent = title;
+        
+        const descEl = document.createElement('div');
+        descEl.style.cssText = 'font-size: 12px; color: #999;';
+        descEl.textContent = description;
+        
+        textContainer.appendChild(titleEl);
+        textContainer.appendChild(descEl);
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = id;
+        checkbox.checked = checked;
+        checkbox.style.cssText = 'width: 20px; height: 20px; cursor: pointer;';
+        
+        option.appendChild(textContainer);
+        option.appendChild(checkbox);
+        
+        return option;
+    }
+    
+    function createMessagesHeader() {
+        const messagesHeader = document.createElement('div');
+        messagesHeader.style.cssText = 'padding: 10px 20px; border-top: 1px solid #e5e5ea; display: flex; justify-content: space-between; align-items: center; background: #f8f8f8;';
+        
+        const messagesTitle = document.createElement('div');
+        messagesTitle.style.cssText = 'font-size: 14px; font-weight: 600; color: #333;';
+        messagesTitle.textContent = '选择要导入的消息';
+        
+        messagesHeader.appendChild(messagesTitle);
+        return messagesHeader;
+    }
+    
+    // 全选/取消全选功能
+    function toggleSelectAll(checked) {
+        const checkboxes = document.querySelectorAll('.import-msg-checkbox');
+        checkboxes.forEach(cb => cb.checked = checked);
+        updateSelectedCount();
+    }
+    
+    // 更新选中数量
+    function updateSelectedCount() {
+        const checkboxes = document.querySelectorAll('.import-msg-checkbox');
+        const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+        const totalCount = checkboxes.length;
+        selectedCount.textContent = `已选择 ${checkedCount} / ${totalCount} 条消息`;
+    }
+    
+    // 执行导入
+    async function executeImport(data) {
+        try {
+            const importSettings = document.getElementById('importSettings')?.checked || false;
+            const importMemories = document.getElementById('importMemories')?.checked || false;
+            const importStickers = document.getElementById('importStickers')?.checked || false;
+            const importArchives = document.getElementById('importArchives')?.checked || false;
+            
+            const checkboxes = document.querySelectorAll('.import-msg-checkbox');
+            const selectedMessages = [];
+            
+            checkboxes.forEach((cb, index) => {
+                if (cb.checked) {
+                    selectedMessages.push(data.messages[index]);
+                }
+            });
+            
+            if (!importSettings && !importMemories && !importStickers && !importArchives && selectedMessages.length === 0) {
+                showIosAlert('提示', '请至少选择一项内容导入');
+                return;
+            }
+            
+            closeDialog();
+            
+            let successLog = [];
+            
+            // 1. 导入角色设置
+            if (importSettings && data.characterSettings) {
+                currentChatCharacter.shortTermMemory = data.characterSettings.shortTermMemory;
+                currentChatCharacter.timeAwareness = data.characterSettings.timeAwareness;
+                currentChatCharacter.longTermMemoryInterval = data.characterSettings.longTermMemoryInterval;
+                currentChatCharacter.longTermMemoryFormat = data.characterSettings.longTermMemoryFormat;
+                currentChatCharacter.longTermMemoryCustomPrompt = data.characterSettings.longTermMemoryCustomPrompt;
+                currentChatCharacter.ltmCondenseFormat = data.characterSettings.ltmCondenseFormat;
+                currentChatCharacter.ltmCondenseCustomPrompt = data.characterSettings.ltmCondenseCustomPrompt;
+                currentChatCharacter.mountedChatIds = data.characterSettings.mountedChatIds;
+                
+                await saveChatCharacters();
+                successLog.push('角色设置');
+            }
+            
+            // 2. 导入长期记忆
+            if (importMemories && data.longTermMemories && data.longTermMemories.length > 0) {
+                for (const memory of data.longTermMemories) {
+                    await addLongTermMemory(currentChatCharacter.id, memory.content, memory.source || 'imported');
+                }
+                successLog.push(`${data.longTermMemories.length} 条长期记忆`);
+            }
+            
+            // 3. 导入表情包
+            if (importStickers && data.characterStickers && data.characterStickers.length > 0) {
+                for (const sticker of data.characterStickers) {
+                    // 生成新的ID避免冲突
+                    const newSticker = {
+                        ...sticker,
+                        id: 'charSticker_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        type: 'charSticker',
+                        timestamp: Date.now(),
+                        // 更新角色ID为当前角色
+                        characterIds: [currentChatCharacter.id]
+                    };
+                    
+                    await saveImageToDB(newSticker.id, newSticker.data, 'charSticker');
+                    
+                    // 更新图片对象的其他属性
+                    const allImages = await getAllImagesFromDB();
+                    const savedImage = allImages.find(img => img.id === newSticker.id);
+                    if (savedImage) {
+                        savedImage.name = newSticker.name;
+                        savedImage.category = newSticker.category;
+                        savedImage.characterIds = newSticker.characterIds;
+                        savedImage.accessType = newSticker.accessType;
+                        await saveImageToDB(savedImage.id, savedImage.data, 'charSticker');
+                    }
+                }
+                successLog.push(`${data.characterStickers.length} 个表情包`);
+            }
+            
+            // 4. 导入记忆库存档
+            if (importArchives && data.memoryArchives && data.memoryArchives.length > 0 && typeof getMemoryArchives === 'function' && typeof saveMemoryArchives === 'function') {
+                const existingArchives = await getMemoryArchives();
+                
+                for (const archive of data.memoryArchives) {
+                    // 生成新的ID避免冲突
+                    const newArchive = {
+                        ...archive,
+                        id: 'archive_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                        // 更新角色ID为当前角色
+                        characterId: currentChatCharacter.id,
+                        // 更新存档中的角色数据
+                        character: {
+                            ...archive.character,
+                            id: currentChatCharacter.id
+                        },
+                        // 更新消息中的角色ID
+                        messages: archive.messages ? archive.messages.map(msg => ({
+                            ...msg,
+                            characterId: currentChatCharacter.id
+                        })) : []
+                    };
+                    
+                    existingArchives.unshift(newArchive);
+                }
+                
+                await saveMemoryArchives(existingArchives);
+                
+                // 刷新记忆库列表
+                if (typeof renderMemoryArchiveList === 'function') {
+                    await renderMemoryArchiveList();
+                }
+                
+                successLog.push(`${data.memoryArchives.length} 个记忆库存档`);
+            }
+            
+            // 5. 导入选中的消息
+            if (selectedMessages.length > 0) {
+                for (let i = 0; i < selectedMessages.length; i++) {
+                    const msg = selectedMessages[i];
+                    // 更新消息的角色ID为当前角色
+                    msg.characterId = currentChatCharacter.id;
+                    
+                    // 生成新的消息ID（避免冲突）
+                    msg.id = Date.now().toString() + Math.random() + '_imported_' + i;
+                    
+                    // 保存到数据库
+                    await saveMessageToDB(msg);
+                }
+                successLog.push(`${selectedMessages.length} 条消息`);
+            }
+            
+            // 刷新聊天界面
+            if (selectedMessages.length > 0 && currentChatCharacter) {
+                await loadChatMessages(currentChatCharacter.id);
+                
+                // 更新聊天列表
+                const lastMsg = selectedMessages[selectedMessages.length - 1];
+                await updateChatListLastMessage(currentChatCharacter.id, lastMsg.content, lastMsg.timestamp);
+            }
+            
+            // 刷新对话统计
+            if (typeof updateChatStats === 'function') {
+                await updateChatStats();
+            }
+            
+            // 刷新长期记忆列表（如果打开了）
+            if (importMemories && typeof renderLongTermMemoryList === 'function') {
+                const ltmPage = document.getElementById('longTermMemoryPage');
+                if (ltmPage && ltmPage.style.display !== 'none') {
+                    await renderLongTermMemoryList();
+                }
+            }
+            
+            showToast(`导入成功！\n${successLog.join('、')}`);
+        } catch (error) {
+            console.error('导入失败:', error);
+            showIosAlert('错误', '导入失败，请重试');
+        }
+    }
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+        }, 300);
     }
 }
 
@@ -15225,6 +16544,20 @@ function appendMessageToChat(messageObj) {
     // 如果是银行转账消息，用专门的渲染函数
     if (messageObj.messageType === 'bankTransfer') {
         appendBankTransferMessageToChat(messageObj);
+        return;
+    }
+
+    // 如果是头像更换消息，用专门的渲染函数
+    if (messageObj.messageType === 'avatarChange') {
+        appendAvatarChangeMessageToChat(messageObj);
+        return;
+    }
+
+    // 如果是情头更换消息，用专门的渲染函数
+    if (messageObj.messageType === 'coupleAvatarChange') {
+        if (typeof appendCoupleAvatarChangeCard === 'function') {
+            appendCoupleAvatarChangeCard(messageObj);
+        }
         return;
     }
 

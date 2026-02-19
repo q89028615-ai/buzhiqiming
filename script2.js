@@ -1,6 +1,22 @@
 // ========== script2.js - 扩展功能模块 ==========
 // 依赖 script.js 中的全局变量和函数
 
+// ========== API调用中断控制 ==========
+let currentAbortController = null; // 用于中断API调用的控制器
+
+// 停止当前的API调用
+function stopApiCall() {
+    if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+        showToast('已停止API调用');
+        console.log('API调用已被用户中断');
+    } else {
+        // 没有正在进行的调用，点击无反应（静默处理）
+        console.log('当前没有正在进行的API调用');
+    }
+}
+
 // ========== 银行卡转账功能 ==========
 
 // 切换银行卡转账功能开关
@@ -213,10 +229,15 @@ async function executeBankTransfer(amount, reason) {
     // 添加账单记录
     addBillRecord('income', amount, `银行转账：${reason}`, 'bankcard', settings.selectedCardIndex);
     
-    // 在聊天界面显示银行转账通知（立即显示）
-    await showBankTransferNotification(card, amount, reason);
+    // 检查是否显示系统卡片
+    const showSystemCardBubbles = localStorage.getItem('showSystemCardBubbles') !== 'false';
     
-    // 添加系统消息到聊天记录（告知AI转账详情，立即显示）
+    // 在聊天界面显示银行转账通知（如果开关开启）
+    if (showSystemCardBubbles) {
+        await showBankTransferNotification(card, amount, reason);
+    }
+    
+    // 添加系统消息到聊天记录（告知AI转账详情，始终显示）
     await addBankTransferSystemMessage(card, amount);
     
     // 发送银行短信通知（延迟4秒，等角色消息通知弹窗显示完）
@@ -1589,67 +1610,8 @@ function openTransferActionModal(transferId) {
 
 
 // ========== 长期记忆功能 ==========
-
-// 简化版提示词（给用户看的纯文字版本，用于自定义格式的示例）
-const LTM_SIMPLE_PROMPTS = {
-    diary: `请用日记的方式总结对话。用"我"的口吻，像写日记一样自然、随意、有感情地记录。可以包含内心想法和感受。不要使用方括号、箭头等符号。150-200字左右，保持段落完整。`,
-    
-    narrative: `请用第三人称旁白的方式总结对话。像讲故事一样叙述，有情节、有细节、有情感描写。不要使用方括号、箭头等符号。150-200字左右，保持段落完整。`,
-    
-    objective: `请用客观中立的方式总结对话。像观察报告一样记录事实和行为，少带主观情感。不要使用方括号、箭头等符号。150-200字左右，保持段落完整。`
-};
-
-// 长期记忆提示词格式预设（{charName}和{userName}会在实际使用时替换为真名）
-const LTM_FORMAT_TEMPLATES = {
-    diary: {
-        label: '日记式',
-        preview: '示例：\n今天下午和小明聊了工作的事。他心情不太好，看起来遇到了一些困难。我耐心地听他倾诉，尽力安慰他。后来我们聊到了电影，发现彼此都喜欢科幻片，气氛轻松了很多。感觉我们的关系又近了一步。',
-        summaryPrompt: `你是{charName}，请以你的第一人称视角，像写日记一样，将以下你和{userName}的对话总结为一段自然的文字记录。要求：
-1. 用"我"指代{charName}（你自己），用"{userName}"或对方的名字指代对方
-2. 用完整的句子和段落，像写日记一样自然、随意、有感情
-3. 可以包含你的内心想法、感受和观察
-4. 不要使用任何方括号[]、箭头->等符号标记
-5. 时间信息可以自然地融入叙述中（如"今天下午"、"刚才"）
-6. 总结要包含关键事件、话题、双方的情感和互动
-7. 150-200字左右，保持段落完整
-8. 只输出总结内容，不要输出其他任何内容
-
-对话内容：
-{messages}`
-    },
-    narrative: {
-        label: '旁白式',
-        preview: '示例：\n2月8日下午，小明向她倾诉了工作上的烦恼。他的情绪有些低落，她耐心地陪伴和安慰他。第二天上午，两人聊起了喜欢的电影，发现都对科幻片情有独钟。这次交流让彼此的距离更近了一些，也让小明的心情好转了不少。',
-        summaryPrompt: `请以第三人称旁白的视角，像讲故事一样，将以下{charName}和{userName}的对话总结为一段自然的叙述文字。要求：
-1. 用第三人称称呼双方（用"他/她"或直接用名字）
-2. 像讲故事一样，有情节、有细节、有情感描写
-3. 保持一定的文学性和叙事感，但不要过于夸张
-4. 不要使用任何方括号[]、箭头->等符号标记
-5. 时间可以自然地融入叙述中（如"那天下午"、"随后"）
-6. 总结要包含关键事件、话题、双方的情感变化和互动
-7. 150-200字左右，保持段落完整
-8. 只输出总结内容，不要输出其他任何内容
-
-对话内容：
-{messages}`
-    },
-    objective: {
-        label: '客观记录式',
-        preview: '示例：\n这段时间里，小明分享了他在工作中遇到的困难和压力。通过交流，他得到了一些情感支持和建议。随后的对话中，双方发现了共同的兴趣爱好，包括对科幻电影的喜爱。这次交流促进了彼此的了解，也对小明的情绪状态产生了积极影响。',
-        summaryPrompt: `请以客观中立的视角，将以下{charName}和{userName}的对话总结为一段客观的记录文字。要求：
-1. 用客观、中立的语气描述
-2. 像观察报告一样记录事实和行为
-3. 少带主观情感色彩，多描述可观察的行为和事件
-4. 不要使用任何方括号[]、箭头->等符号标记
-5. 时间可以用"这段时间"、"期间"等词汇自然表达
-6. 总结要包含关键事件、话题、互动内容和影响
-7. 150-200字左右，保持段落完整，语言简洁但完整
-8. 只输出总结内容，不要输出其他任何内容
-
-对话内容：
-{messages}`
-    }
-};
+// 提示词定义已移至 prompts.js 文件
+// 本文件保留长期记忆的功能函数
 
 // 获取角色的长期记忆列表
 async function getLongTermMemories(characterId) {
@@ -1820,53 +1782,69 @@ async function performAutoSummary(characterId, interval) {
         throw new Error('API未配置');
     }
 
+    // 创建新的AbortController
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
+
     let response;
     const messages = [
         { role: 'system', content: '你是一个对话总结助手。请严格按照要求格式输出总结。' },
         { role: 'user', content: summaryPrompt }
     ];
 
-    if (settings.provider === 'hakimi') {
-        const geminiContents = [{ role: 'user', parts: [{ text: summaryPrompt }] }];
-        response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: geminiContents,
-                systemInstruction: { parts: [{ text: '你是一个对话总结助手。请严格按照要求格式输出总结。' }] },
-                generationConfig: { temperature: 0.3, maxOutputTokens: 500 }
-            })
-        });
-    } else if (settings.provider === 'claude') {
-        response = await fetch(`${settings.apiUrl}/messages`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': settings.apiKey,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: settings.model,
-                max_tokens: 500,
-                temperature: 0.3,
-                system: '你是一个对话总结助手。请严格按照要求格式输出总结。',
-                messages: [{ role: 'user', content: summaryPrompt }]
-            })
-        });
-    } else {
-        response = await fetch(`${settings.apiUrl}/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.apiKey}`
-            },
-            body: JSON.stringify({
-                model: settings.model,
-                messages: messages,
-                temperature: 0.3,
-                max_tokens: 500
-            })
-        });
+    try {
+        if (settings.provider === 'hakimi') {
+            const geminiContents = [{ role: 'user', parts: [{ text: summaryPrompt }] }];
+            response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: geminiContents,
+                    systemInstruction: { parts: [{ text: '你是一个对话总结助手。请严格按照要求格式输出总结。' }] },
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 500 }
+                }),
+                signal: signal
+            });
+        } else if (settings.provider === 'claude') {
+            response = await fetch(`${settings.apiUrl}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': settings.apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    max_tokens: 500,
+                    temperature: 0.3,
+                    system: '你是一个对话总结助手。请严格按照要求格式输出总结。',
+                    messages: [{ role: 'user', content: summaryPrompt }]
+                }),
+                signal: signal
+            });
+        } else {
+            response = await fetch(`${settings.apiUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    messages: messages,
+                    temperature: 0.3,
+                    max_tokens: 500
+                }),
+                signal: signal
+            });
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error('API调用已被用户中断');
+        }
+        throw error;
+    } finally {
+        currentAbortController = null;
     }
 
     if (!response.ok) {
@@ -2031,53 +2009,7 @@ function saveLongTermMemorySettings() {
 let ltmCondenseMode = false;
 let ltmCondenseSelected = new Set();
 
-// 精简提示词格式模板
-const LTM_CONDENSE_FORMATS = {
-    'first-person': {
-        name: '第一人称精简',
-        preview: '以"我"的视角总结记忆，保留情感和主观感受',
-        prompt: `请以第一人称（"我"）的视角，将以下多条记忆信息进行总结精简。要求：
-1. 合并重复内容，提取关键信息
-2. 保留重要的情感和主观感受
-3. 使用"我"的口吻叙述
-4. 语言简洁但完整
-5. 只输出总结后的内容，不要输出其他任何内容
-
-以下是需要精简的记忆内容：
-{memories}`
-    },
-    'third-person': {
-        name: '第三人称精简',
-        preview: '以旁观者视角客观总结记忆内容',
-        prompt: `请以第三人称的视角，将以下多条记忆信息进行总结精简。要求：
-1. 合并重复内容，提取关键信息
-2. 使用第三人称叙述（如"用户"、"他/她"等）
-3. 保持客观中立的叙述风格
-4. 语言简洁但完整
-5. 只输出总结后的内容，不要输出其他任何内容
-
-以下是需要精简的记忆内容：
-{memories}`
-    },
-    'objective': {
-        name: '客观记录式精简',
-        preview: '纯客观事实记录，去除主观描述',
-        prompt: `请以客观记录的方式，将以下多条记忆信息进行总结精简。要求：
-1. 只保留客观事实和关键信息
-2. 去除主观感受和情感描述
-3. 使用简洁的陈述句
-4. 按时间或逻辑顺序组织内容
-5. 只输出总结后的内容，不要输出其他任何内容
-
-以下是需要精简的记忆内容：
-{memories}`
-    }
-};
-
-const LTM_DEFAULT_CONDENSE_PROMPT = `请将以下多条记忆信息进行总结精简，合并重复内容，提取关键信息，生成一条简洁但完整的总结记忆。要求：保留所有重要信息，去除冗余，语言简洁明了。只输出总结后的内容，不要输出其他任何内容。
-
-以下是需要精简的记忆内容：
-{memories}`;
+// 精简提示词格式模板已移至 prompts.js 文件
 
 // 退出精简模式（已移至script.js）
 
@@ -2219,53 +2151,70 @@ async function callCondenseAPI(prompt) {
         throw new Error('API未配置，请先在设置中配置API');
     }
 
+    // 创建新的AbortController
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
+
     let response;
     const systemMsg = '你是一个记忆精简助手。请严格按照要求输出精简后的内容。';
 
-    if (settings.provider === 'hakimi') {
-        response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: systemMsg }] },
-                generationConfig: { temperature: 0.3, maxOutputTokens: 800 }
-            })
-        });
-    } else if (settings.provider === 'claude') {
-        response = await fetch(`${settings.apiUrl}/messages`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': settings.apiKey,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: settings.model,
-                max_tokens: 800,
-                temperature: 0.3,
-                system: systemMsg,
-                messages: [{ role: 'user', content: prompt }]
-            })
-        });
-    } else {
-        response = await fetch(`${settings.apiUrl}/chat/completions`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${settings.apiKey}`
-            },
-            body: JSON.stringify({
-                model: settings.model,
-                messages: [
-                    { role: 'system', content: systemMsg },
-                    { role: 'user', content: prompt }
-                ],
-                temperature: 0.3,
-                max_tokens: 800
-            })
-        });
+    try {
+        if (settings.provider === 'hakimi') {
+            response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: systemMsg }] },
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 800 }
+                }),
+                signal: signal
+            });
+        } else if (settings.provider === 'claude') {
+            response = await fetch(`${settings.apiUrl}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': settings.apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    max_tokens: 800,
+                    temperature: 0.3,
+                    system: systemMsg,
+                    messages: [{ role: 'user', content: prompt }]
+                }),
+                signal: signal
+            });
+        } else {
+            response = await fetch(`${settings.apiUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    messages: [
+                        { role: 'system', content: systemMsg },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 800
+                }),
+                signal: signal
+            });
+        }
+    } catch (error) {
+        currentAbortController = null;
+        if (error.name === 'AbortError') {
+            throw new Error('API调用已被用户中断');
+        }
+        throw error;
     }
+
+    currentAbortController = null;
 
     if (!response.ok) {
         throw new Error(`API请求失败: ${response.status}`);
@@ -2809,22 +2758,32 @@ function handleMsgDelete(msgId, msgEl) {
 }
 
 // 单条删除
-function deleteSingleMsg(msgId, msgEl) {
-    showIosConfirm('删除消息', '确定要删除这条消息吗？', async () => {
-        try {
-            await deleteMsgFromDB(msgId);
-            msgEl.style.transition = 'opacity 0.25s, transform 0.25s';
-            msgEl.style.opacity = '0';
-            msgEl.style.transform = 'scale(0.9)';
-            setTimeout(() => msgEl.remove(), 260);
-            showToast('已删除');
-            // 删除后刷新聊天列表预览
-            renderChatList();
-        } catch (e) {
-            console.error('删除消息失败:', e);
-            showToast('删除失败');
+async function deleteSingleMsg(msgId, msgEl) {
+    const confirmed = await iosConfirm('确定要删除这条消息吗？', '删除消息');
+    if (!confirmed) return;
+    
+    try {
+        await deleteMsgFromDB(msgId);
+        msgEl.style.transition = 'opacity 0.25s, transform 0.25s';
+        msgEl.style.opacity = '0';
+        msgEl.style.transform = 'scale(0.9)';
+        setTimeout(() => msgEl.remove(), 260);
+        showToast('已删除');
+        
+        // 删除后立即更新聊天列表预览
+        if (currentChatCharacter) {
+            const lastMsg = await getLastMessageForCharacter(currentChatCharacter.id);
+            if (lastMsg) {
+                await updateChatListLastMessage(currentChatCharacter.id, lastMsg.text, lastMsg.time);
+            } else {
+                // 如果没有消息了，清空预览
+                await updateChatListLastMessage(currentChatCharacter.id, '', '');
+            }
         }
-    });
+    } catch (e) {
+        console.error('删除消息失败:', e);
+        showToast('删除失败');
+    }
 }
 
 // 从数据库删除单条消息
@@ -3013,40 +2972,50 @@ function updateMultiSelectUI() {
     }
 }
 
-function confirmMultiDelete() {
+async function confirmMultiDelete() {
     const count = _multiSelectedIds.size;
     if (count === 0) return;
 
-    showIosConfirm('批量删除', `确定要删除选中的 ${count} 条消息吗？`, async () => {
-        try {
-            const idsToDelete = [..._multiSelectedIds];
-            const container = document.getElementById('chatMessagesContainer');
+    const confirmed = await iosConfirm(`确定要删除选中的 ${count} 条消息吗？`, '批量删除');
+    if (!confirmed) return;
+    
+    try {
+        const idsToDelete = [..._multiSelectedIds];
+        const container = document.getElementById('chatMessagesContainer');
 
-            // 从数据库批量删除
-            for (const id of idsToDelete) {
-                await deleteMsgFromDB(id);
-            }
-
-            // 从界面移除（带动画）
-            idsToDelete.forEach(id => {
-                const el = container.querySelector(`.chat-message[data-msg-id="${id}"]`);
-                if (el) {
-                    el.style.transition = 'opacity 0.2s, transform 0.2s';
-                    el.style.opacity = '0';
-                    el.style.transform = 'scale(0.9)';
-                    setTimeout(() => el.remove(), 220);
-                }
-            });
-
-            showToast(`已删除 ${count} 条消息`);
-            exitMultiSelectMode();
-            // 删除后刷新聊天列表预览
-            renderChatList();
-        } catch (e) {
-            console.error('批量删除失败:', e);
-            showToast('删除失败');
+        // 从数据库批量删除
+        for (const id of idsToDelete) {
+            await deleteMsgFromDB(id);
         }
-    });
+
+        // 从界面移除（带动画）
+        idsToDelete.forEach(id => {
+            const el = container.querySelector(`.chat-message[data-msg-id="${id}"]`);
+            if (el) {
+                el.style.transition = 'opacity 0.2s, transform 0.2s';
+                el.style.opacity = '0';
+                el.style.transform = 'scale(0.9)';
+                setTimeout(() => el.remove(), 220);
+            }
+        });
+
+        showToast(`已删除 ${count} 条消息`);
+        exitMultiSelectMode();
+        
+        // 删除后立即更新聊天列表预览
+        if (currentChatCharacter) {
+            const lastMsg = await getLastMessageForCharacter(currentChatCharacter.id);
+            if (lastMsg) {
+                await updateChatListLastMessage(currentChatCharacter.id, lastMsg.text, lastMsg.time);
+            } else {
+                // 如果没有消息了，清空预览
+                await updateChatListLastMessage(currentChatCharacter.id, '', '');
+            }
+        }
+    } catch (e) {
+        console.error('批量删除失败:', e);
+        showToast('删除失败');
+    }
 }
 
 // 编辑消息
@@ -3155,8 +3124,14 @@ function handleMsgEdit(msgId, msgEl) {
             }
             
             showToast('已编辑');
-            // 编辑后刷新聊天列表预览
-            renderChatList();
+            
+            // 编辑后立即更新聊天列表预览（如果编辑的是最后一条消息）
+            if (currentChatCharacter) {
+                const lastMsg = await getLastMessageForCharacter(currentChatCharacter.id);
+                if (lastMsg) {
+                    await updateChatListLastMessage(currentChatCharacter.id, lastMsg.text, lastMsg.time);
+                }
+            }
         } catch (e) {
             console.error('编辑消息失败:', e);
             showToast('编辑失败');
@@ -3170,46 +3145,56 @@ function handleMsgEdit(msgId, msgEl) {
 }
 
 // 撤回消息
-function handleMsgRecall(msgId, msgEl) {
-    showIosConfirm('撤回消息', '确定要撤回这条消息吗？', async () => {
-        try {
-            // 从数据库删除
-            await new Promise((resolve) => {
-                const tx = db.transaction(['chats'], 'readwrite');
-                const s = tx.objectStore('chats');
-                const req = s.openCursor();
-                req.onsuccess = (e) => {
-                    const cursor = e.target.result;
-                    if (cursor) {
-                        if (cursor.value.id === msgId) {
-                            cursor.delete();
-                            resolve();
-                        } else {
-                            cursor.continue();
-                        }
-                    } else {
+async function handleMsgRecall(msgId, msgEl) {
+    const confirmed = await iosConfirm('确定要撤回这条消息吗？', '撤回消息');
+    if (!confirmed) return;
+    
+    try {
+        // 从数据库删除
+        await new Promise((resolve) => {
+            const tx = db.transaction(['chats'], 'readwrite');
+            const s = tx.objectStore('chats');
+            const req = s.openCursor();
+            req.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    if (cursor.value.id === msgId) {
+                        cursor.delete();
                         resolve();
+                    } else {
+                        cursor.continue();
                     }
-                };
-                req.onerror = () => resolve();
-            });
-            // 替换为撤回提示
-            const recallEl = document.createElement('div');
-            recallEl.style.cssText = 'text-align:center;padding:8px 0;font-size:12px;color:#999;';
-            recallEl.textContent = msgEl.dataset.msgType === 'user' ? '你撤回了一条消息' : '对方撤回了一条消息';
-            msgEl.style.transition = 'opacity 0.25s';
-            msgEl.style.opacity = '0';
-            setTimeout(() => {
-                msgEl.replaceWith(recallEl);
-            }, 260);
-            showToast('已撤回');
-            // 撤回后刷新聊天列表预览
-            renderChatList();
-        } catch (e) {
-            console.error('撤回消息失败:', e);
-            showToast('撤回失败');
+                } else {
+                    resolve();
+                }
+            };
+            req.onerror = () => resolve();
+        });
+        // 替换为撤回提示
+        const recallEl = document.createElement('div');
+        recallEl.style.cssText = 'text-align:center;padding:8px 0;font-size:12px;color:#999;';
+        recallEl.textContent = msgEl.dataset.msgType === 'user' ? '你撤回了一条消息' : '对方撤回了一条消息';
+        msgEl.style.transition = 'opacity 0.25s';
+        msgEl.style.opacity = '0';
+        setTimeout(() => {
+            msgEl.replaceWith(recallEl);
+        }, 260);
+        showToast('已撤回');
+        
+        // 撤回后立即更新聊天列表预览
+        if (currentChatCharacter) {
+            const lastMsg = await getLastMessageForCharacter(currentChatCharacter.id);
+            if (lastMsg) {
+                await updateChatListLastMessage(currentChatCharacter.id, lastMsg.text, lastMsg.time);
+            } else {
+                // 如果没有消息了，清空预览
+                await updateChatListLastMessage(currentChatCharacter.id, '', '');
+            }
         }
-    });
+    } catch (e) {
+        console.error('撤回消息失败:', e);
+        showToast('撤回失败');
+    }
 }
 
 // 引用消息
@@ -4143,6 +4128,404 @@ function closeTokenDistModal(overlay, card) {
 // 打开手动总结弹窗（已移至script.js）
 
 // 关闭手动总结弹窗（已移至script.js）
+
+// ========== 日记总结功能 ==========
+
+// 获取日记总结状态
+async function getDiarySummaryStatus(characterId) {
+    try {
+        const key = `diary_summary_${characterId}`;
+        const data = await storageDB.getItem(key);
+        return data || {
+            lastSummaryIndex: 0,
+            lastSummaryTime: null,
+            totalMessagesSummarized: 0,
+            summaryCount: 0
+        };
+    } catch (e) {
+        console.error('获取日记总结状态失败:', e);
+        return {
+            lastSummaryIndex: 0,
+            lastSummaryTime: null,
+            totalMessagesSummarized: 0,
+            summaryCount: 0
+        };
+    }
+}
+
+// 保存日记总结状态
+async function saveDiarySummaryStatus(characterId, status) {
+    try {
+        const key = `diary_summary_${characterId}`;
+        await storageDB.setItem(key, status);
+    } catch (e) {
+        console.error('保存日记总结状态失败:', e);
+    }
+}
+
+// 打开日记总结弹窗
+async function openDiarySummaryModal() {
+    if (!currentChatCharacter) return;
+
+    // 获取当前角色的所有消息
+    const allChats = await getAllChatsFromDB();
+    const msgs = allChats.filter(m => m.characterId === currentChatCharacter.id);
+    msgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // 获取日记总结状态
+    const status = await getDiarySummaryStatus(currentChatCharacter.id);
+    const lastIndex = status.lastSummaryIndex;
+    const newMsgsCount = msgs.length - lastIndex;
+
+    if (newMsgsCount < 2) {
+        showIosAlert('提示', `自上次总结后只有 ${newMsgsCount} 条新消息，至少需要2条新消息才能总结`);
+        return;
+    }
+
+    // 获取真名
+    const charName = currentChatCharacter.name || '角色';
+    let userName = '用户';
+    try {
+        const uds = localStorage.getItem('chatUserData');
+        if (uds) { const ud = JSON.parse(uds); if (ud.name) userName = ud.name; }
+    } catch (e) {}
+
+    // 构建弹窗
+    const overlay = document.createElement('div');
+    overlay.id = 'diarySummaryOverlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10003;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'width:320px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);max-height:80vh;overflow-y:auto;';
+
+    // 标题
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:22px 24px 8px;text-align:center;';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:17px;font-weight:600;color:#333;';
+    title.textContent = '日记总结';
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size:12px;color:#aaa;margin-top:6px;';
+    subtitle.textContent = '增量式总结新消息';
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    // 状态信息区域
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:16px 24px;';
+
+    // 总结状态卡片
+    const statusCard = document.createElement('div');
+    statusCard.style.cssText = 'background:#f8f8f8;border-radius:12px;padding:16px;margin-bottom:16px;';
+    
+    const statusTitle = document.createElement('div');
+    statusTitle.style.cssText = 'font-size:13px;color:#666;margin-bottom:12px;font-weight:500;';
+    statusTitle.textContent = '📊 总结状态';
+    
+    const statusInfo = document.createElement('div');
+    statusInfo.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+    
+    // 上次总结时间
+    const lastTimeRow = document.createElement('div');
+    lastTimeRow.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;';
+    const lastTimeLabel = document.createElement('span');
+    lastTimeLabel.style.cssText = 'color:#999;';
+    lastTimeLabel.textContent = '上次总结:';
+    const lastTimeValue = document.createElement('span');
+    lastTimeValue.style.cssText = 'color:#333;font-weight:500;';
+    lastTimeValue.textContent = status.lastSummaryTime ? new Date(status.lastSummaryTime).toLocaleString('zh-CN') : '从未总结';
+    lastTimeRow.appendChild(lastTimeLabel);
+    lastTimeRow.appendChild(lastTimeValue);
+    
+    // 已总结消息数
+    const totalRow = document.createElement('div');
+    totalRow.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;';
+    const totalLabel = document.createElement('span');
+    totalLabel.style.cssText = 'color:#999;';
+    totalLabel.textContent = '已总结消息:';
+    const totalValue = document.createElement('span');
+    totalValue.style.cssText = 'color:#333;font-weight:500;';
+    totalValue.textContent = `${status.totalMessagesSummarized} 条`;
+    totalRow.appendChild(totalLabel);
+    totalRow.appendChild(totalValue);
+    
+    // 新消息数
+    const newRow = document.createElement('div');
+    newRow.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;';
+    const newLabel = document.createElement('span');
+    newLabel.style.cssText = 'color:#999;';
+    newLabel.textContent = '新消息:';
+    const newValue = document.createElement('span');
+    newValue.style.cssText = 'color:#007aff;font-weight:600;';
+    newValue.textContent = `${newMsgsCount} 条`;
+    newRow.appendChild(newLabel);
+    newRow.appendChild(newValue);
+    
+    // 总结次数
+    const countRow = document.createElement('div');
+    countRow.style.cssText = 'display:flex;justify-content:space-between;font-size:13px;';
+    const countLabel = document.createElement('span');
+    countLabel.style.cssText = 'color:#999;';
+    countLabel.textContent = '总结次数:';
+    const countValue = document.createElement('span');
+    countValue.style.cssText = 'color:#333;font-weight:500;';
+    countValue.textContent = `第 ${status.summaryCount + 1} 次`;
+    countRow.appendChild(countLabel);
+    countRow.appendChild(countValue);
+    
+    statusInfo.appendChild(lastTimeRow);
+    statusInfo.appendChild(totalRow);
+    statusInfo.appendChild(newRow);
+    statusInfo.appendChild(countRow);
+    statusCard.appendChild(statusTitle);
+    statusCard.appendChild(statusInfo);
+
+    // 预览区域：显示新消息预览
+    const previewBox = document.createElement('div');
+    previewBox.id = 'diarySummaryPreview';
+    previewBox.style.cssText = 'background:#f8f8f8;border-radius:10px;padding:12px;max-height:150px;overflow-y:auto;font-size:12px;color:#666;line-height:1.6;margin-bottom:6px;';
+    
+    const previewTitle = document.createElement('div');
+    previewTitle.style.cssText = 'font-size:11px;color:#999;margin-bottom:6px;';
+    previewTitle.textContent = `新消息预览 (${newMsgsCount} 条)`;
+    previewBox.appendChild(previewTitle);
+    
+    // 显示新消息预览
+    const newMsgs = msgs.slice(lastIndex);
+    const show = newMsgsCount <= 8 ? newMsgs : [...newMsgs.slice(0, 5), null, ...newMsgs.slice(-2)];
+    show.forEach((m, i) => {
+        if (!m) {
+            const ellipsis = document.createElement('div');
+            ellipsis.style.cssText = 'text-align:center;color:#ccc;padding:2px 0;';
+            ellipsis.textContent = `... 省略 ${newMsgsCount - 7} 条 ...`;
+            previewBox.appendChild(ellipsis);
+            return;
+        }
+        const role = m.type === 'user' ? userName : charName;
+        let text = m.content || '';
+        if (m.messageType === 'voice') text = '(语音)';
+        else if (m.messageType === 'sticker') text = '(表情包)';
+        else if (m.messageType === 'image') text = '(图片)';
+        else if (m.messageType === 'textImage') text = '(图文)';
+        else if (m.messageType === 'transfer') text = '(转账)';
+        else if (m.messageType === 'location') text = '(位置)';
+        if (text.length > 30) text = text.substring(0, 30) + '...';
+        
+        const msgLine = document.createElement('div');
+        msgLine.style.cssText = 'padding:2px 0;';
+        msgLine.textContent = `${role}: ${text}`;
+        previewBox.appendChild(msgLine);
+    });
+
+    body.appendChild(statusCard);
+    body.appendChild(previewBox);
+
+    // 按钮区域
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:8px 24px 20px;display:flex;gap:10px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'flex:1;padding:13px 0;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;transition:all 0.15s;';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDiarySummaryModal(overlay, card);
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.style.cssText = 'flex:1;padding:13px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#007aff;cursor:pointer;transition:all 0.15s;';
+    confirmBtn.textContent = '开始总结';
+    confirmBtn.onclick = () => {
+        executeDiarySummary(overlay, card, msgs, lastIndex);
+    };
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // 入场动画
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        card.style.transform = 'scale(1) translateY(0)';
+        card.style.opacity = '1';
+    });
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeDiarySummaryModal(overlay, card);
+    });
+}
+
+// 关闭日记总结弹窗
+function closeDiarySummaryModal(overlay, card) {
+    overlay.style.opacity = '0';
+    card.style.transform = 'scale(0.9) translateY(20px)';
+    card.style.opacity = '0';
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+}
+
+// 执行日记总结
+async function executeDiarySummary(overlay, card, allMsgs, lastIndex) {
+    if (!currentChatCharacter) return;
+
+    const newMsgs = allMsgs.slice(lastIndex);
+
+    if (newMsgs.length < 2) {
+        showIosAlert('提示', '新消息太少，至少需要2条新消息');
+        return;
+    }
+
+    // 关闭弹窗
+    closeDiarySummaryModal(overlay, card);
+    showToast('正在总结中...');
+
+    try {
+        const character = currentChatCharacter;
+        const charName = character.name || '角色';
+        let userName = '对方';
+        try {
+            const userDataStr = localStorage.getItem('chatUserData');
+            if (userDataStr) {
+                const userData = JSON.parse(userDataStr);
+                if (userData.name) userName = userData.name;
+            }
+        } catch (e) {}
+
+        // 构建对话文本（只包含新消息）
+        const messagesText = newMsgs.map(msg => {
+            const role = msg.type === 'user' ? userName : charName;
+            let content = msg.content || '';
+            if (msg.messageType === 'voice' && msg.voiceText) content = `(语音) ${msg.voiceText}`;
+            else if (msg.messageType === 'sticker') content = `(表情包: ${msg.stickerName || '未知'})`;
+            else if (msg.messageType === 'image') content = '(发送了一张图片)';
+            else if (msg.messageType === 'textImage' && msg.textImageDesc) content = `(图片: ${msg.textImageDesc})`;
+            else if (msg.messageType === 'transfer') {
+                const amount = msg.transferAmount || 0;
+                const status = msg.transferStatus || 'pending';
+                content = `(转账 ¥${amount} ${status === 'accepted' ? '已收款' : status === 'rejected' ? '已退还' : '待处理'})`;
+            }
+            else if (msg.messageType === 'location') content = `(位置: ${msg.locationAddress || ''})`;
+            const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : '';
+            return `[${time}] ${role}: ${content}`;
+        }).join('\n');
+
+        // 获取总结提示词
+        const format = character.longTermMemoryFormat || 'diary';
+        let summaryPrompt;
+        if (format === 'custom' && character.longTermMemoryCustomPrompt) {
+            const userPrompt = character.longTermMemoryCustomPrompt.trim();
+            summaryPrompt = `${userPrompt}\n\n以下是需要总结的对话内容：\n${messagesText}`;
+        } else {
+            const template = LTM_FORMAT_TEMPLATES[format] || LTM_FORMAT_TEMPLATES.diary;
+            summaryPrompt = template.summaryPrompt
+                .replace(/\{messages\}/g, messagesText)
+                .replace(/\{charName\}/g, charName)
+                .replace(/\{userName\}/g, userName);
+        }
+
+        // 调用API
+        const settings = await getSummaryApiSettings();
+        if (!settings || !settings.apiUrl || !settings.apiKey || !settings.model) {
+            showIosAlert('提示', '请先配置API');
+            return;
+        }
+
+        let response;
+        const apiMessages = [
+            { role: 'system', content: '你是一个对话总结助手。请严格按照要求格式输出总结。' },
+            { role: 'user', content: summaryPrompt }
+        ];
+
+        if (settings.provider === 'hakimi') {
+            response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: summaryPrompt }] }],
+                    systemInstruction: { parts: [{ text: '你是一个对话总结助手。请严格按照要求格式输出总结。' }] },
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 500 }
+                })
+            });
+        } else if (settings.provider === 'claude') {
+            response = await fetch(`${settings.apiUrl}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': settings.apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    max_tokens: 500,
+                    temperature: 0.3,
+                    system: '你是一个对话总结助手。请严格按照要求格式输出总结。',
+                    messages: [{ role: 'user', content: summaryPrompt }]
+                })
+            });
+        } else {
+            response = await fetch(`${settings.apiUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    messages: apiMessages,
+                    temperature: 0.3,
+                    max_tokens: 500
+                })
+            });
+        }
+
+        if (!response.ok) {
+            throw new Error(`API请求失败: ${response.status}`);
+        }
+
+        const data = await response.json();
+        let summaryText = '';
+
+        if (settings.provider === 'hakimi') {
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                summaryText = data.candidates[0].content.parts[0].text;
+            }
+        } else if (settings.provider === 'claude') {
+            if (data.content && data.content[0]) {
+                summaryText = data.content[0].text;
+            }
+        } else {
+            if (data.choices && data.choices[0] && data.choices[0].message) {
+                summaryText = data.choices[0].message.content;
+            }
+        }
+
+        summaryText = summaryText.trim();
+        if (!summaryText) {
+            showIosAlert('提示', '总结结果为空，请重试');
+            return;
+        }
+
+        // 保存到长期记忆（标记为日记总结）
+        await addLongTermMemory(currentChatCharacter.id, summaryText, 'diary');
+        
+        // 更新日记总结状态
+        const status = await getDiarySummaryStatus(currentChatCharacter.id);
+        status.lastSummaryIndex = allMsgs.length;
+        status.lastSummaryTime = new Date().toISOString();
+        status.totalMessagesSummarized = allMsgs.length;
+        status.summaryCount += 1;
+        await saveDiarySummaryStatus(currentChatCharacter.id, status);
+        
+        await renderLongTermMemoryList();
+        showToast('日记总结完成');
+
+    } catch (err) {
+        console.error('日记总结失败:', err);
+        showIosAlert('总结失败', err.message || '未知错误');
+    }
+}
 
 // 执行手动总结
 async function executeManualSummary(overlay, card, allMsgs) {
@@ -8949,4 +9332,1983 @@ function appendQuoteMessageToChat(messageObj) {
     `;
 
     container.appendChild(messageEl);
+}
+
+
+// ========== 记忆库功能 ==========
+
+// 获取所有记忆存档
+async function getMemoryArchives() {
+    try {
+        const archives = await storageDB.getItem('memoryArchives') || [];
+        return archives;
+    } catch (e) {
+        console.error('获取记忆存档失败:', e);
+        return [];
+    }
+}
+
+// 保存记忆存档列表
+async function saveMemoryArchives(archives) {
+    try {
+        await storageDB.setItem('memoryArchives', archives);
+    } catch (e) {
+        console.error('保存记忆存档列表失败:', e);
+    }
+}
+
+// 打开保存记忆对话框
+async function openSaveMemoryDialog() {
+    if (!currentChatCharacter) {
+        await showIosAlert('提示', '请先选择一个聊天角色');
+        return;
+    }
+
+    iosPrompt('保存记忆存档', '请输入存档名称', async (archiveName) => {
+        if (!archiveName || archiveName.trim() === '') {
+            await showIosAlert('提示', '存档名称不能为空');
+            return;
+        }
+
+        await saveMemoryArchive(archiveName.trim());
+    });
+}
+
+// 保存记忆存档
+async function saveMemoryArchive(archiveName) {
+    try {
+        showToast('正在保存存档...');
+
+        // 获取当前角色的所有聊天记录
+        const allChats = await getAllChatsFromDB();
+        const characterMessages = allChats.filter(chat => chat.characterId === currentChatCharacter.id);
+
+        // 收集当前所有数据
+        const archiveData = {
+            id: 'archive_' + Date.now(),
+            name: archiveName,
+            timestamp: Date.now(),
+            characterId: currentChatCharacter.id,
+            
+            // 聊天角色数据
+            character: JSON.parse(JSON.stringify(currentChatCharacter)),
+            
+            // 聊天记录
+            messages: JSON.parse(JSON.stringify(characterMessages)),
+            
+            // 表情包数据
+            emojis: await storageDB.getItem(`emojis_${currentChatCharacter.id}`) || [],
+            
+            // 长期记忆
+            longTermMemories: await getLongTermMemories(currentChatCharacter.id),
+            
+            // 聊天设置
+            chatSettings: {
+                apiKey: localStorage.getItem('apiKey') || '',
+                apiEndpoint: localStorage.getItem('apiEndpoint') || '',
+                selectedModel: localStorage.getItem('selectedModel') || '',
+                systemPrompt: localStorage.getItem('systemPrompt') || '',
+                temperature: localStorage.getItem('temperature') || '1.0',
+                maxTokens: localStorage.getItem('maxTokens') || '2048',
+                topP: localStorage.getItem('topP') || '1.0',
+                frequencyPenalty: localStorage.getItem('frequencyPenalty') || '0.0',
+                presencePenalty: localStorage.getItem('presencePenalty') || '0.0'
+            }
+        };
+
+        // 获取现有存档列表
+        const archives = await getMemoryArchives();
+        
+        // 添加新存档（不限制数量）
+        archives.unshift(archiveData);
+        
+        // 保存存档列表
+        await saveMemoryArchives(archives);
+        
+        // 刷新存档列表显示
+        await renderMemoryArchiveList();
+        
+        showToast('存档保存成功！');
+    } catch (e) {
+        console.error('保存记忆存档失败:', e);
+        await showIosAlert('错误', '保存存档失败：' + e.message);
+    }
+}
+
+// 加载记忆存档
+async function loadMemoryArchive(archiveId) {
+    const confirmed = await iosConfirm('确定要加载此存档吗？\n\n当前的聊天记录和设置将被替换为存档中的内容。', '加载存档');
+    if (!confirmed) return;
+
+    try {
+        showToast('正在加载存档...');
+
+        const archives = await getMemoryArchives();
+        const archive = archives.find(a => a.id === archiveId);
+        
+        if (!archive) {
+            await showIosAlert('错误', '找不到该存档');
+            return;
+        }
+
+        // 1. 先删除当前角色的所有聊天记录
+        const allChats = await getAllChatsFromDB();
+        const currentCharacterChats = allChats.filter(c => c.characterId === currentChatCharacter.id);
+        
+        // 删除旧消息
+        const transaction = db.transaction(['chats'], 'readwrite');
+        const store = transaction.objectStore('chats');
+        for (const chat of currentCharacterChats) {
+            store.delete(chat.id);
+        }
+        
+        await new Promise((resolve, reject) => {
+            transaction.oncomplete = resolve;
+            transaction.onerror = reject;
+        });
+
+        // 2. 恢复聊天角色数据
+        currentChatCharacter = JSON.parse(JSON.stringify(archive.character));
+        await saveChatCharacterToDB(currentChatCharacter);
+        
+        // 3. 恢复聊天记录到IndexedDB
+        if (archive.messages && archive.messages.length > 0) {
+            const transaction2 = db.transaction(['chats'], 'readwrite');
+            const store2 = transaction2.objectStore('chats');
+            
+            for (const message of archive.messages) {
+                // 确保消息有正确的characterId
+                message.characterId = currentChatCharacter.id;
+                store2.add(message);
+            }
+            
+            await new Promise((resolve, reject) => {
+                transaction2.oncomplete = resolve;
+                transaction2.onerror = reject;
+            });
+        }
+        
+        // 4. 恢复表情包
+        if (archive.emojis && archive.emojis.length > 0) {
+            await storageDB.setItem(`emojis_${currentChatCharacter.id}`, archive.emojis);
+        }
+        
+        // 5. 恢复长期记忆
+        if (archive.longTermMemories && archive.longTermMemories.length > 0) {
+            await saveLongTermMemories(currentChatCharacter.id, archive.longTermMemories);
+        }
+        
+        // 6. 恢复聊天设置
+        if (archive.chatSettings) {
+            const settings = archive.chatSettings;
+            if (settings.apiKey) localStorage.setItem('apiKey', settings.apiKey);
+            if (settings.apiEndpoint) localStorage.setItem('apiEndpoint', settings.apiEndpoint);
+            if (settings.selectedModel) localStorage.setItem('selectedModel', settings.selectedModel);
+            if (settings.systemPrompt) localStorage.setItem('systemPrompt', settings.systemPrompt);
+            if (settings.temperature) localStorage.setItem('temperature', settings.temperature);
+            if (settings.maxTokens) localStorage.setItem('maxTokens', settings.maxTokens);
+            if (settings.topP) localStorage.setItem('topP', settings.topP);
+            if (settings.frequencyPenalty) localStorage.setItem('frequencyPenalty', settings.frequencyPenalty);
+            if (settings.presencePenalty) localStorage.setItem('presencePenalty', settings.presencePenalty);
+        }
+        
+        // 7. 刷新界面
+        if (typeof loadChatMessages === 'function') {
+            await loadChatMessages(currentChatCharacter.id);
+        }
+        
+        if (typeof updateChatStats === 'function') {
+            await updateChatStats();
+        }
+        
+        // 如果在聊天设置页面，刷新设置显示
+        if (document.getElementById('chatSettingsPage').classList.contains('active')) {
+            if (typeof loadChatSettings === 'function') {
+                loadChatSettings();
+            }
+        }
+        
+        showToast('存档加载成功！');
+        
+        // 关闭高级设置页面，返回聊天界面
+        if (typeof closeChatSettings === 'function') {
+            closeChatSettings();
+        }
+    } catch (e) {
+        console.error('加载记忆存档失败:', e);
+        await showIosAlert('错误', '加载存档失败：' + e.message);
+    }
+}
+
+// 删除记忆存档
+async function deleteMemoryArchive(archiveId) {
+    const confirmed = await iosConfirm('确定要删除此存档吗？\n\n此操作无法撤销。', '删除存档');
+    if (!confirmed) return;
+
+    try {
+        const archives = await getMemoryArchives();
+        const filteredArchives = archives.filter(a => a.id !== archiveId);
+        
+        await saveMemoryArchives(filteredArchives);
+        await renderMemoryArchiveList();
+        
+        showToast('存档已删除');
+    } catch (e) {
+        console.error('删除记忆存档失败:', e);
+        await showIosAlert('错误', '删除存档失败：' + e.message);
+    }
+}
+
+// 渲染记忆存档列表
+async function renderMemoryArchiveList() {
+    const container = document.getElementById('memoryArchiveList');
+    if (!container) return;
+
+    const archives = await getMemoryArchives();
+    
+    if (archives.length === 0) {
+        container.innerHTML = `
+            <div class="memory-empty-state">
+                <div style="font-size: 14px; color: #999;">暂无存档</div>
+                <div style="font-size: 12px; margin-top: 8px; color: #bbb;">点击上方按钮保存当前状态</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = archives.map(archive => {
+        const date = new Date(archive.timestamp);
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        
+        const messageCount = archive.messages ? archive.messages.length : 0;
+        const emojiCount = archive.emojis ? archive.emojis.length : 0;
+        
+        return `
+            <div class="memory-archive-item">
+                <div class="memory-archive-header">
+                    <div class="memory-archive-name">${escapeHtml(archive.name)}</div>
+                    <div class="memory-archive-time">${dateStr}</div>
+                </div>
+                <div class="memory-archive-info">
+                    角色：${escapeHtml(archive.character.name)} | 消息：${messageCount}条 | 表情：${emojiCount}个
+                </div>
+                <div class="memory-archive-actions">
+                    <button class="memory-archive-btn load" onclick="loadMemoryArchive('${archive.id}')">
+                        加载存档
+                    </button>
+                    <button class="memory-archive-btn delete" onclick="deleteMemoryArchive('${archive.id}')">
+                        删除
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// 页面加载时的初始化已在openChatSettings中处理
+
+
+
+// ========== 旧头像库系统已废弃 ==========
+// 统一使用角色专属头像库管理（openAvatarLibraryManager）
+
+// 旧的全局头像库变量（已废弃）
+let charAvatarLibrary = [];
+
+// 旧的初始化函数（已废弃）
+async function initCharAvatarLibrary() {
+    console.log('initCharAvatarLibrary 已废弃');
+}
+
+// 旧的保存函数（已废弃）
+async function saveCharAvatarLibrary() {
+    console.log('saveCharAvatarLibrary 已废弃，请使用 saveCharacterAvatarLibrary');
+}
+
+// 旧的显示函数（跳转到新系统）
+function showCharAvatarLibrary() {
+    if (typeof openAvatarLibraryManager === 'function') {
+        openAvatarLibraryManager();
+    } else {
+        showIosAlert('提示', '请先打开一个聊天');
+    }
+}
+
+// ========== 角色头像更换功能 ==========
+
+// 执行头像更换（AI触发）
+async function executeAvatarChange(avatarName, reason = '') {
+    if (!currentChatCharacter) {
+        console.log('当前没有聊天角色');
+        return;
+    }
+    
+    // 获取角色的头像库
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    
+    if (!avatarLibrary || avatarLibrary.length === 0) {
+        console.log('角色头像库为空');
+        return;
+    }
+    
+    // 查找匹配的头像（模糊匹配）
+    const matchedAvatar = avatarLibrary.find(avatar => 
+        avatar.name && avatar.name.toLowerCase().includes(avatarName.toLowerCase())
+    );
+    
+    if (!matchedAvatar) {
+        console.log(`未找到名为"${avatarName}"的头像`);
+        return;
+    }
+    
+    // 保存旧头像（用于显示）
+    const oldAvatarUrl = currentChatCharacter.avatar;
+    
+    // 更换头像
+    currentChatCharacter.avatar = matchedAvatar.imageData;
+    
+    // 保存到数据库
+    await saveChatCharacterToDB(currentChatCharacter);
+    
+    // 更新聊天界面的头像显示
+    updateChatDetailAvatar();
+    
+    // 在聊天界面显示头像更换通知
+    await showAvatarChangeNotification(matchedAvatar.name, reason);
+    
+    // 添加系统消息到聊天记录
+    await addAvatarChangeSystemMessage(matchedAvatar.name);
+    
+    showToast(`头像已更换为：${matchedAvatar.name}`);
+}
+
+// 获取角色的头像库
+async function getCharacterAvatarLibrary(characterId) {
+    try {
+        const key = `avatarLibrary_${characterId}`;
+        const data = await storageDB.getItem(key);
+        return data || [];
+    } catch (e) {
+        console.error('获取头像库失败:', e);
+        return [];
+    }
+}
+
+// 保存角色的头像库
+async function saveCharacterAvatarLibrary(characterId, avatarLibrary) {
+    try {
+        const key = `avatarLibrary_${characterId}`;
+        await storageDB.setItem(key, avatarLibrary);
+    } catch (e) {
+        console.error('保存头像库失败:', e);
+    }
+}
+
+// 更新聊天详情页的头像显示
+function updateChatDetailAvatar() {
+    if (!currentChatCharacter) return;
+    
+    // 更新聊天详情页顶部的头像
+    const chatAvatar = document.querySelector('.chat-detail-header .chat-avatar-img');
+    if (chatAvatar && currentChatCharacter.avatar) {
+        chatAvatar.src = currentChatCharacter.avatar;
+    }
+    
+    // 实时更新聊天列表中该角色的头像
+    renderChatList();
+    
+    // 实时更新聊天消息中该角色的所有头像
+    const charAvatars = document.querySelectorAll('.chat-message-char .chat-avatar-img');
+    charAvatars.forEach(img => {
+        img.src = currentChatCharacter.avatar;
+    });
+    
+    // 更新聊天设置页面的角色头像
+    const settingsAvatar = document.getElementById('chatSettingsAvatar');
+    if (settingsAvatar && currentChatCharacter.avatar) {
+        settingsAvatar.src = currentChatCharacter.avatar;
+    }
+}
+
+// 在聊天界面显示头像更换通知
+async function showAvatarChangeNotification(avatarName, reason) {
+    if (!currentChatCharacter) return;
+    
+    // 检查是否显示系统卡片
+    const showSystemCardBubbles = localStorage.getItem('showSystemCardBubbles') !== 'false';
+    
+    // 如果开关开启，显示彩色卡片
+    if (showSystemCardBubbles) {
+        const messageObj = {
+            id: Date.now().toString() + Math.random(),
+            characterId: currentChatCharacter.id,
+            content: '[更换头像]',
+            type: 'char',
+            timestamp: new Date().toISOString(),
+            sender: 'char',
+            messageType: 'avatarChange',
+            avatarChangeName: avatarName,
+            avatarChangeReason: reason || ''
+        };
+        
+        // 渲染到聊天界面
+        appendAvatarChangeMessageToChat(messageObj);
+        
+        // 保存到数据库
+        await saveMessageToDB(messageObj);
+        
+        // 更新聊天列表
+        await updateChatListLastMessage(currentChatCharacter.id, '[更换头像]', messageObj.timestamp);
+        
+        // 滚动到底部
+        scrollChatToBottom();
+    }
+}
+
+// 渲染头像更换消息到聊天界面
+function appendAvatarChangeMessageToChat(messageObj) {
+    const container = document.getElementById('chatMessagesContainer');
+    
+    const emptyMsg = container.querySelector('.chat-empty-message');
+    if (emptyMsg) emptyMsg.remove();
+    
+    // 获取角色头像（使用新头像）
+    let avatar = '';
+    if (currentChatCharacter && currentChatCharacter.avatar) {
+        avatar = currentChatCharacter.avatar;
+    }
+    
+    const time = formatMessageTime(messageObj.timestamp);
+    const avatarName = messageObj.avatarChangeName || '';
+    const reason = messageObj.avatarChangeReason || '';
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'chat-message chat-message-char';
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = messageObj.type;
+    
+    messageEl.innerHTML = `
+        <div class="chat-message-avatar">
+            ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
+        </div>
+        <div class="chat-message-content">
+            <div class="chat-avatar-change-bubble">
+                <div class="chat-avatar-change-header">
+                    <div class="chat-avatar-change-icon">🖼️</div>
+                    <div class="chat-avatar-change-title">更换了头像</div>
+                </div>
+                <div class="chat-avatar-change-body">
+                    <div class="chat-avatar-change-preview">
+                        ${avatar ? `<img src="${avatar}" alt="新头像" class="chat-avatar-change-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
+                    </div>
+                    <div class="chat-avatar-change-name">${escapeHtml(avatarName)}</div>
+                    ${reason ? `<div class="chat-avatar-change-reason">${escapeHtml(reason)}</div>` : ''}
+                </div>
+            </div>
+            <div class="chat-message-time">${time}</div>
+        </div>
+    `;
+    
+    container.appendChild(messageEl);
+}
+
+// 添加头像更换系统消息（灰色提示，添加到上下文）
+async function addAvatarChangeSystemMessage(avatarName) {
+    if (!currentChatCharacter) {
+        console.error('currentChatCharacter 为空，无法添加系统消息');
+        return;
+    }
+    
+    // 获取角色真名
+    const charName = currentChatCharacter.name || '角色';
+    
+    // 构建系统消息内容
+    const systemContent = `${charName} 更换了头像：${avatarName}`;
+    
+    const systemMessageObj = {
+        id: Date.now().toString() + Math.random() + '_system',
+        characterId: currentChatCharacter.id,
+        content: systemContent,
+        type: 'system',
+        timestamp: new Date().toISOString(),
+        sender: 'system',
+        messageType: 'systemNotice'
+    };
+    
+    // 渲染到聊天界面
+    appendSystemMessageToChat(systemMessageObj);
+    
+    // 保存到数据库（添加到上下文）
+    await saveMessageToDB(systemMessageObj);
+    
+    // 滚动到底部
+    scrollChatToBottom();
+}
+
+// 打开头像库管理界面
+async function openAvatarLibraryManager() {
+    if (!currentChatCharacter) {
+        showIosAlert('提示', '请先打开一个聊天');
+        return;
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10002';
+    overlay.id = 'avatarLibraryOverlay';
+    
+    const modal = document.createElement('div');
+    modal.className = 'ios-dialog';
+    modal.style.width = '320px';
+    modal.style.maxWidth = '90%';
+    modal.style.maxHeight = '70vh';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    
+    // 标题
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:20px 20px 15px;border-bottom:1px solid #e0e0e0;flex-shrink:0;';
+    header.innerHTML = `
+        <div style="font-size:18px;font-weight:600;color:#333;margin-bottom:8px;">头像库管理</div>
+        <div style="font-size:13px;color:#999;">为角色添加多个头像，AI可根据情绪自动切换</div>
+    `;
+    
+    // 内容区域
+    const content = document.createElement('div');
+    content.style.cssText = 'flex:1;overflow-y:auto;padding:15px 20px;';
+    content.id = 'avatarLibraryContent';
+    
+    // 按钮区域
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:15px 20px;border-top:1px solid #e0e0e0;flex-shrink:0;';
+    footer.id = 'avatarLibraryFooter';
+    
+    // 默认按钮组
+    const defaultButtons = document.createElement('div');
+    defaultButtons.style.cssText = 'display:flex;gap:10px;';
+    defaultButtons.id = 'avatarLibraryDefaultButtons';
+    
+    const addBtn = document.createElement('button');
+    addBtn.className = 'ios-dialog-button primary';
+    addBtn.textContent = '添加头像';
+    addBtn.style.flex = '1';
+    addBtn.onclick = () => showAddAvatarMenu();
+    
+    const selectBtn = document.createElement('button');
+    selectBtn.className = 'ios-dialog-button';
+    selectBtn.textContent = '选择';
+    selectBtn.style.flex = '1';
+    selectBtn.id = 'avatarLibrarySelectBtn';
+    selectBtn.onclick = () => toggleAvatarSelectMode();
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'ios-dialog-button';
+    closeBtn.textContent = '关闭';
+    closeBtn.style.flex = '1';
+    closeBtn.onclick = () => closeAvatarLibraryManager(overlay, modal);
+    
+    defaultButtons.appendChild(addBtn);
+    defaultButtons.appendChild(selectBtn);
+    defaultButtons.appendChild(closeBtn);
+    
+    // 选择模式按钮组
+    const selectButtons = document.createElement('div');
+    selectButtons.style.cssText = 'display:none;gap:10px;';
+    selectButtons.id = 'avatarLibrarySelectButtons';
+    
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.className = 'ios-dialog-button';
+    selectAllBtn.textContent = '全选';
+    selectAllBtn.style.flex = '1';
+    selectAllBtn.id = 'avatarLibrarySelectAllBtn';
+    selectAllBtn.onclick = () => toggleSelectAllAvatars();
+    
+    const deleteSelectedBtn = document.createElement('button');
+    deleteSelectedBtn.className = 'ios-dialog-button';
+    deleteSelectedBtn.textContent = '删除选中';
+    deleteSelectedBtn.style.flex = '1';
+    deleteSelectedBtn.style.color = '#ff3b30';
+    deleteSelectedBtn.id = 'avatarLibraryDeleteSelectedBtn';
+    deleteSelectedBtn.onclick = () => deleteSelectedAvatars();
+    
+    const cancelSelectBtn = document.createElement('button');
+    cancelSelectBtn.className = 'ios-dialog-button';
+    cancelSelectBtn.textContent = '取消';
+    cancelSelectBtn.style.flex = '1';
+    cancelSelectBtn.onclick = () => toggleAvatarSelectMode();
+    
+    selectButtons.appendChild(selectAllBtn);
+    selectButtons.appendChild(deleteSelectedBtn);
+    selectButtons.appendChild(cancelSelectBtn);
+    
+    footer.appendChild(defaultButtons);
+    footer.appendChild(selectButtons);
+    
+    modal.appendChild(header);
+    modal.appendChild(content);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // 渲染头像列表
+    await renderAvatarLibraryList();
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+}
+
+// 渲染头像库列表
+let avatarSelectMode = false;
+let selectedAvatarIndices = new Set();
+
+async function renderAvatarLibraryList() {
+    if (!currentChatCharacter) return;
+    
+    const content = document.getElementById('avatarLibraryContent');
+    if (!content) return;
+    
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    
+    if (avatarLibrary.length === 0) {
+        content.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">暂无头像，点击下方按钮添加</div>';
+        return;
+    }
+    
+    // 使用网格布局
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:12px;';
+    
+    avatarLibrary.forEach((avatar, index) => {
+        const item = document.createElement('div');
+        item.className = 'avatar-library-item';
+        item.dataset.index = index;
+        item.style.cssText = `
+            position:relative;
+            background:#f8f8f8;
+            border-radius:12px;
+            padding:8px;
+            border:2px solid ${selectedAvatarIndices.has(index) ? '#007aff' : 'transparent'};
+            cursor:${avatarSelectMode ? 'pointer' : 'default'};
+            transition:all 0.2s;
+        `;
+        
+        if (avatarSelectMode) {
+            item.onclick = () => handleAvatarItemClick(index);
+        }
+        
+        // 复选框（选择模式下显示）
+        if (avatarSelectMode) {
+            const checkbox = document.createElement('div');
+            checkbox.style.cssText = `
+                position:absolute;
+                top:4px;
+                right:4px;
+                width:18px;
+                height:18px;
+                border:2px solid ${selectedAvatarIndices.has(index) ? '#007aff' : '#d0d0d0'};
+                border-radius:4px;
+                background:${selectedAvatarIndices.has(index) ? '#007aff' : '#fff'};
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                z-index:2;
+            `;
+            if (selectedAvatarIndices.has(index)) {
+                checkbox.innerHTML = '<div style="color:#fff;font-size:11px;">✓</div>';
+            }
+            item.appendChild(checkbox);
+        }
+        
+        // 头像图片
+        const imgContainer = document.createElement('div');
+        imgContainer.style.cssText = 'width:100%;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#e0e0e0;margin-bottom:6px;';
+        
+        if (avatar.imageData) {
+            const img = document.createElement('img');
+            img.src = avatar.imageData;
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+            imgContainer.appendChild(img);
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;';
+            placeholder.textContent = '无';
+            imgContainer.appendChild(placeholder);
+        }
+        
+        item.appendChild(imgContainer);
+        
+        // 头像名称
+        const name = document.createElement('div');
+        name.style.cssText = 'font-size:12px;color:#333;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px;';
+        name.textContent = avatar.name || '未命名';
+        name.title = avatar.name || '未命名';
+        item.appendChild(name);
+        
+        // 操作按钮（非选择模式下显示）
+        if (!avatarSelectMode) {
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+            
+            const useBtn = document.createElement('button');
+            useBtn.style.cssText = 'width:100%;padding:5px;background:#007aff;border:none;border-radius:6px;font-size:11px;color:#fff;cursor:pointer;font-weight:500;';
+            useBtn.textContent = '应用';
+            useBtn.onclick = (e) => {
+                e.stopPropagation();
+                applyAvatarToCharacter(index);
+            };
+            
+            const bottomRow = document.createElement('div');
+            bottomRow.style.cssText = 'display:flex;gap:4px;';
+            
+            const editBtn = document.createElement('button');
+            editBtn.style.cssText = 'flex:1;padding:4px;background:#fff;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;color:#333;cursor:pointer;';
+            editBtn.textContent = '改名';
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                editAvatarInLibrary(index);
+            };
+            
+            const delBtn = document.createElement('button');
+            delBtn.style.cssText = 'flex:1;padding:4px;background:#fff;border:1px solid #ff3b30;border-radius:6px;font-size:11px;color:#ff3b30;cursor:pointer;';
+            delBtn.textContent = '删除';
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteAvatarFromLibrary(index);
+            };
+            
+            bottomRow.appendChild(editBtn);
+            bottomRow.appendChild(delBtn);
+            
+            actions.appendChild(useBtn);
+            actions.appendChild(bottomRow);
+            item.appendChild(actions);
+        }
+        
+        grid.appendChild(item);
+    });
+    
+    content.innerHTML = '';
+    content.appendChild(grid);
+}
+
+// 显示添加头像菜单
+function showAddAvatarMenu() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10003';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '270px';
+    dialog.style.maxWidth = '90%';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '选择添加方式';
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons vertical';
+    
+    const localBtn = document.createElement('button');
+    localBtn.className = 'ios-dialog-button';
+    localBtn.textContent = '本地上传';
+    localBtn.onclick = () => {
+        closeMenu();
+        addAvatarFromLocal();
+    };
+    
+    const urlBtn = document.createElement('button');
+    urlBtn.className = 'ios-dialog-button';
+    urlBtn.textContent = 'URL添加';
+    urlBtn.onclick = () => {
+        closeMenu();
+        addAvatarFromUrl();
+    };
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeMenu();
+    
+    buttonsEl.appendChild(localBtn);
+    buttonsEl.appendChild(urlBtn);
+    buttonsEl.appendChild(cancelBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeMenu() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+        }, 300);
+    }
+}
+
+// 添加头像到库（已废弃，保留兼容）
+async function addAvatarToLibrary() {
+    addAvatarFromLocal();
+}
+
+// 本地上传头像（自动支持单张和批量）
+function addAvatarFromLocal() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true; // 支持多选
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+        let successCount = 0;
+        
+        // 如果只选了一张图片，弹窗输入名称
+        if (files.length === 1) {
+            const file = files[0];
+            try {
+                const imageData = await compressImage(file, {
+                    maxWidth: 800,
+                    maxHeight: 800,
+                    quality: 0.8,
+                    maxSizeKB: 500
+                });
+                
+                // 弹窗输入头像名称
+                iosPrompt('输入头像名称', '', async (name) => {
+                    if (!name || !name.trim()) {
+                        showIosAlert('提示', '请输入头像名称');
+                        return;
+                    }
+                    
+                    avatarLibrary.push({
+                        id: Date.now().toString() + Math.random(),
+                        name: name.trim(),
+                        imageData: imageData,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    await saveCharacterAvatarLibrary(currentChatCharacter.id, avatarLibrary);
+                    await renderAvatarLibraryList();
+                    
+                    showToast('头像已添加');
+                });
+                
+            } catch (err) {
+                console.error('图片处理失败:', err);
+                showIosAlert('提示', '图片处理失败，请重试');
+            }
+        } else {
+            // 多张图片，使用文件名作为名称
+            for (const file of files) {
+                try {
+                    const imageData = await compressImage(file, {
+                        maxWidth: 800,
+                        maxHeight: 800,
+                        quality: 0.8,
+                        maxSizeKB: 500
+                    });
+                    
+                    // 使用文件名作为默认名称（去掉扩展名）
+                    const defaultName = file.name.replace(/\.[^/.]+$/, '');
+                    
+                    avatarLibrary.push({
+                        id: Date.now().toString() + Math.random() + successCount,
+                        name: defaultName,
+                        imageData: imageData,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    successCount++;
+                } catch (err) {
+                    console.error('处理图片失败:', file.name, err);
+                }
+            }
+            
+            if (successCount > 0) {
+                await saveCharacterAvatarLibrary(currentChatCharacter.id, avatarLibrary);
+                await renderAvatarLibraryList();
+                showToast(`成功添加 ${successCount} 个头像`);
+            } else {
+                showIosAlert('提示', '没有成功添加任何头像');
+            }
+        }
+    };
+    input.click();
+}
+
+// URL添加头像（支持批量）
+function addAvatarFromUrl() {
+    // 创建自定义弹窗
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10003';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '85%';
+    dialog.style.maxWidth = '400px';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '批量添加URL';
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'ios-dialog-message';
+    messageEl.textContent = '每行一个URL，格式：URL|名称（名称可选）';
+    messageEl.style.marginBottom = '12px';
+    
+    const inputWrap = document.createElement('div');
+    inputWrap.style.cssText = 'padding:0 16px 16px;';
+    
+    const textarea = document.createElement('textarea');
+    textarea.placeholder = '例如：\nhttps://example.com/1.jpg|生气\nhttps://example.com/2.jpg|开心';
+    textarea.rows = 6;
+    textarea.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;resize:vertical;font-family:inherit;';
+    textarea.onfocus = () => { textarea.style.borderColor = '#007aff'; };
+    textarea.onblur = () => { textarea.style.borderColor = '#e0e0e0'; };
+    
+    inputWrap.appendChild(textarea);
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    
+    const okBtn = document.createElement('button');
+    okBtn.className = 'ios-dialog-button primary';
+    okBtn.textContent = '添加';
+    okBtn.onclick = () => processBatchUrls();
+    
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(okBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(messageEl);
+    dialog.appendChild(inputWrap);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => {
+        overlay.classList.add('show');
+        textarea.focus();
+    }, 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+        }, 300);
+    }
+    
+    async function processBatchUrls() {
+        const text = textarea.value.trim();
+        if (!text) {
+            showIosAlert('提示', '请输入URL');
+            return;
+        }
+        
+        const lines = text.split('\n').filter(line => line.trim());
+        if (lines.length === 0) {
+            showIosAlert('提示', '请输入URL');
+            return;
+        }
+        
+        closeDialog();
+        
+        const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+        let successCount = 0;
+        
+        for (const line of lines) {
+            const parts = line.trim().split('|');
+            const url = parts[0].trim();
+            let name = parts[1] ? parts[1].trim() : '';
+            
+            // 验证URL格式
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                console.warn('跳过无效URL:', url);
+                continue;
+            }
+            
+            // 如果没有名称，使用URL最后一部分作为名称
+            if (!name) {
+                const urlParts = url.split('/');
+                name = urlParts[urlParts.length - 1].split('?')[0].replace(/\.[^/.]+$/, '') || '未命名';
+            }
+            
+            avatarLibrary.push({
+                id: Date.now().toString() + Math.random() + successCount,
+                name: name,
+                imageData: url,
+                timestamp: new Date().toISOString()
+            });
+            
+            successCount++;
+        }
+        
+        if (successCount > 0) {
+            await saveCharacterAvatarLibrary(currentChatCharacter.id, avatarLibrary);
+            await renderAvatarLibraryList();
+            showToast(`成功添加 ${successCount} 个头像`);
+        } else {
+            showIosAlert('提示', '没有成功添加任何头像');
+        }
+    }
+}
+
+// 批量添加头像
+function batchAddAvatars() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        let successCount = 0;
+        const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+        
+        for (const file of files) {
+            try {
+                const imageData = await compressImage(file, {
+                    maxWidth: 800,
+                    maxHeight: 800,
+                    quality: 0.8,
+                    maxSizeKB: 500
+                });
+                
+                // 使用文件名作为默认名称（去掉扩展名）
+                const defaultName = file.name.replace(/\.[^/.]+$/, '');
+                
+                avatarLibrary.push({
+                    id: Date.now().toString() + Math.random() + successCount,
+                    name: defaultName,
+                    imageData: imageData,
+                    timestamp: new Date().toISOString()
+                });
+                
+                successCount++;
+            } catch (err) {
+                console.error('处理图片失败:', file.name, err);
+            }
+        }
+        
+        if (successCount > 0) {
+            await saveCharacterAvatarLibrary(currentChatCharacter.id, avatarLibrary);
+            await renderAvatarLibraryList();
+            showToast(`成功添加 ${successCount} 个头像`);
+        } else {
+            showIosAlert('提示', '没有成功添加任何头像');
+        }
+    };
+    input.click();
+}
+
+// 切换选择模式
+function toggleAvatarSelectMode() {
+    avatarSelectMode = !avatarSelectMode;
+    selectedAvatarIndices.clear();
+    
+    const defaultButtons = document.getElementById('avatarLibraryDefaultButtons');
+    const selectButtons = document.getElementById('avatarLibrarySelectButtons');
+    
+    if (avatarSelectMode) {
+        defaultButtons.style.display = 'none';
+        selectButtons.style.display = 'flex';
+    } else {
+        defaultButtons.style.display = 'flex';
+        selectButtons.style.display = 'none';
+    }
+    
+    renderAvatarLibraryList();
+}
+
+// 处理头像项点击
+function handleAvatarItemClick(index) {
+    if (!avatarSelectMode) return;
+    
+    if (selectedAvatarIndices.has(index)) {
+        selectedAvatarIndices.delete(index);
+    } else {
+        selectedAvatarIndices.add(index);
+    }
+    
+    renderAvatarLibraryList();
+    updateSelectAllButton();
+}
+
+// 全选/取消全选
+async function toggleSelectAllAvatars() {
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    
+    if (selectedAvatarIndices.size === avatarLibrary.length) {
+        // 取消全选
+        selectedAvatarIndices.clear();
+    } else {
+        // 全选
+        selectedAvatarIndices.clear();
+        avatarLibrary.forEach((_, index) => selectedAvatarIndices.add(index));
+    }
+    
+    renderAvatarLibraryList();
+    updateSelectAllButton();
+}
+
+// 更新全选按钮文字
+async function updateSelectAllButton() {
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    const selectAllBtn = document.getElementById('avatarLibrarySelectAllBtn');
+    
+    if (selectAllBtn) {
+        if (selectedAvatarIndices.size === avatarLibrary.length && avatarLibrary.length > 0) {
+            selectAllBtn.textContent = '取消全选';
+        } else {
+            selectAllBtn.textContent = '全选';
+        }
+    }
+    
+    // 更新删除按钮文字
+    const deleteBtn = document.getElementById('avatarLibraryDeleteSelectedBtn');
+    if (deleteBtn) {
+        if (selectedAvatarIndices.size > 0) {
+            deleteBtn.textContent = `删除选中 (${selectedAvatarIndices.size})`;
+        } else {
+            deleteBtn.textContent = '删除选中';
+        }
+    }
+}
+
+// 删除选中的头像
+async function deleteSelectedAvatars() {
+    if (selectedAvatarIndices.size === 0) {
+        showToast('请先选择要删除的头像');
+        return;
+    }
+    
+    const confirmed = await iosConfirm(`确定要删除选中的 ${selectedAvatarIndices.size} 个头像吗？`, '确认删除');
+    if (!confirmed) return;
+    
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    
+    // 按索引从大到小排序，避免删除时索引错乱
+    const indices = Array.from(selectedAvatarIndices).sort((a, b) => b - a);
+    
+    // 删除
+    indices.forEach(index => {
+        avatarLibrary.splice(index, 1);
+    });
+    
+    await saveCharacterAvatarLibrary(currentChatCharacter.id, avatarLibrary);
+    
+    selectedAvatarIndices.clear();
+    await renderAvatarLibraryList();
+    updateSelectAllButton();
+    
+    showToast(`已删除 ${indices.length} 个头像`);
+}
+
+// 应用头像到当前角色
+async function applyAvatarToCharacter(index) {
+    if (!currentChatCharacter) return;
+    
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    const avatar = avatarLibrary[index];
+    
+    if (!avatar) return;
+    
+    // 应用头像
+    currentChatCharacter.avatar = avatar.imageData;
+    
+    // 保存到数据库
+    await saveChatCharacterToDB(currentChatCharacter);
+    
+    // 更新聊天设置页面的头像显示
+    const charAvatarImg = document.getElementById('charAvatarImage');
+    const charAvatarPlaceholder = document.getElementById('charAvatarPlaceholder');
+    if (charAvatarImg && charAvatarPlaceholder) {
+        charAvatarImg.src = avatar.imageData;
+        charAvatarImg.style.display = 'block';
+        charAvatarPlaceholder.style.display = 'none';
+    }
+    
+    // 更新聊天详情页的头像显示
+    const chatAvatar = document.querySelector('.chat-detail-header .chat-avatar-img');
+    if (chatAvatar) {
+        chatAvatar.src = avatar.imageData;
+    }
+    
+    // 更新聊天列表的头像显示
+    const listAvatar = document.querySelector(`.chat-list-item[data-char-id="${currentChatCharacter.id}"] .chat-list-avatar img`);
+    if (listAvatar) {
+        listAvatar.src = avatar.imageData;
+    }
+    
+    showToast(`已应用头像：${avatar.name}`);
+}
+
+// 编辑头像库中的头像
+async function editAvatarInLibrary(index) {
+    if (!currentChatCharacter) return;
+    
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    const avatar = avatarLibrary[index];
+    
+    if (!avatar) return;
+    
+    iosPrompt('修改头像名称', avatar.name, async (newName) => {
+        if (!newName || !newName.trim()) {
+            showIosAlert('提示', '请输入头像名称');
+            return;
+        }
+        
+        avatar.name = newName.trim();
+        await saveCharacterAvatarLibrary(currentChatCharacter.id, avatarLibrary);
+        await renderAvatarLibraryList();
+        
+        showToast('头像名称已更新');
+    });
+}
+
+// 从库中删除头像
+async function deleteAvatarFromLibrary(index) {
+    if (!currentChatCharacter) return;
+    
+    const confirmed = await iosConfirm('确定要删除这个头像吗？', '确认删除');
+    if (!confirmed) return;
+    
+    const avatarLibrary = await getCharacterAvatarLibrary(currentChatCharacter.id);
+    avatarLibrary.splice(index, 1);
+    
+    await saveCharacterAvatarLibrary(currentChatCharacter.id, avatarLibrary);
+    await renderAvatarLibraryList();
+    
+    showToast('头像已删除');
+}
+
+// 关闭头像库管理界面
+function closeAvatarLibraryManager(overlay, modal) {
+    overlay.classList.remove('show');
+    setTimeout(() => {
+        if (overlay.parentNode) {
+            document.body.removeChild(overlay);
+        }
+    }, 300);
+}
+
+// ========== 用户头像库管理系统 ==========
+
+// 获取用户的头像库
+async function getUserAvatarLibrary() {
+    try {
+        const key = 'userAvatarLibrary';
+        const data = await storageDB.getItem(key);
+        return data || [];
+    } catch (e) {
+        console.error('获取用户头像库失败:', e);
+        return [];
+    }
+}
+
+// 保存用户的头像库
+async function saveUserAvatarLibrary(avatarLibrary) {
+    try {
+        const key = 'userAvatarLibrary';
+        await storageDB.setItem(key, avatarLibrary);
+    } catch (e) {
+        console.error('保存用户头像库失败:', e);
+    }
+}
+
+// 打开用户头像库管理界面
+async function openUserAvatarLibraryManager() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10002';
+    overlay.id = 'userAvatarLibraryOverlay';
+    
+    const modal = document.createElement('div');
+    modal.className = 'ios-dialog';
+    modal.style.width = '320px';
+    modal.style.maxWidth = '90%';
+    modal.style.maxHeight = '70vh';
+    modal.style.display = 'flex';
+    modal.style.flexDirection = 'column';
+    
+    // 标题
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:20px 20px 15px;border-bottom:1px solid #e0e0e0;flex-shrink:0;';
+    header.innerHTML = `
+        <div style="font-size:18px;font-weight:600;color:#333;margin-bottom:8px;">用户头像库</div>
+        <div style="font-size:13px;color:#999;">管理你的个人头像，随时切换</div>
+    `;
+    
+    // 内容区域
+    const content = document.createElement('div');
+    content.style.cssText = 'flex:1;overflow-y:auto;padding:15px 20px;';
+    content.id = 'userAvatarLibraryContent';
+    
+    // 按钮区域
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:15px 20px;border-top:1px solid #e0e0e0;flex-shrink:0;';
+    footer.id = 'userAvatarLibraryFooter';
+    
+    // 默认按钮组
+    const defaultButtons = document.createElement('div');
+    defaultButtons.style.cssText = 'display:flex;gap:10px;';
+    defaultButtons.id = 'userAvatarLibraryDefaultButtons';
+    
+    const addBtn = document.createElement('button');
+    addBtn.className = 'ios-dialog-button primary';
+    addBtn.textContent = '添加头像';
+    addBtn.style.flex = '1';
+    addBtn.onclick = () => showAddUserAvatarMenu();
+    
+    const selectBtn = document.createElement('button');
+    selectBtn.className = 'ios-dialog-button';
+    selectBtn.textContent = '选择';
+    selectBtn.style.flex = '1';
+    selectBtn.id = 'userAvatarLibrarySelectBtn';
+    selectBtn.onclick = () => toggleUserAvatarSelectMode();
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'ios-dialog-button';
+    closeBtn.textContent = '关闭';
+    closeBtn.style.flex = '1';
+    closeBtn.onclick = () => closeUserAvatarLibraryManager(overlay, modal);
+    
+    defaultButtons.appendChild(addBtn);
+    defaultButtons.appendChild(selectBtn);
+    defaultButtons.appendChild(closeBtn);
+    
+    // 选择模式按钮组
+    const selectButtons = document.createElement('div');
+    selectButtons.style.cssText = 'display:none;gap:10px;';
+    selectButtons.id = 'userAvatarLibrarySelectButtons';
+    
+    const selectAllBtn = document.createElement('button');
+    selectAllBtn.className = 'ios-dialog-button';
+    selectAllBtn.textContent = '全选';
+    selectAllBtn.style.flex = '1';
+    selectAllBtn.id = 'userAvatarLibrarySelectAllBtn';
+    selectAllBtn.onclick = () => toggleSelectAllUserAvatars();
+    
+    const deleteSelectedBtn = document.createElement('button');
+    deleteSelectedBtn.className = 'ios-dialog-button';
+    deleteSelectedBtn.textContent = '删除选中';
+    deleteSelectedBtn.style.flex = '1';
+    deleteSelectedBtn.style.color = '#ff3b30';
+    deleteSelectedBtn.id = 'userAvatarLibraryDeleteSelectedBtn';
+    deleteSelectedBtn.onclick = () => deleteSelectedUserAvatars();
+    
+    const cancelSelectBtn = document.createElement('button');
+    cancelSelectBtn.className = 'ios-dialog-button';
+    cancelSelectBtn.textContent = '取消';
+    cancelSelectBtn.style.flex = '1';
+    cancelSelectBtn.onclick = () => toggleUserAvatarSelectMode();
+    
+    selectButtons.appendChild(selectAllBtn);
+    selectButtons.appendChild(deleteSelectedBtn);
+    selectButtons.appendChild(cancelSelectBtn);
+    
+    footer.appendChild(defaultButtons);
+    footer.appendChild(selectButtons);
+    
+    modal.appendChild(header);
+    modal.appendChild(content);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // 渲染头像列表
+    await renderUserAvatarLibraryList();
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+}
+
+// 渲染用户头像库列表
+let userAvatarSelectMode = false;
+let selectedUserAvatarIndices = new Set();
+
+async function renderUserAvatarLibraryList() {
+    const content = document.getElementById('userAvatarLibraryContent');
+    if (!content) return;
+    
+    const avatarLibrary = await getUserAvatarLibrary();
+    
+    if (avatarLibrary.length === 0) {
+        content.innerHTML = '<div style="text-align:center;padding:40px 20px;color:#999;">暂无头像，点击下方按钮添加</div>';
+        return;
+    }
+    
+    // 使用网格布局
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:12px;';
+    
+    avatarLibrary.forEach((avatar, index) => {
+        const item = document.createElement('div');
+        item.className = 'user-avatar-library-item';
+        item.dataset.index = index;
+        item.style.cssText = `
+            position:relative;
+            background:#f8f8f8;
+            border-radius:12px;
+            padding:8px;
+            border:2px solid ${selectedUserAvatarIndices.has(index) ? '#007aff' : 'transparent'};
+            cursor:${userAvatarSelectMode ? 'pointer' : 'default'};
+            transition:all 0.2s;
+        `;
+        
+        if (userAvatarSelectMode) {
+            item.onclick = () => handleUserAvatarItemClick(index);
+        }
+        
+        // 复选框（选择模式下显示）
+        if (userAvatarSelectMode) {
+            const checkbox = document.createElement('div');
+            checkbox.style.cssText = `
+                position:absolute;
+                top:4px;
+                right:4px;
+                width:18px;
+                height:18px;
+                border:2px solid ${selectedUserAvatarIndices.has(index) ? '#007aff' : '#d0d0d0'};
+                border-radius:4px;
+                background:${selectedUserAvatarIndices.has(index) ? '#007aff' : '#fff'};
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                z-index:2;
+            `;
+            if (selectedUserAvatarIndices.has(index)) {
+                checkbox.innerHTML = '<div style="color:#fff;font-size:11px;">✓</div>';
+            }
+            item.appendChild(checkbox);
+        }
+        
+        // 头像图片
+        const imgContainer = document.createElement('div');
+        imgContainer.style.cssText = 'width:100%;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#e0e0e0;margin-bottom:6px;';
+        
+        if (avatar.imageData) {
+            const img = document.createElement('img');
+            img.src = avatar.imageData;
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+            imgContainer.appendChild(img);
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#999;font-size:12px;';
+            placeholder.textContent = '无';
+            imgContainer.appendChild(placeholder);
+        }
+        
+        item.appendChild(imgContainer);
+        
+        // 头像名称
+        const name = document.createElement('div');
+        name.style.cssText = 'font-size:12px;color:#333;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px;';
+        name.textContent = avatar.name || '未命名';
+        name.title = avatar.name || '未命名';
+        item.appendChild(name);
+        
+        // 操作按钮（非选择模式下显示）
+        if (!userAvatarSelectMode) {
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+            
+            const useBtn = document.createElement('button');
+            useBtn.style.cssText = 'width:100%;padding:5px;background:#007aff;border:none;border-radius:6px;font-size:11px;color:#fff;cursor:pointer;font-weight:500;';
+            useBtn.textContent = '应用';
+            useBtn.onclick = (e) => {
+                e.stopPropagation();
+                applyUserAvatar(index);
+            };
+            
+            const bottomRow = document.createElement('div');
+            bottomRow.style.cssText = 'display:flex;gap:4px;';
+            
+            const editBtn = document.createElement('button');
+            editBtn.style.cssText = 'flex:1;padding:4px;background:#fff;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;color:#333;cursor:pointer;';
+            editBtn.textContent = '改名';
+            editBtn.onclick = (e) => {
+                e.stopPropagation();
+                editUserAvatarInLibrary(index);
+            };
+            
+            const delBtn = document.createElement('button');
+            delBtn.style.cssText = 'flex:1;padding:4px;background:#fff;border:1px solid #ff3b30;border-radius:6px;font-size:11px;color:#ff3b30;cursor:pointer;';
+            delBtn.textContent = '删除';
+            delBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteUserAvatarFromLibrary(index);
+            };
+            
+            bottomRow.appendChild(editBtn);
+            bottomRow.appendChild(delBtn);
+            
+            actions.appendChild(useBtn);
+            actions.appendChild(bottomRow);
+            item.appendChild(actions);
+        }
+        
+        grid.appendChild(item);
+    });
+    
+    content.innerHTML = '';
+    content.appendChild(grid);
+}
+
+// 显示添加用户头像菜单
+function showAddUserAvatarMenu() {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10003';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '270px';
+    dialog.style.maxWidth = '90%';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '选择添加方式';
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons vertical';
+    
+    const localBtn = document.createElement('button');
+    localBtn.className = 'ios-dialog-button';
+    localBtn.textContent = '本地上传';
+    localBtn.onclick = () => {
+        closeMenu();
+        addUserAvatarFromLocal();
+    };
+    
+    const urlBtn = document.createElement('button');
+    urlBtn.className = 'ios-dialog-button';
+    urlBtn.textContent = 'URL添加';
+    urlBtn.onclick = () => {
+        closeMenu();
+        addUserAvatarFromUrl();
+    };
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeMenu();
+    
+    buttonsEl.appendChild(localBtn);
+    buttonsEl.appendChild(urlBtn);
+    buttonsEl.appendChild(cancelBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => overlay.classList.add('show'), 10);
+    
+    function closeMenu() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+        }, 300);
+    }
+}
+
+// 本地上传用户头像（支持单张和批量）
+function addUserAvatarFromLocal() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true; // 支持多选
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+        
+        const avatarLibrary = await getUserAvatarLibrary();
+        let successCount = 0;
+        
+        // 如果只选了一张图片，弹窗输入名称
+        if (files.length === 1) {
+            const file = files[0];
+            try {
+                const imageData = await compressImage(file, {
+                    maxWidth: 800,
+                    maxHeight: 800,
+                    quality: 0.8,
+                    maxSizeKB: 500
+                });
+                
+                // 弹窗输入头像名称
+                iosPrompt('输入头像名称', '', async (name) => {
+                    if (!name || !name.trim()) {
+                        showIosAlert('提示', '请输入头像名称');
+                        return;
+                    }
+                    
+                    avatarLibrary.push({
+                        id: Date.now().toString() + Math.random(),
+                        name: name.trim(),
+                        imageData: imageData,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    await saveUserAvatarLibrary(avatarLibrary);
+                    await renderUserAvatarLibraryList();
+                    
+                    showToast('头像已添加');
+                });
+                
+            } catch (err) {
+                console.error('图片处理失败:', err);
+                showIosAlert('提示', '图片处理失败，请重试');
+            }
+        } else {
+            // 多张图片，使用文件名作为名称
+            for (const file of files) {
+                try {
+                    const imageData = await compressImage(file, {
+                        maxWidth: 800,
+                        maxHeight: 800,
+                        quality: 0.8,
+                        maxSizeKB: 500
+                    });
+                    
+                    // 使用文件名作为默认名称（去掉扩展名）
+                    const defaultName = file.name.replace(/\.[^/.]+$/, '');
+                    
+                    avatarLibrary.push({
+                        id: Date.now().toString() + Math.random() + successCount,
+                        name: defaultName,
+                        imageData: imageData,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    successCount++;
+                } catch (err) {
+                    console.error('处理图片失败:', file.name, err);
+                }
+            }
+            
+            if (successCount > 0) {
+                await saveUserAvatarLibrary(avatarLibrary);
+                await renderUserAvatarLibraryList();
+                showToast(`成功添加 ${successCount} 个头像`);
+            } else {
+                showIosAlert('提示', '没有成功添加任何头像');
+            }
+        }
+    };
+    input.click();
+}
+
+// URL添加用户头像（支持批量）
+function addUserAvatarFromUrl() {
+    // 创建自定义弹窗
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-dialog-overlay';
+    overlay.style.zIndex = '10003';
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'ios-dialog';
+    dialog.style.width = '85%';
+    dialog.style.maxWidth = '400px';
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'ios-dialog-title';
+    titleEl.textContent = '批量添加URL';
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'ios-dialog-message';
+    messageEl.textContent = '每行一个URL，格式：URL|名称（名称可选）';
+    messageEl.style.marginBottom = '12px';
+    
+    const inputWrap = document.createElement('div');
+    inputWrap.style.cssText = 'padding:0 16px 16px;';
+    
+    const textarea = document.createElement('textarea');
+    textarea.placeholder = '例如：\nhttps://example.com/1.jpg|工作照\nhttps://example.com/2.jpg|生活照';
+    textarea.rows = 6;
+    textarea.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;resize:vertical;font-family:inherit;';
+    textarea.onfocus = () => { textarea.style.borderColor = '#007aff'; };
+    textarea.onblur = () => { textarea.style.borderColor = '#e0e0e0'; };
+    
+    inputWrap.appendChild(textarea);
+    
+    const buttonsEl = document.createElement('div');
+    buttonsEl.className = 'ios-dialog-buttons';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'ios-dialog-button';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeDialog();
+    
+    const okBtn = document.createElement('button');
+    okBtn.className = 'ios-dialog-button primary';
+    okBtn.textContent = '添加';
+    okBtn.onclick = () => processBatchUserUrls();
+    
+    buttonsEl.appendChild(cancelBtn);
+    buttonsEl.appendChild(okBtn);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(messageEl);
+    dialog.appendChild(inputWrap);
+    dialog.appendChild(buttonsEl);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => {
+        overlay.classList.add('show');
+        textarea.focus();
+    }, 10);
+    
+    function closeDialog() {
+        overlay.classList.remove('show');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                document.body.removeChild(overlay);
+            }
+        }, 300);
+    }
+    
+    async function processBatchUserUrls() {
+        const text = textarea.value.trim();
+        if (!text) {
+            showIosAlert('提示', '请输入URL');
+            return;
+        }
+        
+        const lines = text.split('\n').filter(line => line.trim());
+        if (lines.length === 0) {
+            showIosAlert('提示', '请输入URL');
+            return;
+        }
+        
+        closeDialog();
+        
+        const avatarLibrary = await getUserAvatarLibrary();
+        let successCount = 0;
+        
+        for (const line of lines) {
+            const parts = line.trim().split('|');
+            const url = parts[0].trim();
+            let name = parts[1] ? parts[1].trim() : '';
+            
+            // 验证URL格式
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                console.warn('跳过无效URL:', url);
+                continue;
+            }
+            
+            // 如果没有名称，使用URL最后一部分作为名称
+            if (!name) {
+                const urlParts = url.split('/');
+                name = urlParts[urlParts.length - 1].split('?')[0].replace(/\.[^/.]+$/, '') || '未命名';
+            }
+            
+            avatarLibrary.push({
+                id: Date.now().toString() + Math.random() + successCount,
+                name: name,
+                imageData: url,
+                timestamp: new Date().toISOString()
+            });
+            
+            successCount++;
+        }
+        
+        if (successCount > 0) {
+            await saveUserAvatarLibrary(avatarLibrary);
+            await renderUserAvatarLibraryList();
+            showToast(`成功添加 ${successCount} 个头像`);
+        } else {
+            showIosAlert('提示', '没有成功添加任何头像');
+        }
+    }
+}
+
+// 切换用户头像选择模式
+function toggleUserAvatarSelectMode() {
+    userAvatarSelectMode = !userAvatarSelectMode;
+    selectedUserAvatarIndices.clear();
+    
+    const defaultButtons = document.getElementById('userAvatarLibraryDefaultButtons');
+    const selectButtons = document.getElementById('userAvatarLibrarySelectButtons');
+    
+    if (userAvatarSelectMode) {
+        defaultButtons.style.display = 'none';
+        selectButtons.style.display = 'flex';
+    } else {
+        defaultButtons.style.display = 'flex';
+        selectButtons.style.display = 'none';
+    }
+    
+    renderUserAvatarLibraryList();
+}
+
+// 处理用户头像项点击
+function handleUserAvatarItemClick(index) {
+    if (!userAvatarSelectMode) return;
+    
+    if (selectedUserAvatarIndices.has(index)) {
+        selectedUserAvatarIndices.delete(index);
+    } else {
+        selectedUserAvatarIndices.add(index);
+    }
+    
+    renderUserAvatarLibraryList();
+    updateSelectAllUserAvatarsButton();
+}
+
+// 全选/取消全选用户头像
+async function toggleSelectAllUserAvatars() {
+    const avatarLibrary = await getUserAvatarLibrary();
+    
+    if (selectedUserAvatarIndices.size === avatarLibrary.length) {
+        // 取消全选
+        selectedUserAvatarIndices.clear();
+    } else {
+        // 全选
+        selectedUserAvatarIndices.clear();
+        avatarLibrary.forEach((_, index) => selectedUserAvatarIndices.add(index));
+    }
+    
+    renderUserAvatarLibraryList();
+    updateSelectAllUserAvatarsButton();
+}
+
+// 更新全选按钮文字
+async function updateSelectAllUserAvatarsButton() {
+    const avatarLibrary = await getUserAvatarLibrary();
+    const selectAllBtn = document.getElementById('userAvatarLibrarySelectAllBtn');
+    
+    if (selectAllBtn) {
+        if (selectedUserAvatarIndices.size === avatarLibrary.length && avatarLibrary.length > 0) {
+            selectAllBtn.textContent = '取消全选';
+        } else {
+            selectAllBtn.textContent = '全选';
+        }
+    }
+    
+    // 更新删除按钮文字
+    const deleteBtn = document.getElementById('userAvatarLibraryDeleteSelectedBtn');
+    if (deleteBtn) {
+        if (selectedUserAvatarIndices.size > 0) {
+            deleteBtn.textContent = `删除选中 (${selectedUserAvatarIndices.size})`;
+        } else {
+            deleteBtn.textContent = '删除选中';
+        }
+    }
+}
+
+// 删除选中的用户头像
+async function deleteSelectedUserAvatars() {
+    if (selectedUserAvatarIndices.size === 0) {
+        showToast('请先选择要删除的头像');
+        return;
+    }
+    
+    const confirmed = await iosConfirm(`确定要删除选中的 ${selectedUserAvatarIndices.size} 个头像吗？`, '确认删除');
+    if (!confirmed) return;
+    
+    const avatarLibrary = await getUserAvatarLibrary();
+    
+    // 按索引从大到小排序，避免删除时索引错乱
+    const indices = Array.from(selectedUserAvatarIndices).sort((a, b) => b - a);
+    
+    // 删除
+    indices.forEach(index => {
+        avatarLibrary.splice(index, 1);
+    });
+    
+    await saveUserAvatarLibrary(avatarLibrary);
+    
+    selectedUserAvatarIndices.clear();
+    await renderUserAvatarLibraryList();
+    updateSelectAllUserAvatarsButton();
+    
+    showToast(`已删除 ${indices.length} 个头像`);
+}
+
+// 应用用户头像
+async function applyUserAvatar(index) {
+    const avatarLibrary = await getUserAvatarLibrary();
+    const avatar = avatarLibrary[index];
+    
+    if (!avatar) return;
+    
+    // 应用头像到用户设置
+    const userAvatarImg = document.getElementById('userAvatarImage');
+    const userAvatarPlaceholder = document.getElementById('userAvatarPlaceholder');
+    
+    if (userAvatarImg && userAvatarPlaceholder) {
+        userAvatarImg.src = avatar.imageData;
+        userAvatarImg.style.display = 'block';
+        userAvatarPlaceholder.style.display = 'none';
+    }
+    
+    // 保存到localStorage
+    localStorage.setItem('userAvatar', avatar.imageData);
+    
+    showToast(`已应用头像：${avatar.name}`);
+}
+
+// 编辑用户头像库中的头像
+async function editUserAvatarInLibrary(index) {
+    const avatarLibrary = await getUserAvatarLibrary();
+    const avatar = avatarLibrary[index];
+    
+    if (!avatar) return;
+    
+    iosPrompt('修改头像名称', avatar.name, async (newName) => {
+        if (!newName || !newName.trim()) {
+            showIosAlert('提示', '请输入头像名称');
+            return;
+        }
+        
+        avatar.name = newName.trim();
+        await saveUserAvatarLibrary(avatarLibrary);
+        await renderUserAvatarLibraryList();
+        
+        showToast('头像名称已更新');
+    });
+}
+
+// 从库中删除用户头像
+async function deleteUserAvatarFromLibrary(index) {
+    const confirmed = await iosConfirm('确定要删除这个头像吗？', '确认删除');
+    if (!confirmed) return;
+    
+    const avatarLibrary = await getUserAvatarLibrary();
+    avatarLibrary.splice(index, 1);
+    
+    await saveUserAvatarLibrary(avatarLibrary);
+    await renderUserAvatarLibraryList();
+    
+    showToast('头像已删除');
+}
+
+// 关闭用户头像库管理界面
+function closeUserAvatarLibraryManager(overlay, modal) {
+    overlay.classList.remove('show');
+    setTimeout(() => {
+        if (overlay.parentNode) {
+            document.body.removeChild(overlay);
+        }
+    }, 300);
+}
+
+// 显示用户头像库（兼容旧接口）
+function showUserAvatarLibrary() {
+    openUserAvatarLibraryManager();
 }
