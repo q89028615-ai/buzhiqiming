@@ -125,6 +125,94 @@
         </div>
     </div>
 
+    <!-- 格式调节面板 -->
+    <div class="settings-page" id="formatFixPanel" style="z-index: 10003;">
+        <div class="settings-content" style="max-width: 500px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeFormatFixPanel()">←</div>
+                <div class="settings-title">调节格式</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <div class="section-title">
+                    <span class="section-title-text">选择需要调节的消息</span>
+                </div>
+                
+                <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                        <div>• 选择角色的某一轮回复进行格式调节</div>
+                        <div>• 智能调节：调用AI自动修正为规范格式</div>
+                        <div>• 手动编辑：直接修改消息内容</div>
+                    </div>
+                </div>
+
+                <!-- 消息列表 -->
+                <div id="formatFixMessageList" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+                    <!-- 动态生成消息列表 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 格式编辑弹窗 -->
+    <div class="settings-page" id="formatEditModal" style="z-index: 10004;">
+        <div class="settings-content" style="max-width: 500px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeFormatEditModal()">←</div>
+                <div class="settings-title">编辑消息格式</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <!-- 原始内容显示 -->
+                <div class="section-title">
+                    <span class="section-title-text">原始内容</span>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <div style="padding: 15px; background-color: #f8f8f8; border-radius: 12px; border: 2px solid #e0e0e0; min-height: 60px;">
+                        <div style="font-size: 13px; color: #666; line-height: 1.6; white-space: pre-wrap; word-break: break-word;" id="formatEditOriginal"></div>
+                    </div>
+                </div>
+
+                <!-- 编辑区域 -->
+                <div class="section-title">
+                    <span class="section-title-text">编辑内容</span>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">JSON数组格式</label>
+                    <textarea class="form-input" id="formatEditInput" placeholder='["消息1", "消息2", "消息3"]' rows="8" style="resize: vertical; min-height: 150px; font-family: monospace; font-size: 13px;"></textarea>
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        必须是有效的JSON数组格式，如：["你好", "在干嘛呢"]
+                    </div>
+                </div>
+
+                <!-- 格式说明 -->
+                <div style="margin-top: 15px; padding: 12px; background-color: #fff3cd; border-radius: 10px; border: 1px solid #ffc107;">
+                    <div style="font-size: 12px; color: #856404; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">✓ 正确格式：</div>
+                        <div style="font-family: monospace; background: white; padding: 8px; border-radius: 6px; margin-bottom: 8px;">["你好啊", "在干嘛呢"]</div>
+                        <div style="font-weight: 600; margin-bottom: 6px;">✗ 错误格式：</div>
+                        <div style="font-family: monospace; background: white; padding: 8px; border-radius: 6px;">你好啊（缺少JSON格式）</div>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div style="display: flex; gap: 10px; margin-top: 30px;">
+                    <button class="btn-primary" onclick="smartFixFormat()" style="flex: 1; background: #007bff;">
+                        智能调节
+                    </button>
+                    <button class="btn-primary btn-save" onclick="saveFormatEdit()" style="flex: 1;">
+                        保存修改
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ID修改弹窗 -->
     <div class="settings-page" id="idModal" style="z-index: 2000;">
         <div class="settings-content" style="max-width: 400px;">
@@ -594,6 +682,58 @@
         
         .ios-switch input:focus + .ios-slider {
             box-shadow: 0 0 1px #34c759;
+        }
+        
+        /* 颜色选择器样式 */
+        .color-option {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .color-option:active {
+            transform: scale(0.95);
+        }
+        
+        .color-option .color-check {
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        
+        .color-option.selected {
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.5), 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .color-option.selected .color-check {
+            opacity: 1;
+        }
+        
+        .custom-color-picker {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .custom-color-picker:hover {
+            border-color: #007bff;
+        }
+        
+        .custom-color-picker:active {
+            transform: scale(0.95);
         }
         
         /* 锁屏模糊效果 */
@@ -1576,6 +1716,35 @@
                 <button class="btn-primary" onclick="clearSecSettings()" style="background: #dc3545; color: white; border: none;">清除副API设置</button>
             </div>
 
+            <!-- 格式修正功能 -->
+            <div style="margin-top: 50px;">
+                <div class="section-title">
+                    <span class="section-title-text">格式修正</span>
+                </div>
+                
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label class="form-label" style="margin-bottom: 4px;">自动修正格式</label>
+                            <div style="font-size: 12px; color: #999;">AI回复格式异常时自动调用API修正</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="autoFormatFixToggle" checked onchange="toggleAutoFormatFix()">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 12px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                        <div>• 开启后：AI回复格式异常时自动调用API修正</div>
+                        <div>• 关闭后：只能通过聊天扩展面板手动调节</div>
+                        <div style="margin-top: 6px; color: #999;">默认开启，建议保持开启以获得最佳体验</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- API预设保存 -->
             <div style="margin-top: 50px;">
                 <div class="section-title">
@@ -1613,6 +1782,7 @@
                 <div class="appearance-tab active" onclick="switchAppearanceTab('lockscreen')">锁屏</div>
                 <div class="appearance-tab" onclick="switchAppearanceTab('wallpaper')">壁纸</div>
                 <div class="appearance-tab" onclick="switchAppearanceTab('interface')">界面</div>
+                <div class="appearance-tab" onclick="switchAppearanceTab('pendant')">挂坠</div>
                 <div class="appearance-tab" onclick="switchAppearanceTab('border')">边框</div>
             </div>
 
@@ -2008,7 +2178,259 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 触感反馈设置 -->
+                <div style="margin-top: 20px; border-top: 1px solid #f0f0f0; padding-top: 20px;">
+                    <label class="form-label" style="margin-bottom: 4px;">触感反馈</label>
+                    <div style="font-size: 12px; color: #999; margin-bottom: 16px;">点击按钮时产生震动反馈</div>
+
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 4px;">启用触感</label>
+                                <div style="font-size: 12px; color: #999;">点击按钮、开关等交互时震动</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="hapticFeedbackToggle" onchange="toggleHapticFeedback()" checked>
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 发送动画设置 -->
+                <div style="margin-top: 20px; border-top: 1px solid #f0f0f0; padding-top: 20px;">
+                    <label class="form-label" style="margin-bottom: 4px;">发送动画</label>
+                    <div style="font-size: 12px; color: #999; margin-bottom: 16px;">发送消息时按钮的弹性动画效果</div>
+
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 4px;">启用发送动画</label>
+                                <div style="font-size: 12px; color: #999;">聊天和短信发送时的按钮动画</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="sendAnimationToggle" onchange="toggleSendAnimation()">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
+            </div>
+
+            <!-- 挂坠标签页 -->
+            <div class="appearance-tab-content" id="pendantTab">
+            <div class="settings-card">
+                <!-- 挂坠功能说明 -->
+                <div style="text-align: center; padding: 20px; background: #f8f8f8; border-radius: 12px; margin-bottom: 20px;">
+                    <div style="font-size: 14px; color: #666; margin-bottom: 8px; font-weight: 500;">挂坠装饰</div>
+                    <div style="font-size: 12px; color: #999;">在主屏幕添加挂坠装饰，支持自定义动画效果</div>
+                </div>
+
+                <!-- 显示/隐藏开关 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label class="form-label" style="margin-bottom: 4px;">显示挂坠</label>
+                            <div style="font-size: 12px; color: #999;">在主屏幕显示挂坠装饰</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="pendantVisibilityToggle" onchange="togglePendantVisibility()">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 图片设置 -->
+                <div class="section-title">
+                    <span class="section-title-text">图片设置</span>
+                </div>
+
+                <!-- 图片预览 -->
+                <div class="form-group">
+                    <label class="form-label">挂坠预览</label>
+                    <div style="width: 100%; height: 150px; border-radius: 12px; overflow: hidden; background: #f5f5f5; display: flex; align-items: center; justify-content: center; border: 2px solid #e5e5ea; position: relative;">
+                        <div id="pendantImagePlaceholder" style="font-size: 14px; color: #999; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                            <div style="width: 60px; height: 60px; border-radius: 50%; background: #e0e0e0; display: flex; align-items: center; justify-content: center;">
+                                <span style="font-size: 12px; color: #999;">预览</span>
+                            </div>
+                            <span>暂无挂坠图片</span>
+                        </div>
+                        <img id="pendantImagePreview" style="display: none; max-width: 100%; max-height: 100%; object-fit: contain;">
+                    </div>
+                </div>
+
+                <!-- 本地上传 -->
+                <div class="form-group">
+                    <label class="form-label">本地上传</label>
+                    <button class="btn-primary" onclick="openPendantImageUpload()" style="width: 100%;">
+                        选择本地图片
+                    </button>
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        支持 JPG、PNG、GIF 等格式，建议使用透明背景 PNG
+                    </div>
+                </div>
+
+                <!-- URL上传 -->
+                <div class="form-group">
+                    <label class="form-label">URL上传</label>
+                    <input type="text" class="form-input" id="pendantImageUrlInput" placeholder="输入图片URL地址">
+                    <button class="btn-primary" onclick="loadPendantImageFromUrl()" style="margin-top: 10px; width: 100%;">
+                        加载URL图片
+                    </button>
+                </div>
+
+                <!-- 重置按钮 -->
+                <div class="form-group">
+                    <button class="btn-primary" onclick="resetPendantImage()" style="background: #dc3545; color: white; border: none;">
+                        重置图片
+                    </button>
+                </div>
+
+                <!-- 位置调整 -->
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="section-title-text">位置调整</span>
+                </div>
+
+                <!-- 水平位置 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="form-label" style="margin: 0;">水平位置</label>
+                        <span id="pendantPositionXValue" style="font-size: 13px; color: #666;">50%</span>
+                    </div>
+                    <input type="range" class="param-slider" id="pendantPositionX" min="0" max="100" value="50" oninput="document.getElementById('pendantPositionXValue').textContent = this.value + '%'" onchange="updatePendantPosition()">
+                    <div style="margin-top: 4px; font-size: 11px; color: #999; display: flex; justify-content: space-between;">
+                        <span>左</span>
+                        <span>右</span>
+                    </div>
+                </div>
+
+                <!-- 垂直位置 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="form-label" style="margin: 0;">垂直位置</label>
+                        <span id="pendantPositionYValue" style="font-size: 13px; color: #666;">20%</span>
+                    </div>
+                    <input type="range" class="param-slider" id="pendantPositionY" min="0" max="100" value="20" oninput="document.getElementById('pendantPositionYValue').textContent = this.value + '%'" onchange="updatePendantPosition()">
+                    <div style="margin-top: 4px; font-size: 11px; color: #999; display: flex; justify-content: space-between;">
+                        <span>上</span>
+                        <span>下</span>
+                    </div>
+                </div>
+
+                <!-- 大小调整 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="form-label" style="margin: 0;">挂坠大小</label>
+                        <span id="pendantSizeValue" style="font-size: 13px; color: #666;">60px</span>
+                    </div>
+                    <input type="range" class="param-slider" id="pendantSizeInput" min="30" max="150" value="60" oninput="document.getElementById('pendantSizeValue').textContent = this.value + 'px'" onchange="updatePendantSize()">
+                    <div style="margin-top: 4px; font-size: 11px; color: #999; display: flex; justify-content: space-between;">
+                        <span>小</span>
+                        <span>大</span>
+                    </div>
+                </div>
+
+                <!-- 动画效果 -->
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="section-title-text">动画效果</span>
+                </div>
+
+                <!-- 预设动画 -->
+                <div class="form-group">
+                    <label class="form-label">动画预设</label>
+                    <select class="form-input" id="pendantAnimationSelect" onchange="changePendantAnimation()">
+                        <option value="none">无动画</option>
+                        <option value="swing-slow">左右摇晃 - 慢速</option>
+                        <option value="swing-medium" selected>左右摇晃 - 中速</option>
+                        <option value="swing-fast">左右摇晃 - 快速</option>
+                        <option value="bounce-slow">上下晃动 - 慢速</option>
+                        <option value="bounce-medium">上下晃动 - 中速</option>
+                        <option value="bounce-fast">上下晃动 - 快速</option>
+                        <option value="rotate-slow">旋转 - 慢速</option>
+                        <option value="rotate-medium">旋转 - 中速</option>
+                        <option value="rotate-fast">旋转 - 快速</option>
+                    </select>
+                </div>
+
+                <!-- 自定义动画 -->
+                <div class="form-group">
+                    <label class="form-label">自定义动画代码</label>
+                    <button class="btn-primary" onclick="openCustomAnimationEditor()">
+                        打开动画编辑器
+                    </button>
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        编写自定义CSS动画代码，实现更多效果
+                    </div>
+                </div>
+
+                <!-- 保存按钮 -->
+                <div class="form-group" style="margin-top: 30px;">
+                    <button class="btn-primary btn-save" onclick="savePendantSettings()">
+                        保存挂坠设置
+                    </button>
+                </div>
+            </div>
+            </div>
+
+            <!-- 自定义动画编辑器（弹出层） -->
+            <div id="customAnimationSection" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2001; overflow-y: auto; padding: 20px;">
+                <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 16px; padding: 0; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+                    <!-- 头部 -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #f0f0f0;">
+                        <h3 style="font-size: 18px; color: #333; margin: 0; font-weight: 600;">自定义动画编辑器</h3>
+                        <button onclick="closeCustomAnimationEditor()" style="width: 32px; height: 32px; border-radius: 50%; background: #f5f5f5; border: none; font-size: 20px; cursor: pointer; color: #666; transition: all 0.2s;">×</button>
+                    </div>
+
+                    <!-- 内容区域 -->
+                    <div style="padding: 20px;">
+                        <!-- 代码输入 -->
+                        <div class="form-group">
+                            <label class="form-label">CSS 动画代码</label>
+                            <textarea class="form-input" id="customAnimationCodeInput" rows="10" placeholder="例如：&#10;.screen-pendant {&#10;  animation: myAnim 2s infinite;&#10;}&#10;@keyframes myAnim {&#10;  0% { transform: translate(-50%, -50%) rotate(0deg); }&#10;  100% { transform: translate(-50%, -50%) rotate(360deg); }&#10;}" style="font-family: 'Courier New', monospace; font-size: 13px;"></textarea>
+                            <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                                输入完整的 CSS 代码，包括选择器和 @keyframes
+                            </div>
+                            <div style="margin-top: 12px; padding: 10px; background: #f0f8ff; border-radius: 8px; font-size: 11px; color: #666; line-height: 1.6;">
+                                <div style="font-weight: 500; margin-bottom: 4px;">编写提示：</div>
+                                <div>• 使用 .screen-pendant 选择器</div>
+                                <div>• transform 属性需包含 translate(-50%, -50%) 以保持居中</div>
+                                <div>• 示例：transform: translate(-50%, -50%) rotate(10deg);</div>
+                            </div>
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                            <button class="btn-primary" onclick="applyCustomAnimation()" style="flex: 1;">
+                                应用动画
+                            </button>
+                            <button class="btn-primary btn-save" onclick="saveCustomAnimationPreset()" style="flex: 1;">
+                                保存为预设
+                            </button>
+                        </div>
+
+                        <!-- 预设管理 -->
+                        <div class="section-title" style="margin-bottom: 15px;">
+                            <span class="section-title-text">我的预设</span>
+                        </div>
+
+                        <!-- 预设列表 -->
+                        <div id="customAnimationPresetList" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; border: 1px solid #f0f0f0; border-radius: 8px; padding: 10px;">
+                            <!-- JS动态渲染 -->
+                        </div>
+
+                        <!-- 批量操作 -->
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-primary" onclick="toggleSelectAllAnimationPresets()" style="flex: 1; font-size: 13px;">
+                                全选/取消
+                            </button>
+                            <button class="btn-primary" onclick="batchDeleteAnimationPresets()" style="flex: 1; background: #dc3545; color: white; border: none; font-size: 13px;">
+                                删除选中
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 边框标签页 -->
@@ -2018,12 +2440,53 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <label class="form-label" style="margin-bottom: 4px;">显示手机边框</label>
-                            <div style="font-size: 12px; color: #999;">显示精致的白色手机边框</div>
+                            <div style="font-size: 12px; color: #999;">显示精致的手机边框</div>
                         </div>
                         <label class="ios-switch">
                             <input type="checkbox" id="phoneBorderToggle" onchange="togglePhoneBorder()">
                             <span class="ios-slider"></span>
                         </label>
+                    </div>
+                </div>
+
+                <!-- 边框颜色选择 -->
+                <div class="form-group" id="borderColorSection" style="display: none; margin-top: 20px;">
+                    <label class="form-label">边框颜色</label>
+                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 12px;">
+                        <div class="color-option" data-color="#ffffff" style="background: #ffffff; border: 2px solid #e0e0e0;" onclick="selectBorderColor('#ffffff')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#000000" style="background: #000000;" onclick="selectBorderColor('#000000')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#ff6b6b" style="background: #ff6b6b;" onclick="selectBorderColor('#ff6b6b')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#4ecdc4" style="background: #4ecdc4;" onclick="selectBorderColor('#4ecdc4')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#95e1d3" style="background: #95e1d3;" onclick="selectBorderColor('#95e1d3')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#ffd93d" style="background: #ffd93d;" onclick="selectBorderColor('#ffd93d')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#6bcf7f" style="background: #6bcf7f;" onclick="selectBorderColor('#6bcf7f')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#c77dff" style="background: #c77dff;" onclick="selectBorderColor('#c77dff')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#ff9ff3" style="background: #ff9ff3;" onclick="selectBorderColor('#ff9ff3')">
+                            <div class="color-check">✓</div>
+                        </div>
+                        <div class="color-option" data-color="#fca311" style="background: #fca311;" onclick="selectBorderColor('#fca311')">
+                            <div class="color-check">✓</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="color" id="customBorderColor" class="custom-color-picker" value="#ffffff" onchange="selectBorderColor(this.value)">
+                        <label for="customBorderColor" style="font-size: 13px; color: #666; cursor: pointer;">自定义颜色</label>
                     </div>
                 </div>
             </div>
@@ -5251,6 +5714,7 @@
                 </div>
                 <div class="wallet-balance-actions" style="margin-top: 10px;">
                     <button class="wallet-balance-btn wallet-balance-btn-outline" onclick="walletDirectRecharge()">直接充值</button>
+                    <button class="wallet-balance-btn wallet-balance-btn-outline" onclick="walletDirectModify()">直接修改</button>
                 </div>
             </div>
 
@@ -6313,19 +6777,38 @@
                                 </div>
                                 <span class="chat-extend-label">停止调用</span>
                             </div>
-                            <div class="chat-extend-item chat-extend-item-placeholder">
-                                <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
-                                <span class="chat-extend-label"></span>
+                            <div class="chat-extend-item" onclick="openFormatFixPanel()">
+                                <div class="chat-extend-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </div>
+                                <span class="chat-extend-label">调节格式</span>
                             </div>
 
                             <!-- 第二行 -->
-                            <div class="chat-extend-item chat-extend-item-placeholder">
-                                <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
-                                <span class="chat-extend-label"></span>
+                            <div class="chat-extend-item" onclick="extendAction('narration')">
+                                <div class="chat-extend-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                        <polyline points="14 2 14 8 20 8"/>
+                                        <line x1="8" y1="13" x2="16" y2="13"/>
+                                        <line x1="8" y1="17" x2="16" y2="17"/>
+                                    </svg>
+                                </div>
+                                <span class="chat-extend-label">旁白</span>
                             </div>
-                            <div class="chat-extend-item chat-extend-item-placeholder">
-                                <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
-                                <span class="chat-extend-label"></span>
+                            <div class="chat-extend-item" onclick="extendAction('proactiveSpeak')">
+                                <div class="chat-extend-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                        <path d="M8 10h.01"/>
+                                        <path d="M12 10h.01"/>
+                                        <path d="M16 10h.01"/>
+                                    </svg>
+                                </div>
+                                <span class="chat-extend-label">主动说话</span>
                             </div>
                             <div class="chat-extend-item chat-extend-item-placeholder">
                                 <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
@@ -7598,6 +8081,7 @@
     <script src="prompts.js"></script>
     <script src="script.js"></script>
     <script src="script2.js"></script>
+    <script src="script3.js"></script>
     <script src="couple-avatar.js"></script>
     
     <!-- PWA Service Worker 注册和安装提示 -->

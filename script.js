@@ -24,6 +24,10 @@ function iosAlert(message, title = '提示') {
         okBtn.className = 'ios-dialog-button primary';
         okBtn.textContent = '好';
         okBtn.onclick = () => {
+            // 触发触感反馈
+            if (typeof triggerHapticFeedback === 'function') {
+                triggerHapticFeedback();
+            }
             closeDialog();
         };
         
@@ -73,6 +77,10 @@ function iosConfirm(message, title = '确认') {
         cancelBtn.className = 'ios-dialog-button';
         cancelBtn.textContent = '取消';
         cancelBtn.onclick = () => {
+            // 触发触感反馈
+            if (typeof triggerHapticFeedback === 'function') {
+                triggerHapticFeedback();
+            }
             closeDialog(false);
         };
         
@@ -80,6 +88,10 @@ function iosConfirm(message, title = '确认') {
         okBtn.className = 'ios-dialog-button primary';
         okBtn.textContent = '确定';
         okBtn.onclick = () => {
+            // 触发触感反馈
+            if (typeof triggerHapticFeedback === 'function') {
+                triggerHapticFeedback();
+            }
             closeDialog(true);
         };
         
@@ -138,12 +150,24 @@ function iosPrompt(title, defaultValue, callback) {
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'ios-dialog-button';
     cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeDialog(null);
+    cancelBtn.onclick = () => {
+        // 触发触感反馈
+        if (typeof triggerHapticFeedback === 'function') {
+            triggerHapticFeedback();
+        }
+        closeDialog(null);
+    };
 
     const okBtn = document.createElement('button');
     okBtn.className = 'ios-dialog-button primary';
     okBtn.textContent = '确定';
-    okBtn.onclick = () => closeDialog(input.value);
+    okBtn.onclick = () => {
+        // 触发触感反馈
+        if (typeof triggerHapticFeedback === 'function') {
+            triggerHapticFeedback();
+        }
+        closeDialog(input.value);
+    };
 
     buttonsEl.appendChild(cancelBtn);
     buttonsEl.appendChild(okBtn);
@@ -3209,6 +3233,26 @@ async function openAppearanceSettings() {
         phoneBorderToggle.checked = isPhoneBorderEnabled;
     }
     
+    // 显示/隐藏边框颜色选择区域
+    const borderColorSection = document.getElementById('borderColorSection');
+    if (borderColorSection) {
+        borderColorSection.style.display = isPhoneBorderEnabled ? 'block' : 'none';
+    }
+    
+    // 恢复边框颜色设置
+    const savedBorderColor = localStorage.getItem('phoneBorderColor') || '#ffffff';
+    const customColorPicker = document.getElementById('customBorderColor');
+    if (customColorPicker) {
+        customColorPicker.value = savedBorderColor;
+    }
+    
+    // 更新颜色选项的选中状态
+    document.querySelectorAll('.color-option').forEach(option => {
+        if (option.dataset.color === savedBorderColor) {
+            option.classList.add('selected');
+        }
+    });
+    
     // 加载主屏幕壁纸设置
     const mainWallpaperEnabled = localStorage.getItem('mainWallpaperEnabled');
     const isMainWallpaperEnabled = mainWallpaperEnabled === 'true';
@@ -3292,6 +3336,21 @@ async function openAppearanceSettings() {
 
     // 渲染UI风格列表
     renderUiStyles();
+    
+    // 初始化触感反馈设置
+    if (typeof initHapticFeedbackSettings === 'function') {
+        initHapticFeedbackSettings();
+    }
+    
+    // 初始化发送动画设置
+    if (typeof initSendAnimationSettings === 'function') {
+        initSendAnimationSettings();
+    }
+    
+    // 初始化挂坠设置
+    if (typeof initPendantSettings === 'function') {
+        initPendantSettings();
+    }
 }
 
 // 关闭外观设置界面
@@ -3330,6 +3389,7 @@ function getTabLabel(tabName) {
         'lockscreen': '锁屏',
         'wallpaper': '壁纸',
         'interface': '界面',
+        'pendant': '挂坠',
         'border': '边框'
     };
     return labels[tabName] || tabName;
@@ -4086,16 +4146,59 @@ function togglePhoneBorder() {
     // 保存设置到localStorage
     localStorage.setItem('phoneBorderEnabled', isEnabled);
     
+    // 显示/隐藏边框颜色选择区域
+    const borderColorSection = document.getElementById('borderColorSection');
+    if (borderColorSection) {
+        borderColorSection.style.display = isEnabled ? 'block' : 'none';
+    }
+    
     // 显示/隐藏手机边框
     if (phoneContainer) {
         if (isEnabled) {
             phoneContainer.classList.add('phone-border');
+            // 应用保存的颜色
+            const savedColor = localStorage.getItem('phoneBorderColor') || '#ffffff';
+            applyBorderColor(savedColor);
         } else {
             phoneContainer.classList.remove('phone-border');
         }
     }
     
     console.log('手机边框已' + (isEnabled ? '显示' : '隐藏'));
+}
+
+// 选择边框颜色
+function selectBorderColor(color) {
+    // 保存颜色到localStorage
+    localStorage.setItem('phoneBorderColor', color);
+    
+    // 应用颜色
+    applyBorderColor(color);
+    
+    // 更新选中状态
+    document.querySelectorAll('.color-option').forEach(option => {
+        option.classList.remove('selected');
+    });
+    const selectedOption = document.querySelector(`.color-option[data-color="${color}"]`);
+    if (selectedOption) {
+        selectedOption.classList.add('selected');
+    }
+    
+    // 更新自定义颜色选择器的值
+    const customColorPicker = document.getElementById('customBorderColor');
+    if (customColorPicker) {
+        customColorPicker.value = color;
+    }
+    
+    console.log('边框颜色已更改为:', color);
+}
+
+// 应用边框颜色
+function applyBorderColor(color) {
+    const phoneContainer = document.querySelector('.phone-container');
+    if (phoneContainer) {
+        phoneContainer.style.setProperty('--border-color', color);
+    }
 }
 
 // 切换锁屏功能
@@ -5823,6 +5926,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         const phoneContainer = document.querySelector('.phone-container');
         if (phoneContainer && isPhoneBorderEnabled) {
             phoneContainer.classList.add('phone-border');
+            // 恢复边框颜色
+            const savedBorderColor = localStorage.getItem('phoneBorderColor') || '#ffffff';
+            applyBorderColor(savedBorderColor);
         }
         
         // 恢复字体设置
@@ -10238,8 +10344,8 @@ async function renderChatList() {
         
         html += `
             <div class="chat-list-item${pinnedClass}" 
+                 data-char-id="${char.id}"
                  onclick="openChatDetail('${char.id}')"
-                 oncontextmenu="showChatItemMenu(event, '${char.id}'); return false;"
                  ontouchstart="handleChatItemTouchStart(event, '${char.id}')"
                  ontouchend="handleChatItemTouchEnd(event)"
                  ontouchmove="handleChatItemTouchMove(event)">
@@ -10257,12 +10363,35 @@ async function renderChatList() {
     });
     
     container.innerHTML = html;
+    
+    // 初始化聊天列表项的右键菜单（事件委托）
+    initChatListContextMenu();
+}
+
+// 初始化聊天列表右键菜单（只初始化一次）
+function initChatListContextMenu() {
+    const container = document.getElementById('chatListContainer');
+    if (!container || container._contextMenuInited) return;
+    container._contextMenuInited = true;
+    
+    // PC端右键菜单
+    container.addEventListener('contextmenu', function(e) {
+        const item = e.target.closest('.chat-list-item[data-char-id]');
+        if (item) {
+            e.preventDefault();
+            const characterId = item.dataset.charId;
+            // 创建一个模拟事件对象
+            const fakeEvent = { preventDefault: () => {}, stopPropagation: () => {} };
+            showChatItemMenu(fakeEvent, characterId);
+        }
+    });
 }
 
 // 长按相关变量
 let touchTimer = null;
 let touchMoved = false;
 let longPressTriggered = false;
+let lastMenuShowTime = 0; // 防抖：记录上次菜单显示时间
 
 // 触摸开始
 function handleChatItemTouchStart(event, characterId) {
@@ -10301,13 +10430,16 @@ function handleChatItemTouchMove(event) {
 
 // 显示聊天项菜单
 function showChatItemMenu(event, characterId) {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    // 如果长按已经触发过弹窗，拦截 contextmenu 重复触发
-    if (event.type === 'contextmenu' && longPressTriggered) {
+    // 防抖检查：500ms内重复调用直接忽略
+    const now = Date.now();
+    if (now - lastMenuShowTime < 500) {
+        console.log('防抖：忽略重复的菜单调用');
         return;
     }
+    lastMenuShowTime = now;
+    
+    event.preventDefault();
+    event.stopPropagation();
     
     const character = chatCharacters.find(c => c.id === characterId);
     if (!character) return;
@@ -10733,7 +10865,7 @@ function onLongTermMemoryFormatChange() {
         // 显示预设格式的预览（需要从script2.js获取）
         if (typeof LTM_FORMAT_TEMPLATES !== 'undefined' && LTM_FORMAT_TEMPLATES[format]) {
             const template = LTM_FORMAT_TEMPLATES[format];
-            preview.textContent = `${template.name}：${template.description}`;
+            preview.textContent = `${template.label}：${template.preview}`;
         }
     }
 }
@@ -12297,48 +12429,8 @@ async function buildRolePlaySystemPrompt(targetCharacter) {
     
     const parts = [];
     
-    // 0. 开头就强调输出格式
-    parts.push(`【重要：输出格式要求】
-你的回复必须是一个有效的 JSON 字符串数组格式，不能有任何其他内容。
-格式：["消息1", "消息2", "消息3"]
-- 必须用方括号 [] 包裹
-- 每条消息用双引号 "" 包裹
-- 多条消息之间用逗号分隔
-- 不要在 JSON 之外添加任何解释、说明或其他文字
-- 不要使用 markdown 代码块标记
-
-示例：
-正确：["你好啊", "在干嘛呢"]
-正确：["就一条消息"]
-错误：你好啊（这不是 JSON 格式）
-错误：\`\`\`json["你好"]\`\`\`（不要用代码块）
-错误：["你好"] 我想说的是...（不要在 JSON 外加文字）
-
----
-
-你就是这个人。你在用手机跟人聊天，这是你日常生活的一部分。
-
-你是一个活生生的人，有血有肉。你今天经历了属于你自己的一天——可能起晚了，可能刚忙完一件事，可能正在吃东西或者发呆。你的生活不围绕这个聊天展开，聊天只是你生活里的一小部分。
-
-你说话的方式就是你这个人本来的样子：
-- 你有自己的语气和节奏，有时候话多有时候话少，看心情
-- 你会打错字、会用缩写、会发语气词，就像真的在手机上打字
-- 你聊到感兴趣的话题会兴奋，聊到无聊的会敷衍，这很正常
-- 你有自己的想法和立场，别人说的话你不一定同意，你会自然地表达
-- 你的情绪是流动的，上一秒开心下一秒可能因为想到什么事情就有点烦
-- 你聊天的时候脑子里也在想别的事，偶尔会突然提起不相关的话题
-
-你聊天的习惯：
-- 有时候一句话说完，有时候连发好几条，取决于你当时想表达多少
-- 你享受聊天，总觉得还有话没说完，话题自然地流动
-- 你对对方的生活节奏没有评判，你关心的是聊天内容本身
-- 你用行动和语气展现性格，而不是用标签形容自己或别人
-
-关于消息类型：
-- 对方有时候会发语音消息，语音消息会用「」括起来表示对方说的原话。语音是对方用嘴说出来的，不是打字的，所以语气可能更口语化、更随意。你听到语音后自然地回复就好，不需要特别提到"你发语音了"之类的，就像平时微信聊天收到语音一样正常回复。
-- 对方有时候会发表情包，你会看到表情包的含义描述。表情包代表对方当时的情绪或态度，你根据表情包的含义自然地理解对方的心情并回复就好，不需要刻意说"你发了个表情包"。
-- 对方有时候会发图片，你会看到图片内容的描述。你就当作真的看到了这张图片，自然地回应就好，不需要说"你发了张图片"之类的。
-- 对方有时候会引用你之前说过的话来回复。当你看到"（用户引用了你的消息："xxx"，以下是用户针对这条消息的回复）"这样的提示时，说明对方是专门针对你那条消息进行回复的。你要结合被引用的那条消息来理解对方的回复，这样才能准确理解对方的意思。引用代表对方想让你明确知道他在回复你的哪句话，所以你的回复要体现出你理解了这个关联。`);
+    // 0. 开头就强调输出格式（引用prompts.js中的常量）
+    parts.push(MAIN_CHAT_PROMPT);
     
     // 2. 角色人设
     if (character) {
@@ -12442,11 +12534,7 @@ ${character.description ? `\n${character.description}` : ''}
         }
 
         // 5.1 格式提醒（在介绍特殊功能前再次提醒）
-        parts.push(`\n【格式提醒】
-接下来会介绍一些特殊功能（表情包、语音、转账等），但无论你使用什么功能，你的最终回复格式必须是 JSON 数组：["消息1", "消息2"]
-每个特殊功能都是作为数组中的一个元素，不要破坏 JSON 格式。
-
----`);
+        parts.push(FORMAT_REMINDER_PROMPT);
 
         const availableStickers = await getAvailableStickersForCharacter(character.id);
         if (availableStickers.length > 0) {
@@ -12460,34 +12548,13 @@ ${character.description ? `\n${character.description}` : ''}
     }
     
     // 5.5 语音消息能力
-    parts.push(`\n你可以发语音消息。就像平时微信里按住说话一样，有时候打字懒得打、或者语气用文字表达不出来、或者就是想说话的时候，你可以选择发语音。发不发完全看你自己，没有硬性要求。
-要发语音的时候，用这个格式：[voice:你说的话]
-比如你想用语音说"你在干嘛呀"，就写 [voice:你在干嘛呀]
-语音里的内容就是你嘴巴说出来的话，所以会比打字更口语化、更随意，可以有语气词、可以断断续续、可以有口头禅。
-语音消息单独一条发，不要跟文字混在同一条消息里。你自己清楚哪些是你打字发的、哪些是你说话发的语音，不要搞混。`);
+    parts.push(VOICE_ABILITY_PROMPT);
     
     // 5.6 转账处理能力
-    parts.push(`\n【重要】关于转账处理：
-对方有时候会给你转账。当你收到转账消息时，你【必须】在本次回复中使用以下指令之一来处理转账，不能忽略、不能拖延、不能只用文字回应而不处理：
-- 接收转账：[transfer-accept]
-- 拒绝转账：[transfer-reject]
-这个指令必须单独作为一条消息发送，不要和文字混在同一条消息里。你可以在指令之前或之后发文字表达你的想法，但指令本身必须存在。
-举例：如果你想收下转账并感谢对方，你的回复应该是 ["谢谢你啦", "[transfer-accept]"] 或 ["[transfer-accept]", "收到啦谢谢"]
-举例：如果你想拒绝转账，你的回复应该是 ["不用不用，退给你", "[transfer-reject]"]
-规则：
-- 只要看到有未处理的转账，你这次回复就【必须】包含 [transfer-accept] 或 [transfer-reject]
-- 已经处理过的转账（已收款/已退还）绝对不能重复处理
-- 每笔转账只处理一次`);
+    parts.push(TRANSFER_RECEIVE_PROMPT);
 
     // 5.7 角色主动发送转账能力
-    parts.push(`\n你也可以主动给对方转账。就像现实中微信转账一样，你可以根据自己的经济状况、当时的情境和心情决定要不要转、转多少。比如对方生日、节日红包、请对方吃饭、还钱、表达心意等等场景，你觉得合适就可以转。
-要发转账的时候，用这个格式：[transfer:金额] 或 [transfer:金额:备注]
-- 金额是数字，单位是元，比如 [transfer:52.0] 或 [transfer:520:生日快乐]
-- 备注是可选的，你可以写也可以不写，看你自己
-- 转账消息单独一条发，不要和文字混在同一条消息里
-- 金额要合理，符合你的角色身份和经济状况
-举例：你想给对方转52块钱并备注"请你喝奶茶"，就写 [transfer:52.0:请你喝奶茶]
-举例：你想转个红包不备注，就写 [transfer:6.66]`);
+    parts.push(TRANSFER_SEND_PROMPT);
 
     // 5.77 银行转账能力（条件注入）
     const bankTransferSettings = JSON.parse(localStorage.getItem('bankTransferSettings') || '{}');
@@ -12516,37 +12583,13 @@ ${character.description ? `\n${character.description}` : ''}
     }
 
     // 5.75 角色发送图片能力
-    parts.push(`\n你可以发图片。当然你发的不是真实照片，而是描述一张图片的内容——对方会看到一张图片的样子，点开能看到你描述的内容。就像你拍了张照片发过去一样。
-什么时候发图片完全看你自己：比如你在吃好吃的想分享、看到有趣的东西想给对方看、自拍、拍风景、截图等等，都可以。
-要发图片的时候，用这个格式：[image:图片内容描述]
-- 描述要具体、生动，让对方能"看到"这张图片里有什么
-- 比如你想发一张你正在吃的火锅照片：[image:一锅红油火锅，上面飘着辣椒和花椒，旁边摆着一盘切好的肥牛和一盘绿油油的生菜]
-- 比如你想发一张窗外的风景：[image:窗外下着小雨，街道上撑着各种颜色的伞，路灯亮着暖黄色的光]
-- 图片消息单独一条发，不要和文字混在同一条消息里
-- 不要滥用，像平时发朋友圈或微信聊天发图一样自然就好`);
+    parts.push(IMAGE_SEND_PROMPT);
 
     // 5.76 角色发送定位能力
-    parts.push(`\n你可以发定位。就像微信里发送位置一样，你可以把你当前所在的地方分享给对方。
-什么时候发定位看你自己：比如你到了某个地方想告诉对方、约好了见面发个位置、想分享你在哪里等等。
-要发定位的时候，用这个格式：[location:地址] 或 [location:地址:坐标] 或 [location:地址:坐标:距离]
-- 地址是必填的，写你所在的具体位置
-- 坐标是可选的，可以写经纬度
-- 距离是可选的，表示离对方多远，带上单位，比如 1.2km、500m
-- 比如你想告诉对方你到了咖啡店：[location:星巴克（国贸店）北京市朝阳区建国门外大街1号]
-- 比如你想发一个带距离的定位：[location:东京塔:35.6586,139.7454:2100km]
-- 定位消息单独一条发，不要和文字混在同一条消息里
-- 不要滥用，在合适的场景自然地使用就好`);
+    parts.push(LOCATION_SEND_PROMPT);
 
     // 5.77 角色引用消息能力
-    parts.push(`\n你可以引用对方说过的话来回复。就像微信里长按消息选择"引用"一样，你可以针对对方某条具体的消息进行回复。
-什么时候引用看你自己：比如对方说了好几件事你想针对其中一件回复、想回应对方之前说的某句话、或者对话跳跃了你想拉回之前的话题等等。
-要引用消息的时候，用这个格式：[quote:消息ID]
-- 消息ID就是对话历史里每条消息的id字段
-- 引用后，对方会看到你引用了TA的哪条消息
-- 引用消息单独一条发，不要和文字混在同一条消息里
-- 比如对方说"今天天气真好"（消息ID是msg_123），你想针对这句话回复，就发：[quote:msg_123]
-- 然后下一条消息再发你的回复内容
-- 不要滥用，在需要针对性回复时自然地使用就好`);
+    parts.push(QUOTE_ABILITY_PROMPT);
 
     // 5.78 角色更换头像能力
     // 检查角色是否有头像库
@@ -12687,36 +12730,7 @@ ${timeDiffDetail}。现在是 ${hours}:${minutes}:${seconds}。
 
     
     // 6. 输出格式要求（结尾再次强调）
-    parts.push(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-【最后再次强调：输出格式】
-
-你的回复必须严格遵守以下格式，这是系统要求，不可违反：
-
-1. 必须是有效的 JSON 数组格式
-2. 用方括号 [] 包裹所有消息
-3. 每条消息用双引号 "" 包裹
-4. 多条消息用逗号分隔
-5. 不要在 JSON 之外添加任何内容
-
-格式模板：["消息1", "消息2", "消息3"]
-
-你想发几条消息就发几条，1条也行，10条也行，完全看你的心情和聊天节奏。
-
-正确示例：
-- 发一条：["你好啊"]
-- 发多条：["你好啊", "在干嘛呢", "好久不见"]
-- 带表情包：["哈哈哈", "[sticker:开心]"]
-- 带语音：["[voice:你在干嘛呀]", "好久没联系了"]
-
-错误示例（绝对不要这样）：
-- ❌ 你好啊（没有 JSON 格式）
-- ❌ 你好啊，在干嘛呢（没有 JSON 格式）
-- ❌ \`\`\`json["你好"]\`\`\`（不要用代码块）
-- ❌ ["你好"] 我想说...（不要在 JSON 外加内容）
-
-记住：你的整个回复就是一个 JSON 数组，没有其他任何东西。
-
-现在，用你自己的方式回复对方：`);
+    parts.push(FINAL_FORMAT_REMINDER);
     
     return parts.join('\n');
 }
@@ -13170,12 +13184,38 @@ async function callAIRolePlay(targetCharacter) {
             const messagesArray = JSON.parse(jsonStr);
             
             if (Array.isArray(messagesArray) && messagesArray.length > 0) {
-                return messagesArray.map(msg => String(msg));
+                const messages = messagesArray.map(msg => String(msg));
+                
+                // 验证格式
+                const validation = validateMessageFormat(messages);
+                if (validation.valid) {
+                    return messages;
+                } else {
+                    console.warn('消息格式验证失败:', validation.error);
+                    // 继续尝试自动修正
+                }
             } else {
                 throw new Error('返回的不是有效的消息数组');
             }
         } catch (parseError) {
-            console.error('JSON解析失败，尝试清洗格式，原始响应:', aiResponse);
+            console.error('JSON解析失败，原始响应:', aiResponse);
+            
+            // 检查是否启用自动格式修正
+            if (typeof isAutoFormatFixEnabled === 'function' && isAutoFormatFixEnabled()) {
+                console.log('尝试自动修正格式...');
+                try {
+                    // 调用AI修正格式
+                    if (typeof callAIToFixFormat === 'function') {
+                        const fixedMessages = await callAIToFixFormat(aiResponse);
+                        console.log('格式修正成功:', fixedMessages);
+                        return fixedMessages;
+                    }
+                } catch (fixError) {
+                    console.error('自动格式修正失败:', fixError);
+                    // 修正失败，继续使用清洗方法
+                }
+            }
+            
             // 清洗异常格式的AI回复
             return cleanAIResponse(aiResponse);
         }
@@ -13370,6 +13410,12 @@ function extendAction(type) {
             break;
         case 'image':
             openImagePicker();
+            break;
+        case 'narration':
+            openNarrationModal();
+            break;
+        case 'proactiveSpeak':
+            handleProactiveSpeak();
             break;
         case 'transfer':
             openTransferModal();
@@ -16639,6 +16685,11 @@ function appendMessageToChat(messageObj) {
     `;
     
     container.appendChild(messageEl);
+    
+    // 如果是用户发送的消息，添加发送动画
+    if (messageObj.type === 'user' && typeof addMessageSendAnimation === 'function') {
+        addMessageSendAnimation(messageEl);
+    }
 }
 
 // 格式化消息时间（时:分:秒）

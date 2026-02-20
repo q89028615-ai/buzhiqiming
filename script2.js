@@ -1,11 +1,72 @@
 // ========== script2.js - 扩展功能模块 ==========
 // 依赖 script.js 中的全局变量和函数
 
+// ========== 触感反馈功能 ==========
+
+/**
+ * 触发触感反馈（震动）
+ * @param {number} duration - 震动时长（毫秒），默认15ms
+ */
+function triggerHapticFeedback(duration = 15) {
+    // 检查是否启用触感反馈
+    const hapticEnabled = localStorage.getItem('hapticFeedbackEnabled');
+    
+    // 默认开启，只有明确设置为 'false' 时才关闭
+    if (hapticEnabled === 'false') {
+        return;
+    }
+    
+    // 检查浏览器是否支持震动API
+    if ('vibrate' in navigator) {
+        try {
+            navigator.vibrate(duration);
+        } catch (e) {
+            console.warn('触感反馈失败:', e);
+        }
+    }
+}
+
+/**
+ * 切换触感反馈开关
+ */
+function toggleHapticFeedback() {
+    const toggle = document.getElementById('hapticFeedbackToggle');
+    const isEnabled = toggle.checked;
+    
+    // 保存设置
+    localStorage.setItem('hapticFeedbackEnabled', isEnabled.toString());
+    
+    // 触发一次震动作为反馈
+    if (isEnabled) {
+        if ('vibrate' in navigator) {
+            navigator.vibrate(15);
+        }
+        showToast('触感反馈已开启');
+    } else {
+        showToast('触感反馈已关闭');
+    }
+}
+
+/**
+ * 初始化触感反馈设置
+ */
+function initHapticFeedbackSettings() {
+    const toggle = document.getElementById('hapticFeedbackToggle');
+    if (!toggle) return;
+    
+    // 读取设置，默认开启
+    const hapticEnabled = localStorage.getItem('hapticFeedbackEnabled');
+    toggle.checked = hapticEnabled !== 'false'; // 默认true，只有明确设置为false才关闭
+}
+
 // ========== API调用中断控制 ==========
 let currentAbortController = null; // 用于中断API调用的控制器
 
 // 停止当前的API调用
 function stopApiCall() {
+    // 触发触感反馈
+    triggerHapticFeedback();
+    
     if (currentAbortController) {
         currentAbortController.abort();
         currentAbortController = null;
@@ -516,6 +577,775 @@ async function saveModelParams() {
     } catch (error) {
         console.error('❌ 保存模型参数失败:', error);
         showToast('保存失败，请重试');
+    }
+}
+
+// ========== 旁白功能 ==========
+
+// 打开旁白输入弹窗
+function openNarrationModal() {
+    // 收起扩展面板
+    const panel = document.getElementById('chatExtendPanel');
+    if (panel) panel.classList.remove('active');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'narrationOverlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
+
+    const card = document.createElement('div');
+    card.style.cssText = 'width:320px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.25);transform:scale(0.9) translateY(20px);opacity:0;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);';
+
+    // 标题
+    const header = document.createElement('div');
+    header.style.cssText = 'padding:22px 24px 8px;text-align:center;';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:17px;font-weight:600;color:#333;';
+    title.textContent = '添加旁白';
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size:12px;color:#aaa;margin-top:6px;';
+    subtitle.textContent = '描述客观发生的事实或背景信息';
+    header.appendChild(title);
+    header.appendChild(subtitle);
+
+    // 表单区域
+    const body = document.createElement('div');
+    body.style.cssText = 'padding:12px 24px 8px;';
+
+    // 旁白内容输入
+    const contentLabel = document.createElement('div');
+    contentLabel.style.cssText = 'font-size:12px;color:#999;margin-bottom:6px;';
+    contentLabel.textContent = '旁白内容';
+    const contentInput = document.createElement('textarea');
+    contentInput.id = 'narrationContentInput';
+    contentInput.placeholder = '例如：昨天我们一起去吃了晚饭，吃的很高兴';
+    contentInput.maxLength = 500;
+    contentInput.rows = 5;
+    contentInput.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;color:#333;outline:none;box-sizing:border-box;transition:border-color 0.2s;resize:vertical;min-height:100px;font-family:inherit;';
+    contentInput.onfocus = () => { contentInput.style.borderColor = '#999'; };
+    contentInput.onblur = () => { contentInput.style.borderColor = '#e0e0e0'; };
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:#bbb;margin-top:6px;line-height:1.4;';
+    hint.textContent = '旁白会以灰色系统消息显示，并作为上下文的一部分被AI理解';
+
+    body.appendChild(contentLabel);
+    body.appendChild(contentInput);
+    body.appendChild(hint);
+
+    // 按钮区域
+    const footer = document.createElement('div');
+    footer.style.cssText = 'padding:8px 24px 20px;display:flex;gap:10px;';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.style.cssText = 'flex:1;padding:13px 0;border:1.5px solid #e0e0e0;border-radius:12px;font-size:15px;font-weight:500;color:#666;background:#fff;cursor:pointer;transition:all 0.15s;';
+    cancelBtn.textContent = '取消';
+    cancelBtn.onclick = () => closeNarrationModal(overlay, card);
+
+    const sendBtn = document.createElement('button');
+    sendBtn.style.cssText = 'flex:1;padding:13px 0;border:none;border-radius:12px;font-size:15px;font-weight:600;color:#fff;background:#333;cursor:pointer;transition:all 0.15s;';
+    sendBtn.textContent = '发送';
+    sendBtn.onclick = () => sendNarrationMessage(overlay, card);
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(sendBtn);
+
+    card.appendChild(header);
+    card.appendChild(body);
+    card.appendChild(footer);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    // 入场动画
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        card.style.transform = 'scale(1) translateY(0)';
+        card.style.opacity = '1';
+    });
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeNarrationModal(overlay, card);
+    });
+
+    setTimeout(() => contentInput.focus(), 400);
+}
+
+// 关闭旁白弹窗
+function closeNarrationModal(overlay, card) {
+    overlay.style.opacity = '0';
+    card.style.transform = 'scale(0.9) translateY(20px)';
+    card.style.opacity = '0';
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+}
+
+// 发送旁白消息
+async function sendNarrationMessage(overlay, card) {
+    const content = document.getElementById('narrationContentInput').value.trim();
+    if (!content) {
+        showIosAlert('提示', '请输入旁白内容');
+        return;
+    }
+
+    if (!currentChatCharacter) {
+        showIosAlert('提示', '请先选择一个聊天角色');
+        return;
+    }
+
+    closeNarrationModal(overlay, card);
+
+    const messageObj = {
+        id: Date.now().toString() + Math.random() + '_narration',
+        characterId: currentChatCharacter.id,
+        content: content,
+        type: 'system',
+        timestamp: new Date().toISOString(),
+        sender: 'system',
+        messageType: 'narration'
+    };
+
+    // 渲染到聊天界面
+    appendSystemMessageToChat(messageObj);
+    
+    // 保存到数据库（添加到上下文）
+    await saveMessageToDB(messageObj);
+    
+    // 更新聊天列表
+    await updateChatListLastMessage(currentChatCharacter.id, '[旁白]', messageObj.timestamp);
+    
+    // 滚动到底部
+    scrollChatToBottom();
+    
+    showToast('旁白已添加');
+}
+
+// ========== 主动说话功能 ==========
+
+// 处理主动说话
+async function handleProactiveSpeak() {
+    // 收起扩展面板
+    const panel = document.getElementById('chatExtendPanel');
+    if (panel) panel.classList.remove('active');
+
+    if (!currentChatCharacter) {
+        showIosAlert('提示', '请先选择一个聊天角色');
+        return;
+    }
+
+    // 确认操作
+    const confirmed = await iosConfirm(
+        '角色将基于当前对话历史主动发起对话，是否继续？',
+        '主动说话'
+    );
+    if (!confirmed) return;
+
+    // 捕获当前角色引用，防止用户切换角色
+    const targetCharacter = currentChatCharacter;
+    const targetCharacterId = currentChatCharacter.id;
+
+    // 记录正在调用AI的角色ID
+    if (typeof aiRespondingCharacterIds !== 'undefined') {
+        aiRespondingCharacterIds.add(targetCharacterId);
+    }
+
+    try {
+        // 显示"正在输入中"提示
+        if (typeof showTypingIndicator === 'function') {
+            showTypingIndicator();
+        }
+        
+        // 禁用发送按钮
+        if (typeof disableSendButton === 'function') {
+            disableSendButton();
+        }
+
+        console.log('角色正在主动思考...');
+
+        // 调用API获取角色的主动发言
+        const messages = await callProactiveSpeakAPI(targetCharacter);
+
+        if (!messages || messages.length === 0) {
+            showIosAlert('提示', 'AI返回了空响应');
+            return;
+        }
+
+        // 预加载角色可用表情包
+        const availableStickers = await getAvailableStickersForCharacter(targetCharacterId);
+        const stickerMap = {};
+        if (availableStickers.length > 0) {
+            const userStickers = await loadStickersFromDB();
+            const charStickers = await loadCharStickersFromDB();
+            const allStickers = [...userStickers, ...charStickers];
+            availableStickers.forEach(as => {
+                const found = allStickers.find(s => s.id === as.id);
+                if (found && found.data) {
+                    stickerMap[as.name] = found;
+                }
+            });
+        }
+
+        // 处理每条消息（与showEmojiPicker中的逻辑相同）
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+
+            // 只有当用户仍在查看目标角色的聊天界面时才显示typing动画
+            const isViewingTarget = currentChatCharacter && currentChatCharacter.id === targetCharacterId;
+
+            // 显示"正在输入中"动画
+            if (i > 0 && isViewingTarget && typeof showTypingIndicator === 'function') {
+                showTypingIndicator();
+            }
+
+            // 等待一段时间，让用户看到"正在输入..."动画
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            // 隐藏typing indicator
+            if (isViewingTarget && typeof hideTypingIndicator === 'function') {
+                hideTypingIndicator();
+            }
+
+            // 检查各种消息类型
+            const stickerMatch = msg.match(/^\[sticker:(.+)\]$/);
+            const voiceMatch = msg.match(/^\[voice:(.+)\]$/);
+            const transferSendMatch = msg.match(/^\[transfer:([\d.]+)(?::(.+))?\]$/);
+            const bankTransferMatch = msg.match(/^\[银行转账:([\d.]+):(.+)\]$/);
+            const avatarChangeMatch = msg.match(/^\[更换头像:([^:\]]+)(?::(.+))?\]$/);
+            const coupleAvatarChangeMatch = msg.match(/^\[换情头:([^:\]]+)\]$/);
+            const charImageMatch = msg.match(/^\[image:(.+)\]$/);
+            const locationMatch = msg.match(/^\[location:([^:\]]+)(?::([^:\]]*))?(?::([^\]]*))?\]$/);
+
+            let messageObj;
+
+            if (stickerMatch && stickerMap[stickerMatch[1]]) {
+                // 表情包消息
+                const stickerName = stickerMatch[1];
+                const sticker = stickerMap[stickerName];
+                messageObj = {
+                    id: Date.now().toString() + Math.random(),
+                    characterId: targetCharacterId,
+                    content: '[表情包]',
+                    type: 'char',
+                    timestamp: new Date().toISOString(),
+                    sender: 'char',
+                    messageType: 'sticker',
+                    stickerData: sticker.data,
+                    stickerName: sticker.name || stickerName
+                };
+            } else if (voiceMatch) {
+                // 语音消息
+                const voiceText = voiceMatch[1];
+                const duration = typeof estimateVoiceDuration === 'function' ? estimateVoiceDuration(voiceText) : 5;
+                messageObj = {
+                    id: Date.now().toString() + Math.random(),
+                    characterId: targetCharacterId,
+                    content: `[语音消息: ${voiceText}]`,
+                    type: 'char',
+                    timestamp: new Date().toISOString(),
+                    sender: 'char',
+                    messageType: 'voice',
+                    voiceText: voiceText,
+                    voiceDuration: duration
+                };
+            } else if (transferSendMatch) {
+                // 转账消息
+                const tfAmount = Math.round(parseFloat(transferSendMatch[1]) * 100) / 100;
+                const tfRemark = transferSendMatch[2] || '';
+                if (!tfAmount || tfAmount <= 0 || isNaN(tfAmount)) {
+                    continue;
+                }
+                const transferId = 'tf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                messageObj = {
+                    id: Date.now().toString() + Math.random(),
+                    characterId: targetCharacterId,
+                    content: '[转账]',
+                    type: 'char',
+                    timestamp: new Date().toISOString(),
+                    sender: 'char',
+                    messageType: 'transfer',
+                    transferAmount: tfAmount,
+                    transferRemark: tfRemark,
+                    transferId: transferId,
+                    transferStatus: 'pending'
+                };
+            } else if (bankTransferMatch) {
+                // 银行转账
+                const btAmount = Math.round(parseFloat(bankTransferMatch[1]) * 100) / 100;
+                const btReason = bankTransferMatch[2] || '';
+                if (!btAmount || btAmount <= 0 || isNaN(btAmount)) {
+                    continue;
+                }
+                if (typeof executeBankTransfer === 'function') {
+                    executeBankTransfer(btAmount, btReason).catch(err => {
+                        console.error('银行转账执行失败:', err);
+                    });
+                }
+                continue;
+            } else if (avatarChangeMatch) {
+                // 更换头像
+                const avatarName = avatarChangeMatch[1].trim();
+                const reason = (avatarChangeMatch[2] || '').trim();
+                if (typeof executeAvatarChange === 'function') {
+                    executeAvatarChange(avatarName, reason).catch(err => {
+                        console.error('头像更换执行失败:', err);
+                    });
+                }
+                continue;
+            } else if (coupleAvatarChangeMatch) {
+                // 更换情头
+                const coupleName = coupleAvatarChangeMatch[1].trim();
+                if (typeof aiChangeCoupleAvatar === 'function') {
+                    aiChangeCoupleAvatar(coupleName).catch(err => {
+                        console.error('情头更换执行失败:', err);
+                    });
+                }
+                continue;
+            } else if (charImageMatch) {
+                // 图片消息
+                const imageDesc = charImageMatch[1];
+                messageObj = {
+                    id: Date.now().toString() + Math.random(),
+                    characterId: targetCharacterId,
+                    content: '[图片]',
+                    type: 'char',
+                    timestamp: new Date().toISOString(),
+                    sender: 'char',
+                    messageType: 'textImage',
+                    textImageDesc: imageDesc
+                };
+            } else if (locationMatch) {
+                // 定位消息
+                const locAddr = locationMatch[1].trim();
+                const locCoord = (locationMatch[2] || '').trim();
+                const distRaw = (locationMatch[3] || '').trim();
+                let locDist = '';
+                let locUnit = '';
+                if (distRaw) {
+                    const distParts = distRaw.match(/^([\d.]+)\s*(.*)$/);
+                    if (distParts) {
+                        locDist = distParts[1];
+                        locUnit = distParts[2] || 'km';
+                    } else {
+                        locDist = distRaw;
+                    }
+                }
+                messageObj = {
+                    id: Date.now().toString() + Math.random(),
+                    characterId: targetCharacterId,
+                    content: '[位置]',
+                    type: 'char',
+                    timestamp: new Date().toISOString(),
+                    sender: 'char',
+                    messageType: 'location',
+                    locationAddress: locAddr,
+                    locationCoord: locCoord,
+                    locationDistance: locDist,
+                    locationUnit: locUnit
+                };
+            } else {
+                // 普通文本消息
+                let cleanMsg = msg
+                    .replace(/\[sticker:[^\]]*\]/g, '')
+                    .replace(/\[voice:[^\]]*\]/g, '')
+                    .replace(/\[transfer[^\]]*\]/g, '')
+                    .replace(/\[银行转账:[^\]]*\]/g, '')
+                    .replace(/\[image:[^\]]*\]/g, '')
+                    .replace(/\[location:[^\]]*\]/g, '')
+                    .trim();
+
+                if (!cleanMsg) continue;
+
+                messageObj = {
+                    id: Date.now().toString() + Math.random(),
+                    characterId: targetCharacterId,
+                    content: cleanMsg,
+                    type: 'char',
+                    timestamp: new Date().toISOString(),
+                    sender: 'char'
+                };
+            }
+
+            // 渲染消息到界面
+            if (currentChatCharacter && currentChatCharacter.id === targetCharacterId && typeof appendMessageToChat === 'function') {
+                appendMessageToChat(messageObj);
+            }
+            
+            // 保存到数据库
+            if (typeof saveMessageToDB === 'function') {
+                await saveMessageToDB(messageObj);
+            }
+
+            // 更新角色最后消息时间
+            targetCharacter.lastMessageTime = new Date().toISOString();
+
+            // 消息之间添加小延迟
+            if (i < messages.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+        }
+
+        // 更新角色最后消息
+        const lastMsg = messages[messages.length - 1];
+        const lastMsgSticker = lastMsg.match(/^\[sticker:(.+)\]$/);
+        const lastMsgVoice = lastMsg.match(/^\[voice:(.+)\]$/);
+        const lastMsgTransfer = lastMsg.match(/^\[transfer:[\d.]+(?::.+)?\]$/);
+        const lastMsgImage = lastMsg.match(/^\[image:.+\]$/);
+        const lastMsgLocation = lastMsg.match(/^\[location:[^\]]+\]$/);
+        targetCharacter.lastMessage = lastMsgSticker ? '[表情包]' : lastMsgVoice ? '[语音消息]' : lastMsgTransfer ? '[转账]' : lastMsgImage ? '[图片]' : lastMsgLocation ? '[位置]' : lastMsg.substring(0, 50) + (lastMsg.length > 50 ? '...' : '');
+        
+        if (typeof saveChatCharacters === 'function') {
+            await saveChatCharacters();
+        }
+
+        // 滚动到底部
+        if (currentChatCharacter && currentChatCharacter.id === targetCharacterId && typeof scrollChatToBottom === 'function') {
+            scrollChatToBottom();
+        }
+
+        // 触发长期记忆自动总结检查
+        if (typeof checkAndTriggerAutoSummary === 'function') {
+            checkAndTriggerAutoSummary(targetCharacterId);
+        }
+
+        // 启用发送按钮
+        if (currentChatCharacter && currentChatCharacter.id === targetCharacterId && typeof enableSendButton === 'function') {
+            enableSendButton();
+        }
+
+        // AI调用完成，清除该角色的调用状态
+        if (typeof aiRespondingCharacterIds !== 'undefined') {
+            aiRespondingCharacterIds.delete(targetCharacterId);
+        }
+
+        console.log('主动说话完成');
+
+    } catch (error) {
+        // 出错时隐藏typing indicator和启用发送按钮
+        if (currentChatCharacter && currentChatCharacter.id === targetCharacterId) {
+            if (typeof hideTypingIndicator === 'function') {
+                hideTypingIndicator();
+            }
+            if (typeof enableSendButton === 'function') {
+                enableSendButton();
+            }
+        }
+
+        // AI调用失败，清除该角色的调用状态
+        if (typeof aiRespondingCharacterIds !== 'undefined') {
+            aiRespondingCharacterIds.delete(targetCharacterId);
+        }
+
+        console.error('主动说话失败:', error);
+        if (error.message === 'API调用已被用户中断') {
+            showToast('已取消');
+        } else {
+            showIosAlert('主动说话失败', error.message || '未知错误');
+        }
+    }
+}
+
+// 调用API获取角色的主动发言
+async function callProactiveSpeakAPI(targetCharacter) {
+    // 获取API设置
+    const settings = await storageDB.getItem('apiSettings');
+    if (!settings || !settings.apiUrl || !settings.apiKey || !settings.model) {
+        throw new Error('请先在设置中配置API');
+    }
+
+    // 构建系统提示词（复用角色扮演的系统提示词）
+    const systemPrompt = await buildRolePlaySystemPrompt(targetCharacter);
+
+    // 获取最近的聊天历史
+    const memoryLimit = targetCharacter.shortTermMemory || 10;
+    const chatHistory = await getChatHistory(targetCharacter.id, memoryLimit);
+
+    // 构建消息数组
+    const messages = [
+        {
+            role: 'system',
+            content: systemPrompt
+        }
+    ];
+
+    // 添加聊天历史（与callAIRolePlay相同的处理逻辑）
+    chatHistory.forEach(msg => {
+        let content = msg.content;
+        let imageData = null;
+
+        // 生成消息ID标记
+        let idPrefix = '';
+        if (msg.id) {
+            idPrefix = `[id:${msg.id}] `;
+        }
+
+        // 生成精确时间标记
+        let timePrefix = '';
+        if (msg.timestamp) {
+            const msgTime = new Date(msg.timestamp);
+            const y = msgTime.getFullYear();
+            const mo = msgTime.getMonth() + 1;
+            const d = msgTime.getDate();
+            const h = String(msgTime.getHours()).padStart(2, '0');
+            const mi = String(msgTime.getMinutes()).padStart(2, '0');
+            const s = String(msgTime.getSeconds()).padStart(2, '0');
+            timePrefix = `[${y}年${mo}月${d}日 ${h}:${mi}:${s}] `;
+        }
+
+        // 检查是否有引用信息
+        let quotePrefix = '';
+        if (msg.quotedMessageId && msg.quotedSender && msg.quotedContent && msg.type === 'user') {
+            quotePrefix = `（用户引用了你的消息："${msg.quotedContent}"，以下是用户针对这条消息的回复）\n`;
+        }
+
+        // 处理各种消息类型（简化版，只处理主要类型）
+        if (msg.messageType === 'voice' && msg.voiceText) {
+            if (msg.type === 'user') {
+                content = `（对方发了一条${msg.voiceDuration || ''}秒的语音消息，说的是：「${msg.voiceText}」）`;
+            } else {
+                content = `[voice:${msg.voiceText}]`;
+            }
+        } else if (msg.messageType === 'sticker') {
+            const name = msg.stickerName || '未知';
+            if (msg.type === 'user') {
+                content = `（对方发了一个表情包，含义是：${name}）`;
+            } else {
+                content = `[sticker:${name}]`;
+            }
+        } else if (msg.messageType === 'image' && msg.imageData) {
+            imageData = msg.imageData;
+            content = '（对方发送了一张图片，请仔细查看图片内容并自然地回应）';
+        } else if (msg.messageType === 'systemNotice' || msg.type === 'system') {
+            content = `（系统记录的客观事实：${msg.content}。注意：这不是你说的，也不是对方说的，这是系统自动记录的事实信息，供你了解当前情况。）`;
+        }
+
+        const msgObj = {
+            role: msg.type === 'user' ? 'user' : (msg.type === 'system' ? 'user' : 'assistant'),
+            content: idPrefix + timePrefix + quotePrefix + content
+        };
+
+        if (imageData) {
+            msgObj._hasImage = true;
+            msgObj._imageData = imageData;
+        }
+
+        messages.push(msgObj);
+    });
+
+    // 添加主动说话的特殊提示
+    messages.push({
+        role: 'user',
+        content: '（现在请你主动发起对话。你可以：1）询问对方的近况或感受；2）分享你自己的想法、心情或最近发生的事；3）延续之前的话题；4）提出新的话题。请自然、真实地表达，就像真正的朋友或恋人那样主动关心对方。）'
+    });
+
+    // 调用API
+    try {
+        // 创建新的AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = new AbortController();
+        }
+        const signal = (typeof currentAbortController !== 'undefined') ? currentAbortController.signal : undefined;
+
+        let response;
+
+        if (settings.provider === 'hakimi') {
+            // Gemini API
+            const geminiContents = messages.filter(m => m.role !== 'system').map(m => {
+                const parts = [{ text: m.content }];
+                if (m._hasImage && m._imageData) {
+                    const base64Match = m._imageData.match(/^data:(image\/\w+);base64,(.+)$/);
+                    if (base64Match) {
+                        parts.unshift({
+                            inlineData: {
+                                mimeType: base64Match[1],
+                                data: base64Match[2]
+                            }
+                        });
+                    }
+                }
+                return {
+                    role: m.role === 'user' ? 'user' : 'model',
+                    parts: parts
+                };
+            });
+            response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: geminiContents,
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                    generationConfig: {
+                        temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
+                        topP: settings.topP !== undefined ? settings.topP : 0.95,
+                        maxOutputTokens: settings.maxTokens || 2048
+                    }
+                }),
+                signal: signal
+            });
+        } else if (settings.provider === 'claude') {
+            // Claude API
+            const claudeMessages = messages.filter(m => m.role !== 'system').map(m => {
+                if (m._hasImage && m._imageData) {
+                    const base64Match = m._imageData.match(/^data:(image\/\w+);base64,(.+)$/);
+                    if (base64Match) {
+                        return {
+                            role: m.role,
+                            content: [
+                                {
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: base64Match[1],
+                                        data: base64Match[2]
+                                    }
+                                },
+                                {
+                                    type: 'text',
+                                    text: m.content
+                                }
+                            ]
+                        };
+                    }
+                }
+                return { role: m.role, content: m.content };
+            });
+            response = await fetch(`${settings.apiUrl}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': settings.apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    max_tokens: settings.maxTokens || 2048,
+                    temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
+                    system: systemPrompt,
+                    messages: claudeMessages
+                }),
+                signal: signal
+            });
+        } else {
+            // OpenAI-compatible API
+            const openaiMessages = messages.map(m => {
+                if (m._hasImage && m._imageData) {
+                    return {
+                        role: m.role,
+                        content: [
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: m._imageData
+                                }
+                            },
+                            {
+                                type: 'text',
+                                text: m.content
+                            }
+                        ]
+                    };
+                }
+                return { role: m.role, content: m.content };
+            });
+            response = await fetch(`${settings.apiUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: settings.model,
+                    messages: openaiMessages,
+                    temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
+                    max_tokens: settings.maxTokens || 2048
+                }),
+                signal: signal
+            });
+        }
+
+        // 清除AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = null;
+        }
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API请求失败: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+
+        // 解析响应
+        let aiResponse = '';
+
+        if (settings.provider === 'hakimi') {
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                aiResponse = data.candidates[0].content.parts[0].text;
+            }
+        } else if (settings.provider === 'claude') {
+            if (data.content && data.content[0]) {
+                aiResponse = data.content[0].text;
+            }
+        } else {
+            if (data.choices && data.choices[0] && data.choices[0].message) {
+                aiResponse = data.choices[0].message.content;
+            }
+        }
+
+        if (!aiResponse) {
+            throw new Error('API返回了空响应');
+        }
+
+        // 解析JSON数组
+        try {
+            let jsonStr = aiResponse.trim();
+            jsonStr = jsonStr.replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
+            const messagesArray = JSON.parse(jsonStr);
+
+            if (Array.isArray(messagesArray) && messagesArray.length > 0) {
+                return messagesArray.map(msg => String(msg));
+            } else {
+                throw new Error('返回的不是有效的消息数组');
+            }
+        } catch (parseError) {
+            console.error('JSON解析失败，原始响应:', aiResponse);
+
+            // 检查是否启用自动格式修正
+            if (typeof isAutoFormatFixEnabled === 'function' && isAutoFormatFixEnabled()) {
+                console.log('尝试自动修正格式...');
+                try {
+                    if (typeof callAIToFixFormat === 'function') {
+                        const fixedMessages = await callAIToFixFormat(aiResponse);
+                        console.log('格式修正成功:', fixedMessages);
+                        return fixedMessages;
+                    }
+                } catch (fixError) {
+                    console.error('自动格式修正失败:', fixError);
+                }
+            }
+
+            // 清洗异常格式的AI回复
+            if (typeof cleanAIResponse === 'function') {
+                return cleanAIResponse(aiResponse);
+            } else {
+                return [aiResponse.trim()];
+            }
+        }
+    } catch (error) {
+        // 清除AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = null;
+        }
+
+        // 检查是否是用户中断
+        if (error.name === 'AbortError') {
+            console.log('API调用已被用户中断');
+            throw new Error('API调用已被用户中断');
+        }
+
+        console.error('API调用错误:', error);
+        throw error;
     }
 }
 
@@ -5856,6 +6686,42 @@ function walletDirectRecharge() {
     });
 }
 
+// 直接修改余额（金手指功能）
+function walletDirectModify() {
+    if (isWalletFrozen()) {
+        showIosAlert('操作受限', '您的钱包已被冻结（花呗逾期），修改后资金将优先用于还款。');
+    }
+    
+    const data = JSON.parse(localStorage.getItem('walletData'));
+    const currentBalance = data.balance || 0;
+    
+    iosPrompt('直接修改余额', currentBalance.toFixed(2), (val) => {
+        const newBalance = parseFloat(val);
+        if (isNaN(newBalance) || newBalance < 0) {
+            showIosAlert('提示', '请输入有效金额（不能为负数）');
+            return;
+        }
+        
+        // 格式化金额（保留两位小数）
+        const formattedBalance = Math.round(newBalance * 100) / 100;
+        const difference = formattedBalance - currentBalance;
+        
+        // 直接设置钱包余额
+        data.balance = formattedBalance;
+        localStorage.setItem('walletData', JSON.stringify(data));
+        
+        // 添加账单记录
+        if (difference > 0) {
+            addBillRecord('income', difference, '直接修改余额（增加）', 'balance');
+        } else if (difference < 0) {
+            addBillRecord('expense', Math.abs(difference), '直接修改余额（减少）', 'balance');
+        }
+        
+        updateWalletUI(data);
+        showToast('余额已修改为 ¥' + formattedBalance.toFixed(2));
+    });
+}
+
 // 发送银行短信通知
 function sendBankSms(card, type, amount) {
     const now = new Date();
@@ -8414,10 +9280,19 @@ function renderSmsMessages() {
     const container = document.getElementById('smsMessages');
     const msgs = smsConversations[currentSmsPhone] || [];
 
-    let html = '<div class="sms-imessage-hint">信息 · 短信</div>';
+    // 清空容器
+    container.innerHTML = '';
+    
+    // 添加提示
+    const hint = document.createElement('div');
+    hint.className = 'sms-imessage-hint';
+    hint.textContent = '信息 · 短信';
+    container.appendChild(hint);
 
     let lastDate = '';
-    msgs.forEach(msg => {
+    let isFirstUserMessage = true; // 标记是否是本次渲染的第一条用户消息（最新的）
+    
+    msgs.forEach((msg, index) => {
         const d = new Date(msg.time);
         const dateStr = (d.getMonth() + 1) + '月' + d.getDate() + '日 ' +
             d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
@@ -8432,26 +9307,50 @@ function renderSmsMessages() {
             } else {
                 label = dateStr;
             }
-            html += `<div class="sms-time-divider">${label}</div>`;
+            const divider = document.createElement('div');
+            divider.className = 'sms-time-divider';
+            divider.textContent = label;
+            container.appendChild(divider);
             lastDate = dayStr;
         }
 
         const type = msg.from === 'user' ? 'sent' : 'received';
-        html += `<div class="sms-bubble-row ${type}">
-            <div class="sms-bubble ${type}">${escapeHtml(msg.text)}</div>
-        </div>`;
+        const row = document.createElement('div');
+        row.className = `sms-bubble-row ${type}`;
+        
+        const bubble = document.createElement('div');
+        bubble.className = `sms-bubble ${type}`;
+        bubble.textContent = msg.text;
+        
+        row.appendChild(bubble);
+        container.appendChild(row);
+        
+        // 如果是最后一条用户消息，添加发送动画
+        const isLastMessage = index === msgs.length - 1;
+        if (msg.from === 'user' && isLastMessage && isFirstUserMessage && typeof addMessageSendAnimation === 'function') {
+            addMessageSendAnimation(row);
+            isFirstUserMessage = false;
+        }
     });
 
     // 只对陌生号码（不在联系人列表中）显示"疑似垃圾信息"提示
     if (!isInContacts(currentSmsPhone)) {
-        html += `<div class="sms-not-in-contacts">
+        const notInContacts = document.createElement('div');
+        notInContacts.className = 'sms-not-in-contacts';
+        notInContacts.innerHTML = `
             发件人不在你的联系人列表中。<br>
             <a href="javascript:void(0)" onclick="reportSpam('${currentSmsPhone}')">报告垃圾信息</a> | 
             <a href="javascript:void(0)" onclick="addContactFromSms('${currentSmsPhone}')">添加到联系人</a>
-        </div>`;
+        `;
+        container.appendChild(notInContacts);
     }
 
-    container.innerHTML = html;
+    // 初始化短信消息长按菜单
+    setTimeout(() => {
+        if (typeof initSmsMessageContextMenu === 'function') {
+            initSmsMessageContextMenu();
+        }
+    }, 100);
 
     // 滚动到底部
     setTimeout(() => {
@@ -8676,6 +9575,39 @@ function openForum() {
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     initHomePageSwipe();
+    
+    // 为所有可点击元素添加触感反馈
+    document.addEventListener('click', (e) => {
+        // 检查点击的元素或其父元素是否是可点击的
+        const target = e.target;
+        const clickableSelectors = [
+            'button',
+            '.btn-primary',
+            '.btn-save',
+            '.ios-dialog-button',
+            '.app-icon',
+            '.dock-app',
+            '.back-btn',
+            '.ios-switch',
+            '.chat-header-back',
+            '.settings-option',
+            '.profile-option-item',
+            '.wallet-quick-item',
+            '.keypad-key',
+            '[onclick]',
+            'a[href]'
+        ];
+        
+        // 检查是否匹配任何可点击选择器
+        const isClickable = clickableSelectors.some(selector => {
+            return target.matches(selector) || target.closest(selector);
+        });
+        
+        // 如果是可点击元素，触发触感反馈
+        if (isClickable) {
+            triggerHapticFeedback();
+        }
+    }, true); // 使用捕获阶段，确保在其他事件处理器之前触发
 });
 
 // ========== 账单功能 ==========
