@@ -19,12 +19,15 @@
     
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="couple-avatar.css">
+    <link rel="stylesheet" href="video-call.css">
     <!-- Chart.js 图表库 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <!-- docx解析库 -->
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
     <!-- ZIP解析库 -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <!-- docx生成库 -->
+    <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js"></script>
 </head>
 <body>
     <!-- 消息通知弹窗容器 -->
@@ -156,6 +159,78 @@
         </div>
     </div>
 
+    <!-- 隐藏消息管理面板 -->
+    <div class="settings-page" id="hiddenMessagePanel" style="z-index: 10003;">
+        <div class="settings-content" style="max-width: 500px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeHiddenMessagePanel()">←</div>
+                <div class="settings-title">隐藏消息管理</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <!-- 功能说明 -->
+                <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                        <div>• 隐藏指定范围的消息，AI将看不到这些消息</div>
+                        <div>• 可以节省Token，降低API调用成本</div>
+                        <div>• 消息在聊天界面仍正常显示，只是不发给AI</div>
+                    </div>
+                </div>
+
+                <!-- 消息总数显示 -->
+                <div style="margin-bottom: 20px; padding: 16px; background: #f8f8f8; border-radius: 12px; border: 2px solid #e0e0e0; text-align: center;">
+                    <div style="font-size: 13px; color: #999; margin-bottom: 6px;">当前对话总消息数</div>
+                    <div style="font-size: 36px; font-weight: 600; color: #333;" id="hiddenMessageTotalCount">0</div>
+                </div>
+
+                <!-- 添加隐藏范围 -->
+                <div class="section-title">
+                    <span class="section-title-text">添加隐藏范围</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">起始序号</label>
+                    <input type="number" id="hiddenRangeStart" class="form-input" placeholder="例如：1" min="1" step="1">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">结束序号</label>
+                    <input type="number" id="hiddenRangeEnd" class="form-input" placeholder="例如：50" min="1" step="1">
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn-primary" onclick="previewHiddenRange()" style="flex: 1; background: #007bff;">
+                        预览范围
+                    </button>
+                    <button class="btn-primary btn-save" onclick="confirmHideRange()" style="flex: 1;">
+                        确认隐藏
+                    </button>
+                </div>
+
+                <!-- 预览区域 -->
+                <div id="hiddenRangePreviewSection" style="display: none; margin-bottom: 30px;">
+                    <div class="section-title">
+                        <span class="section-title-text">预览消息</span>
+                    </div>
+                    <div id="hiddenRangePreview" style="max-height: 300px; overflow-y: auto; background: #f8f8f8; border-radius: 12px; padding: 12px;">
+                        <!-- 动态生成预览内容 -->
+                    </div>
+                </div>
+
+                <!-- 已隐藏范围列表 -->
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="section-title-text">已隐藏范围</span>
+                </div>
+
+                <div id="hiddenRangeList" style="max-height: 400px; overflow-y: auto;">
+                    <!-- 动态生成隐藏范围列表 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 格式编辑弹窗 -->
     <div class="settings-page" id="formatEditModal" style="z-index: 10004;">
         <div class="settings-content" style="max-width: 500px;">
@@ -207,6 +282,124 @@
                     </button>
                     <button class="btn-primary btn-save" onclick="saveFormatEdit()" style="flex: 1;">
                         保存修改
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API历史查看面板 -->
+    <div class="settings-page" id="apiHistoryPanel" style="z-index: 10003;">
+        <div class="settings-content" style="max-width: 600px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeApiHistoryPanel()">←</div>
+                <div class="settings-title">API调用历史</div>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <div class="settings-action" onclick="exportApiHistory()" style="font-size: 14px; color: #007aff; cursor: pointer;">导出</div>
+                    <div class="settings-action" onclick="clearApiHistory()" style="font-size: 14px; color: #ff3b30; cursor: pointer;">清空</div>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <!-- 功能说明 -->
+                <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                        <div>• 查看所有API请求和响应数据</div>
+                        <div>• 支持单个导出和批量导出</div>
+                        <div>• 支持多选删除历史记录</div>
+                        <div style="margin-top: 6px; color: #999;">需在API设置中开启"记录API调用历史"</div>
+                    </div>
+                </div>
+
+                <!-- 统计信息 -->
+                <div style="margin-bottom: 20px; display: flex; gap: 12px;">
+                    <div style="flex: 1; padding: 16px; background: #f8f8f8; border-radius: 12px; border: 2px solid #e0e0e0; text-align: center;">
+                        <div style="font-size: 13px; color: #999; margin-bottom: 6px;">总记录数</div>
+                        <div style="font-size: 28px; font-weight: 600; color: #333;" id="apiHistoryTotalCount">0</div>
+                    </div>
+                    <div style="flex: 1; padding: 16px; background: #f8f8f8; border-radius: 12px; border: 2px solid #e0e0e0; text-align: center;">
+                        <div style="font-size: 13px; color: #999; margin-bottom: 6px;">已选择</div>
+                        <div style="font-size: 28px; font-weight: 600; color: #007bff;" id="apiHistorySelectedCount">0</div>
+                    </div>
+                </div>
+
+                <!-- 批量操作按钮 -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn-primary" onclick="toggleSelectAllApiHistory()" style="flex: 1; background: #6c757d;">
+                        全选/取消
+                    </button>
+                    <button class="btn-primary" onclick="batchDeleteApiHistory()" style="flex: 1; background: #dc3545;">
+                        批量删除
+                    </button>
+                    <button class="btn-primary" onclick="batchExportApiHistory()" style="flex: 1; background: #007bff;">
+                        批量导出
+                    </button>
+                </div>
+
+                <!-- 历史记录列表 -->
+                <div class="section-title">
+                    <span class="section-title-text">历史记录</span>
+                </div>
+
+                <div id="apiHistoryList" style="max-height: 500px; overflow-y: auto;">
+                    <!-- 动态生成历史记录列表 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API历史详情弹窗 -->
+    <div class="settings-page" id="apiHistoryDetailModal" style="z-index: 10004;">
+        <div class="settings-content" style="max-width: 600px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeApiHistoryDetail()">←</div>
+                <div class="settings-title">调用详情</div>
+                <div class="settings-action" onclick="exportSingleApiHistory()" style="font-size: 14px; color: #007aff; cursor: pointer;">导出</div>
+            </div>
+
+            <div class="settings-card">
+                <!-- 基本信息 -->
+                <div style="margin-bottom: 20px; padding: 16px; background: #f8f8f8; border-radius: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 13px; color: #999;">调用时间</span>
+                        <span style="font-size: 13px; color: #333; font-weight: 500;" id="historyDetailTime">-</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 13px; color: #999;">角色名称</span>
+                        <span style="font-size: 13px; color: #333; font-weight: 500;" id="historyDetailCharacter">-</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 13px; color: #999;">状态</span>
+                        <span style="font-size: 13px; font-weight: 500;" id="historyDetailStatus">-</span>
+                    </div>
+                </div>
+
+                <!-- 请求数据 -->
+                <div class="section-title">
+                    <span class="section-title-text">请求数据</span>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <div style="padding: 15px; background-color: #f8f8f8; border-radius: 12px; border: 2px solid #e0e0e0; max-height: 300px; overflow-y: auto;">
+                        <pre style="font-size: 12px; color: #333; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0; font-family: monospace;" id="historyDetailRequest"></pre>
+                    </div>
+                    <button class="btn-primary" onclick="copyHistoryRequest()" style="margin-top: 10px; width: 100%; background: #6c757d;">
+                        复制请求数据
+                    </button>
+                </div>
+
+                <!-- 响应数据 -->
+                <div class="section-title">
+                    <span class="section-title-text">响应数据</span>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <div style="padding: 15px; background-color: #f8f8f8; border-radius: 12px; border: 2px solid #e0e0e0; max-height: 300px; overflow-y: auto;">
+                        <pre style="font-size: 12px; color: #333; line-height: 1.6; white-space: pre-wrap; word-break: break-word; margin: 0; font-family: monospace;" id="historyDetailResponse"></pre>
+                    </div>
+                    <button class="btn-primary" onclick="copyHistoryResponse()" style="margin-top: 10px; width: 100%; background: #6c757d;">
+                        复制响应数据
                     </button>
                 </div>
             </div>
@@ -1764,6 +1957,140 @@
                     <button class="btn-primary" onclick="openDeleteModal()" style="flex: 1; min-width: 120px; background: #dc3545;">删除预设</button>
                 </div>
             </div>
+
+            <!-- API历史记录 -->
+            <div style="margin-top: 50px;">
+                <div class="section-title">
+                    <span class="section-title-text">API历史记录</span>
+                </div>
+                
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label class="form-label" style="margin-bottom: 4px;">记录API调用历史</label>
+                            <div style="font-size: 12px; color: #999;">开启后记录每次API请求和响应数据</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="apiHistoryToggle" onchange="toggleApiHistory()">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 12px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                        <div>• 记录每次API调用的请求和响应数据</div>
+                        <div>• 可在聊天设置中查看和管理历史记录</div>
+                        <div>• 默认关闭以节省存储空间</div>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 20px;">
+                    <label class="form-label">历史记录数量限制</label>
+                    <input type="number" class="form-input" id="apiHistoryLimit" placeholder="最多保存的记录数" value="100" min="10" max="1000" step="10">
+                    <div style="margin-top: 8px; font-size: 12px; color: #999;">
+                        超过限制后自动删除最旧的记录，建议 50~200
+                    </div>
+                </div>
+            </div>
+
+            <!-- 全局后台系统 -->
+            <div style="margin-top: 50px;">
+                <div class="section-title">
+                    <span class="section-title-text">全局后台系统</span>
+                </div>
+                <div style="margin-bottom: 16px; font-size: 12px; color: #999;">
+                    全局设置对所有角色生效。角色单独设置可覆盖全局设置。
+                </div>
+
+                <!-- 全局后台活动 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label class="form-label" style="margin-bottom: 4px;">全局后台活动</label>
+                            <div style="font-size: 12px; color: #999;">所有角色拥有自己的生活节奏（可被角色单独设置覆盖）</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="globalBgActivityToggle" onchange="toggleGlobalBgActivity()">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 全局定时主动消息 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label class="form-label" style="margin-bottom: 4px;">全局定时消息</label>
+                            <div style="font-size: 12px; color: #999;">所有角色按设定间隔主动发消息（可被角色单独设置覆盖）</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="globalIndProactiveToggle" onchange="toggleGlobalIndProactive()">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 全局定时消息间隔 -->
+                <div class="form-group">
+                    <label class="form-label">全局消息间隔（分钟）</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="number" class="form-input" id="globalIndProactiveMin" value="5" min="0.1" step="0.1" max="1440" style="flex:1;">
+                        <span style="color: #999;">~</span>
+                        <input type="number" class="form-input" id="globalIndProactiveMax" value="10" min="0.1" step="0.1" max="1440" style="flex:1;">
+                    </div>
+                </div>
+
+                <!-- 全局勿扰 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label class="form-label" style="margin-bottom: 4px;">全局勿扰模式</label>
+                            <div style="font-size: 12px; color: #999;">设定时段内所有角色不发定时消息</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="globalDndToggle">
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">全局勿扰时段</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="time" class="form-input" id="globalDndStart" value="00:00" style="flex:1;">
+                        <span style="color: #999;">至</span>
+                        <input type="time" class="form-input" id="globalDndEnd" value="08:00" style="flex:1;">
+                    </div>
+                </div>
+
+                <button class="btn-primary btn-save" onclick="saveGlobalBgSettings()">保存全局后台设置</button>
+
+                <div style="margin-top: 12px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        <div style="font-weight: 600; margin-bottom: 6px;">优先级说明：</div>
+                        <div>• 角色单独开启 → 该角色使用自己的设置</div>
+                        <div>• 角色未设置 + 全局开启 → 该角色跟随全局</div>
+                        <div>• 角色未设置 + 全局关闭 → 该角色不启用</div>
+                    </div>
+                </div>
+
+                <!-- 全局拉黑好友申请频率 -->
+                <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #e9ecef;">
+                    <div class="section-title" style="margin-bottom: 16px;">
+                        <span class="section-title-text">🚫 拉黑好友申请设置</span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">全局好友申请频率（分钟）</label>
+                        <input type="number" class="form-input" id="globalBlockRequestInterval" value="10" min="1" step="1" max="1440">
+                        <div style="font-size: 12px; color: #999; margin-top: 6px;">
+                            角色被拉黑后每隔多少分钟发一次好友申请（角色可单独覆盖此设置）
+                        </div>
+                    </div>
+                    <button class="btn-primary btn-save" onclick="saveGlobalBlockSettings()">保存拉黑设置</button>
+                </div>
+            </div>
+
             </div>
         </div>
     </div>
@@ -2120,6 +2447,20 @@
                         </div>
                         <label class="ios-switch">
                             <input type="checkbox" id="statusBarToggle" onchange="toggleStatusBar()" checked>
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 顶栏分割线设置 -->
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <label class="form-label" style="margin-bottom: 4px;">隐藏聊天顶栏分割线</label>
+                            <div style="font-size: 12px; color: #999;">隐藏聊天界面顶栏的分割线，界面更简洁</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="hideHeaderDividerToggle" onchange="toggleHeaderDivider()" checked>
                             <span class="ios-slider"></span>
                         </label>
                     </div>
@@ -2661,11 +3002,18 @@
             <!-- 顶部栏 (仅在聊天标签显示) -->
             <div class="chat-header" id="chatHeader">
                 <div class="chat-header-back" onclick="closeChatPage()">←</div>
-                <div class="chat-header-avatar" onclick="openChatProfileSettings()">
-                    <span id="chatAvatarPlaceholder">头像</span>
-                    <img id="chatAvatarImage" style="display: none; width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                <div class="chat-header-title-text">聊天</div>
+                <div style="display: flex; gap: 8px;">
+                    <div class="chat-header-add chat-header-group-btn" onclick="openCreateGroup()" title="创建群聊">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </div>
+                    <div class="chat-header-add" onclick="addNewChat()" title="新建角色">+</div>
                 </div>
-                <div class="chat-header-add" onclick="addNewChat()">+</div>
             </div>
 
             <!-- 底部导航栏 -->
@@ -2674,7 +3022,7 @@
                     <div class="chat-nav-text">聊天</div>
                 </div>
                 <div class="chat-nav-item" onclick="switchChatTab('friends')">
-                    <div class="chat-nav-text">好友</div>
+                    <div class="chat-nav-text" style="position:relative;">好友<span id="friendRequestBadge" class="friend-badge" style="display:none;">0</span></div>
                 </div>
                 <div class="chat-nav-item" onclick="switchChatTab('moments')">
                     <div class="chat-nav-text">朋友圈</div>
@@ -2689,7 +3037,7 @@
                 <!-- 搜索框 -->
                 <div class="chat-search-container">
                     <div class="chat-search-box">
-                        <input type="text" class="chat-search-input" placeholder="搜索" id="chatSearchInput">
+                        <input type="text" class="chat-search-input" placeholder="搜索角色" id="chatSearchInput" oninput="filterChatList(this.value)">
                     </div>
                 </div>
 
@@ -2698,6 +3046,26 @@
                     <div class="chat-empty-state">
                         <div class="chat-empty-text">暂无聊天记录</div>
                     </div>
+                </div>
+            </div>
+
+            <!-- 好友标签页内容 -->
+            <div class="chat-tab-content" id="friendsTabContent" style="display: none; background: #ffffff; flex-direction: column;">
+                <div style="padding:12px 16px 8px;display:flex;justify-content:space-between;align-items:center;">
+                    <div style="font-size:17px;font-weight:600;color:#333;">好友申请</div>
+                    <div id="friendReqEditBtn" onclick="toggleFriendReqEditMode()" style="font-size:14px;color:#007aff;cursor:pointer;">管理</div>
+                </div>
+                <div id="friendReqEditBar" style="display:none;padding:8px 16px;background:#f8f8f8;border-bottom:1px solid #e0e0e0;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;gap:12px;align-items:center;">
+                        <label style="font-size:13px;color:#333;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="friendReqSelectAll" onchange="toggleFriendReqSelectAll(this.checked)"> 全选
+                        </label>
+                        <span id="friendReqSelectedCount" style="font-size:12px;color:#999;">已选 0 项</span>
+                    </div>
+                    <button id="friendReqDeleteBtn" onclick="deleteFriendReqSelected()" style="background:#ff3b30;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:13px;cursor:pointer;" disabled>删除</button>
+                </div>
+                <div id="friendRequestListContainer" style="flex:1;overflow-y:auto;padding:0 0 12px;">
+                    <!-- 动态生成 -->
                 </div>
             </div>
 
@@ -3275,6 +3643,13 @@
             transition: all 0.2s;
         }
 
+        .chat-header-title-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            letter-spacing: 0.5px;
+        }
+
         .chat-header-avatar:hover {
             transform: scale(1.05);
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -3644,6 +4019,95 @@
             border-bottom-left-radius: 2px;
         }
 
+        /* 气泡形状样式覆盖 */
+        /* 方案1：圆角气泡（默认） */
+        .bubble-shape-1 .chat-message-user .chat-message-bubble {
+            border-radius: 18px !important;
+            border-bottom-right-radius: 4px !important;
+        }
+        .bubble-shape-1 .chat-message-char .chat-message-bubble {
+            border-radius: 18px !important;
+            border-bottom-left-radius: 4px !important;
+        }
+
+        /* 方案2：全圆角（胶囊） */
+        .bubble-shape-2 .chat-message-user .chat-message-bubble,
+        .bubble-shape-2 .chat-message-char .chat-message-bubble {
+            border-radius: 20px !important;
+        }
+        .bubble-shape-2 .chat-message-user .chat-message-bubble::after,
+        .bubble-shape-2 .chat-message-char .chat-message-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案3：直角矩形 */
+        .bubble-shape-3 .chat-message-user .chat-message-bubble,
+        .bubble-shape-3 .chat-message-char .chat-message-bubble {
+            border-radius: 4px !important;
+        }
+        .bubble-shape-3 .chat-message-user .chat-message-bubble::after,
+        .bubble-shape-3 .chat-message-char .chat-message-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案4：大圆角无尾巴 */
+        .bubble-shape-4 .chat-message-user .chat-message-bubble,
+        .bubble-shape-4 .chat-message-char .chat-message-bubble {
+            border-radius: 16px !important;
+        }
+        .bubble-shape-4 .chat-message-user .chat-message-bubble::after,
+        .bubble-shape-4 .chat-message-char .chat-message-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案5：不规则圆角（iOS拟态） */
+        .bubble-shape-5 .chat-message-user .chat-message-bubble {
+            border-radius: 18px 18px 4px 18px !important;
+        }
+        .bubble-shape-5 .chat-message-char .chat-message-bubble {
+            border-radius: 18px 18px 18px 4px !important;
+        }
+        .bubble-shape-5 .chat-message-user .chat-message-bubble::after,
+        .bubble-shape-5 .chat-message-char .chat-message-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案6：扁平方形带边框 */
+        .bubble-shape-6 .chat-message-user .chat-message-bubble {
+            border-radius: 8px !important;
+            border: 1.5px solid #0066cc !important;
+        }
+        .bubble-shape-6 .chat-message-char .chat-message-bubble {
+            border-radius: 8px !important;
+            border: 1.5px solid #d0d0d0 !important;
+        }
+        .bubble-shape-6 .chat-message-user .chat-message-bubble::after,
+        .bubble-shape-6 .chat-message-char .chat-message-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案7：气泡形（对话框） */
+        .bubble-shape-7 .chat-message-user .chat-message-bubble {
+            border-radius: 20px 20px 4px 20px !important;
+        }
+        .bubble-shape-7 .chat-message-char .chat-message-bubble {
+            border-radius: 20px 20px 20px 4px !important;
+        }
+
+        /* 方案8：卡片式带阴影 */
+        .bubble-shape-8 .chat-message-user .chat-message-bubble {
+            border-radius: 12px !important;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2) !important;
+        }
+        .bubble-shape-8 .chat-message-char .chat-message-bubble {
+            border-radius: 12px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+        }
+        .bubble-shape-8 .chat-message-user .chat-message-bubble::after,
+        .bubble-shape-8 .chat-message-char .chat-message-bubble::after {
+            display: none !important;
+        }
+
         /* 气泡尾巴 - 用户（SVG背景法，透明友好） */
         .chat-message-user .chat-message-bubble::after {
             content: '';
@@ -3926,6 +4390,12 @@
         .chat-transfer-icon svg {
             color: #fff;
         }
+        .chat-transfer-currency-symbol {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+            line-height: 1;
+        }
         .chat-transfer-info {
             flex: 1;
             min-width: 0;
@@ -3942,6 +4412,13 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+        .chat-transfer-converted {
+            font-size: 11px;
+            color: rgba(255,255,255,0.75);
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px solid rgba(255,255,255,0.2);
         }
         .chat-transfer-footer {
             background: #faf5ef;
@@ -4492,21 +4969,11 @@
             padding: 10px 18px 18px;
         }
 
-        /* 正在输入中提示 */
-        .typing-indicator {
-            display: flex;
-            margin-bottom: 20px;
-            align-items: flex-start;
-        }
-
+        /* 正在输入中提示 - 复用 chat-message-char 结构，气泡形状/颜色/自定义CSS自动生效 */
         .typing-indicator-bubble {
-            background: #E5E5EA;
-            padding: 12px 18px;
-            border-radius: 20px;
-            border-bottom-left-radius: 2px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
+            display: flex !important;
+            align-items: center !important;
+            gap: 4px !important;
         }
 
         .typing-dot {
@@ -4850,6 +5317,68 @@
 
         .sticker-add-btn:active {
             background: #f0f0f0;
+        }
+
+        /* 智能表情包推荐面板 */
+        .sticker-suggestion-panel {
+            background: #f7f7f7;
+            border-top: 0.5px solid #e5e5e5;
+            padding: 8px 10px;
+            flex-shrink: 0;
+        }
+
+        .sticker-suggestion-scroll {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+
+        .sticker-suggestion-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sticker-suggestion-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .sticker-suggestion-item:active .sticker-suggestion-thumb {
+            transform: scale(0.93);
+        }
+
+        .sticker-suggestion-thumb {
+            width: 52px;
+            height: 52px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s;
+        }
+
+        .sticker-suggestion-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .sticker-suggestion-name {
+            font-size: 10px;
+            color: #999;
+            text-align: center;
+            max-width: 56px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* 表情包上传弹窗 */
@@ -6190,6 +6719,7 @@
             <div class="chat-settings-tabs">
                 <div class="chat-settings-tab active" onclick="switchChatSettingsTab('char')">角色</div>
                 <div class="chat-settings-tab" onclick="switchChatSettingsTab('user')">用户</div>
+                <div class="chat-settings-tab" onclick="switchChatSettingsTab('beautify')">美化</div>
                 <div class="chat-settings-tab" onclick="switchChatSettingsTab('advanced')">高级</div>
             </div>
 
@@ -6230,6 +6760,60 @@
                 <div class="form-group">
                     <label class="form-label">人物描述</label>
                     <textarea id="charDescInput" class="form-textarea" rows="4" placeholder="输入角色的人物描述..."></textarea>
+                </div>
+
+                <!-- 国籍与货币设置 -->
+                <div class="form-group" style="margin-top: 24px;">
+                    <div class="section-title" style="margin-bottom: 16px;">
+                        <span class="section-title-text">货币设置</span>
+                    </div>
+                    
+                    <label class="form-label">角色国籍</label>
+                    <select id="charNationalitySelect" class="form-input" style="cursor: pointer;">
+                        <!-- 选项由JS动态生成 -->
+                    </select>
+                    <div style="font-size: 12px; color: #999; margin-top: 6px;">
+                        角色转账时将使用对应国家的货币
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">汇率模式</label>
+                    <select id="exchangeRateModeSelect" class="form-input" style="cursor: pointer;">
+                        <option value="local">本地汇率（离线可用）</option>
+                        <option value="realtime">实时汇率（需联网）</option>
+                    </select>
+                    <div style="font-size: 12px; color: #999; margin-top: 6px;">
+                        实时汇率获取失败时会自动降级为本地汇率
+                    </div>
+                </div>
+
+                <!-- 角色主动来电 -->
+                <div class="form-group" style="margin-top: 24px;">
+                    <div class="section-title" style="margin-bottom: 16px;">
+                        <span class="section-title-text">视频通话</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 15px; color: #333;">角色主动来电</div>
+                            <div style="font-size: 12px; color: #999; margin-top: 4px;">开启后角色可以在聊天中主动给你打视频电话</div>
+                        </div>
+                        <label class="ios-switch">
+                            <input type="checkbox" id="incomingCallToggle" checked>
+                            <span class="ios-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 拉黑开发者面板入口 -->
+                <div class="form-group" style="margin-top: 24px;">
+                    <div class="section-title" style="margin-bottom: 16px;">
+                        <span class="section-title-text">拉黑管理</span>
+                    </div>
+                    <button class="btn-primary" onclick="openBlockDevPanel()" style="width:100%;background:#f8f8f8;color:#333;border:1px solid #e0e0e0;border-radius:12px;padding:14px 16px;font-size:15px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+                        <span>🚫 拉黑开发者面板</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                    </button>
                 </div>
             </div>
             </div>
@@ -6320,6 +6904,350 @@
             </div>
             </div>
 
+            <!-- 美化标签页 -->
+            <div class="chat-settings-tab-content" id="beautifyTab">
+                <div class="settings-card">
+                    <div class="section-title">
+                        <span class="section-title-text">气泡样式</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                        <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                            <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                            <div>• 选择不同的气泡形状样式</div>
+                            <div>• 点击按钮打开样式选择器</div>
+                            <div>• 样式会实时应用到聊天界面</div>
+                        </div>
+                    </div>
+
+                    <!-- 当前样式显示 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">当前气泡样式</label>
+                        <div style="padding: 16px; background: #f8f8f8; border-radius: 12px; border: 2px solid #e0e0e0;">
+                            <div style="font-size: 15px; font-weight: 600; color: #333; margin-bottom: 8px;" id="currentBubbleStyleName">方案1 - 圆角气泡</div>
+                            <div style="font-size: 12px; color: #999;" id="currentBubbleStyleDesc">经典圆角矩形气泡，带小尾巴</div>
+                        </div>
+                    </div>
+
+                    <!-- 选择按钮 -->
+                    <button class="btn-primary" onclick="openBubbleStyleSelector()" style="width: 100%;">
+                        选择气泡样式
+                    </button>
+                </div>
+
+                <!-- 气泡颜色设置 -->
+                <div class="settings-card">
+                    <div class="section-title">
+                        <span class="section-title-text">气泡颜色</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                        <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                            <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                            <div>• 选择预设颜色或自定义颜色</div>
+                            <div>• 可保存自定义颜色为预设方案</div>
+                            <div>• 支持管理和删除自定义方案</div>
+                        </div>
+                    </div>
+
+                    <!-- 预设颜色 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">预设颜色</label>
+                        <div id="presetColorGrid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                            <!-- 动态生成预设颜色按钮 -->
+                        </div>
+                    </div>
+
+                    <!-- 自定义颜色 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">自定义颜色</label>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 11px; color: #999; margin-bottom: 4px; display: block;">用户消息</label>
+                                <input type="color" id="userBubbleColorPicker" class="color-picker" value="#007aff">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 11px; color: #999; margin-bottom: 4px; display: block;">AI消息</label>
+                                <input type="color" id="aiBubbleColorPicker" class="color-picker" value="#e5e5ea">
+                            </div>
+                        </div>
+                        <button class="btn-primary" onclick="applyCustomBubbleColor()" style="width: 100%; margin-bottom: 10px;">
+                            应用自定义颜色
+                        </button>
+                    </div>
+
+                    <!-- 保存自定义方案 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">保存为预设方案</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="customColorSchemeName" class="form-input" placeholder="输入方案名称" maxlength="20" style="flex: 1;">
+                            <button class="btn-primary" onclick="saveCustomColorScheme()" style="width: 80px; padding: 12px;">
+                                保存
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 方案管理 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">方案管理</label>
+                        <select id="colorSchemeSelect" class="form-select" onchange="loadColorScheme()" style="margin-bottom: 10px;">
+                            <option value="">选择方案</option>
+                        </select>
+                        <button class="btn-primary" onclick="openDeleteColorSchemes()" style="width: 100%; background: #dc3545; color: white; border: none;">
+                            删除方案
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 气泡装饰设置 -->
+                <div class="settings-card">
+                    <div class="section-title">
+                        <span class="section-title-text">气泡装饰</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                        <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                            <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                            <div>• 在气泡上添加装饰图片（支持GIF）</div>
+                            <div>• 可调节位置、大小、透明度等</div>
+                            <div>• 支持保存和管理装饰预设</div>
+                        </div>
+                    </div>
+
+                    <!-- 启用开关 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">启用气泡装饰</label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="bubbleDecorationToggle" onchange="toggleBubbleDecoration()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span style="font-size: 13px; color: #666;">开启后装饰将显示在气泡上</span>
+                        </div>
+                    </div>
+
+                    <!-- 图片导入 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">导入图片</label>
+                        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                            <button class="btn-primary" onclick="uploadBubbleDecorationImage()" style="flex: 1;">
+                                本地上传
+                            </button>
+                            <button class="btn-primary" onclick="showBubbleDecorationUrlInput()" style="flex: 1;">
+                                URL导入
+                            </button>
+                        </div>
+                        
+                        <!-- URL输入区域 -->
+                        <div id="bubbleDecorationUrlSection" style="display: none; margin-top: 10px;">
+                            <input type="text" id="bubbleDecorationUrlInput" class="form-input" placeholder="输入图片URL" style="margin-bottom: 10px;">
+                            <button class="btn-primary" onclick="loadBubbleDecorationFromUrl()" style="width: 100%;">
+                                加载图片
+                            </button>
+                        </div>
+
+                        <!-- 图片预览 -->
+                        <div style="margin-top: 15px; padding: 15px; background: #f8f8f8; border-radius: 12px; border: 2px dashed #d0d0d0; min-height: 120px; display: flex; align-items: center; justify-content: center;">
+                            <div id="bubbleDecorationImagePlaceholder" style="text-align: center; color: #999;">
+                                <div style="font-size: 12px;">未选择图片</div>
+                            </div>
+                            <img id="bubbleDecorationImagePreview" style="display: none; max-width: 100%; max-height: 100px; border-radius: 8px;">
+                        </div>
+                        
+                        <button class="btn-primary" onclick="resetBubbleDecorationImage()" style="width: 100%; margin-top: 10px; background: #6c757d;">
+                            重置图片
+                        </button>
+                    </div>
+
+                    <!-- 位置选择 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">装饰位置</label>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px;">
+                            <button class="bubble-decoration-position-btn" data-position="top-left" onclick="selectBubbleDecorationPosition('top-left')">↖ 左上</button>
+                            <button class="bubble-decoration-position-btn" data-position="top" onclick="selectBubbleDecorationPosition('top')">↑ 上</button>
+                            <button class="bubble-decoration-position-btn" data-position="top-right" onclick="selectBubbleDecorationPosition('top-right')">↗ 右上</button>
+                            <button class="bubble-decoration-position-btn" data-position="left" onclick="selectBubbleDecorationPosition('left')">← 左</button>
+                            <button class="bubble-decoration-position-btn" data-position="center" onclick="selectBubbleDecorationPosition('center')">● 中</button>
+                            <button class="bubble-decoration-position-btn" data-position="right" onclick="selectBubbleDecorationPosition('right')">→ 右</button>
+                            <button class="bubble-decoration-position-btn" data-position="bottom-left" onclick="selectBubbleDecorationPosition('bottom-left')">↙ 左下</button>
+                            <button class="bubble-decoration-position-btn" data-position="bottom" onclick="selectBubbleDecorationPosition('bottom')">↓ 下</button>
+                            <button class="bubble-decoration-position-btn" data-position="bottom-right" onclick="selectBubbleDecorationPosition('bottom-right')">↘ 右下</button>
+                        </div>
+                        
+                        <!-- 微调 -->
+                        <div style="margin-top: 15px;">
+                            <label style="font-size: 11px; color: #999; margin-bottom: 8px; display: block;">位置微调</label>
+                            <div style="display: flex; gap: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="font-size: 11px; color: #999; margin-bottom: 4px; display: block;">X轴偏移: <span id="bubbleDecorationOffsetXValue">0</span>%</label>
+                                    <input type="range" id="bubbleDecorationOffsetX" class="param-slider" min="-50" max="50" value="0" step="1" oninput="updateBubbleDecorationOffset()">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label style="font-size: 11px; color: #999; margin-bottom: 4px; display: block;">Y轴偏移: <span id="bubbleDecorationOffsetYValue">0</span>%</label>
+                                    <input type="range" id="bubbleDecorationOffsetY" class="param-slider" min="-50" max="50" value="0" step="1" oninput="updateBubbleDecorationOffset()">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 大小调节 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">装饰大小: <span id="bubbleDecorationSizeValue">40</span>px</label>
+                        <input type="range" id="bubbleDecorationSize" class="param-slider" min="20" max="100" value="40" step="5" oninput="updateBubbleDecorationSize()">
+                    </div>
+
+                    <!-- 透明度调节 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">透明度: <span id="bubbleDecorationOpacityValue">100</span>%</label>
+                        <input type="range" id="bubbleDecorationOpacity" class="param-slider" min="0" max="100" value="100" step="5" oninput="updateBubbleDecorationOpacity()">
+                    </div>
+
+                    <!-- 旋转角度 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">旋转角度: <span id="bubbleDecorationRotationValue">0</span>°</label>
+                        <input type="range" id="bubbleDecorationRotation" class="param-slider" min="0" max="360" value="0" step="15" oninput="updateBubbleDecorationRotation()">
+                    </div>
+
+                    <!-- 应用范围 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">应用到</label>
+                        <div style="display: flex; gap: 10px;">
+                            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: #f8f8f8; border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="bubbleDecorationApplyTo" value="both" checked onchange="updateBubbleDecorationApplyTo()">
+                                <span style="font-size: 13px; color: #333;">全部</span>
+                            </label>
+                            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: #f8f8f8; border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="bubbleDecorationApplyTo" value="user" onchange="updateBubbleDecorationApplyTo()">
+                                <span style="font-size: 13px; color: #333;">我</span>
+                            </label>
+                            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: #f8f8f8; border-radius: 8px; cursor: pointer;">
+                                <input type="radio" name="bubbleDecorationApplyTo" value="char" onchange="updateBubbleDecorationApplyTo()">
+                                <span style="font-size: 13px; color: #333;">对方</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 保存设置 -->
+                    <button class="btn-primary btn-save" onclick="saveBubbleDecorationSettings()" style="width: 100%; margin-bottom: 20px;">
+                        保存装饰设置
+                    </button>
+
+                    <!-- 装饰预设管理 -->
+                    <div class="section-title" style="margin-top: 30px;">
+                        <span class="section-title-text">装饰预设</span>
+                    </div>
+
+                    <!-- 保存为预设 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">保存当前配置为预设</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="bubbleDecorationPresetName" class="form-input" placeholder="输入预设名称" maxlength="20" style="flex: 1;">
+                            <button class="btn-primary" onclick="saveBubbleDecorationPreset()" style="width: 80px; padding: 12px;">
+                                保存
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 预设选择 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">加载预设</label>
+                        <select id="bubbleDecorationPresetSelect" class="form-select" onchange="loadBubbleDecorationPreset()" style="margin-bottom: 10px;">
+                            <option value="">选择预设</option>
+                        </select>
+                    </div>
+
+                    <!-- 删除预设 -->
+                    <button class="btn-primary" onclick="openDeleteBubbleDecorationPresets()" style="width: 100%; background: #dc3545; color: white; border: none;">
+                        删除预设
+                    </button>
+                </div>
+
+                <!-- 自定义气泡CSS代码 -->
+                <div class="settings-card">
+                    <div class="section-title">
+                        <span class="section-title-text">自定义气泡CSS代码</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                        <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                            <div style="font-weight: 600; margin-bottom: 6px;">功能说明：</div>
+                            <div>• 自定义用户和AI的气泡CSS样式</div>
+                            <div>• 可复制代码给AI进行美化</div>
+                            <div>• 支持保存和管理CSS预设</div>
+                        </div>
+                    </div>
+
+                    <!-- 预览区域 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">实时预览</label>
+                        <div id="bubbleCssPreview" style="background: #f5f5f5; border-radius: 12px; padding: 20px; min-height: 200px; overflow-y: auto; max-height: 400px;">
+                            <!-- 预览内容由JS动态生成 -->
+                        </div>
+                    </div>
+
+                    <!-- CSS代码编辑器 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">CSS代码</label>
+                        <textarea id="customBubbleCssInput" class="form-input" placeholder="输入自定义CSS代码..." rows="12" style="resize: vertical; min-height: 200px; font-family: monospace; font-size: 12px;" oninput="updateBubbleCssPreview()"></textarea>
+                        <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                            编辑用户和AI气泡的CSS样式代码，预览会实时更新
+                        </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="btn-primary" onclick="applyCustomBubbleCss()" style="flex: 1; background: #007bff; color: white; border: none;">
+                            应用
+                        </button>
+                        <button class="btn-primary" onclick="copyCustomBubbleCss()" style="flex: 1; background: #6c757d; color: white; border: none;">
+                            复制
+                        </button>
+                        <button class="btn-primary" onclick="resetCustomBubbleCss()" style="flex: 1; background: #dc3545; color: white; border: none;">
+                            重置
+                        </button>
+                    </div>
+
+                    <!-- 导入/导出按钮 -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="btn-primary" onclick="importBubbleCss()" style="flex: 1; background: #28a745; color: white; border: none;">
+                            导入
+                        </button>
+                        <button class="btn-primary" onclick="openExportBubbleCssModal()" style="flex: 1; background: #17a2b8; color: white; border: none;">
+                            导出
+                        </button>
+                    </div>
+
+                    <!-- CSS预设管理 -->
+                    <div class="section-title" style="margin-top: 30px;">
+                        <span class="section-title-text">CSS预设</span>
+                    </div>
+
+                    <!-- 预设选择 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">选择预设</label>
+                        <select id="customBubbleCssPresetSelect" class="form-select" onchange="loadCustomBubbleCssPreset()">
+                            <option value="">选择预设</option>
+                        </select>
+                    </div>
+
+                    <!-- 保存预设 -->
+                    <div style="margin-bottom: 20px;">
+                        <label class="form-label">保存为预设</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="customBubbleCssPresetName" class="form-input" placeholder="输入预设名称" maxlength="30" style="flex: 1;">
+                            <button class="btn-primary" onclick="saveCustomBubbleCssPreset()" style="width: 80px; padding: 12px;">
+                                保存
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 删除预设 -->
+                    <button class="btn-primary" onclick="openDeleteCustomBubbleCssPresets()" style="width: 100%; background: #dc3545; color: white; border: none;">
+                        删除预设
+                    </button>
+                </div>
+            </div>
+
             <!-- 高级标签页 -->
             <div class="chat-settings-tab-content" id="advancedTab">
 
@@ -6333,9 +7261,61 @@
                                 <div style="font-size: 12px; color: #999; margin-top: 4px;">角色将感知当前时间与对话间隔的流逝</div>
                             </div>
                             <label class="ios-switch">
-                                <input type="checkbox" id="timeAwarenessToggle" checked>
+                                <input type="checkbox" id="timeAwarenessToggle" checked onchange="toggleTimeAwareness()">
                                 <span class="ios-slider"></span>
                             </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 15px; color: #333;">自定义时间</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 4px;">开启后角色将使用你设定的时间，与时间感知互斥</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="customTimeToggle" onchange="toggleCustomTime()">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 自定义时间设置区域 -->
+                    <div id="customTimeSettings" style="display: none; margin-top: 15px; padding: 15px; background: #f8f8f8; border-radius: 12px;">
+                        <div style="font-size: 14px; color: #333; margin-bottom: 12px; font-weight: 500;">设置自定义时间</div>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
+                            <div>
+                                <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">年</label>
+                                <input type="number" id="customYear" class="form-input" placeholder="2024" min="1900" max="2100" style="padding: 8px;">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">月</label>
+                                <input type="number" id="customMonth" class="form-input" placeholder="1" min="1" max="12" style="padding: 8px;">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">日</label>
+                                <input type="number" id="customDay" class="form-input" placeholder="1" min="1" max="31" style="padding: 8px;">
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                            <div>
+                                <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">时</label>
+                                <input type="number" id="customHour" class="form-input" placeholder="0" min="0" max="23" style="padding: 8px;">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">分</label>
+                                <input type="number" id="customMinute" class="form-input" placeholder="0" min="0" max="59" style="padding: 8px;">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: #666; display: block; margin-bottom: 4px;">秒</label>
+                                <input type="number" id="customSecond" class="form-input" placeholder="0" min="0" max="59" style="padding: 8px;">
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 12px; font-size: 11px; color: #999; line-height: 1.4;">
+                            角色将认为当前时间是你设定的时间，不会使用真实系统时间
                         </div>
                     </div>
                 </div>
@@ -6364,6 +7344,52 @@
                             </div>
                             <label class="ios-switch">
                                 <input type="checkbox" id="coupleModeToggle" onchange="toggleCoupleMode()">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 表情包识别 -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">表情包识别</div>
+                    <div class="form-group">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 15px; color: #333;">启用表情包识别</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 4px;">角色可以识别用户发送的表情包内容和含义</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="memeRecognitionToggle" onchange="toggleMemeRecognition()">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <button class="data-action-btn secondary-btn" onclick="showMemeCacheStats()" style="width: 100%; margin-bottom: 8px;">
+                            查看缓存统计
+                        </button>
+                        <button class="data-action-btn secondary-btn" onclick="clearMemeCache()" style="width: 100%; background: #ff3b30; color: #fff;">
+                            清空表情包缓存
+                        </button>
+                        <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                            表情包会自动缓存到本地，避免重复识别
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 智能表情包匹配 -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">智能表情包匹配</div>
+                    <div class="form-group">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-size: 15px; color: #333;">启用智能匹配</div>
+                                <div style="font-size: 12px; color: #999; margin-top: 4px;">输入文字时自动推荐匹配的表情包</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="stickerMatchToggle" checked onchange="toggleStickerMatch()">
                                 <span class="ios-slider"></span>
                             </label>
                         </div>
@@ -6517,6 +7543,65 @@
                     </div>
                 </div>
 
+                <!-- 隐藏消息管理 -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">隐藏消息管理</div>
+                    <div class="form-group" style="margin: 0;">
+                        <button class="data-action-btn secondary-btn" onclick="openHiddenMessagePanel()" style="width: 100%;">
+                            管理隐藏消息
+                        </button>
+                        <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                            隐藏指定范围的消息，AI将看不到这些消息，节省Token
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 视频通话设置 -->
+                <div class="adv-section-card" id="videoCallAvatarSection">
+                    <div class="adv-section-label">视频通话设置</div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">用户视频画面</label>
+                        <div style="font-size:12px;color:#999;margin-bottom:8px;">视频通话时显示的用户画面（会铺满小窗）</div>
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                            <div style="width:60px;height:60px;border-radius:8px;background:#f0f0f0;overflow:hidden;flex-shrink:0;position:relative;">
+                                <img id="videoCallUserAvatarPreview" style="width:100%;height:100%;object-fit:cover;display:none;">
+                                <div id="videoCallUserAvatarPlaceholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;color:#999;">未设置</div>
+                            </div>
+                            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                                <button class="data-action-btn secondary-btn" onclick="uploadVideoCallUserAvatar('local')" style="padding:8px 12px;font-size:13px;">本地上传</button>
+                                <button class="data-action-btn secondary-btn" onclick="uploadVideoCallUserAvatar('url')" style="padding:8px 12px;font-size:13px;">URL上传</button>
+                            </div>
+                        </div>
+                        <button class="data-action-btn secondary-btn" onclick="resetVideoCallUserAvatar()" style="width:100%;background:#ff3b30;color:#fff;font-size:13px;">重置</button>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">角色视频画面</label>
+                        <div style="font-size:12px;color:#999;margin-bottom:8px;">视频通话时显示的角色画面（会铺满整个屏幕）</div>
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                            <div style="width:60px;height:60px;border-radius:8px;background:#f0f0f0;overflow:hidden;flex-shrink:0;position:relative;">
+                                <img id="videoCallCharAvatarPreview" style="width:100%;height:100%;object-fit:cover;display:none;">
+                                <div id="videoCallCharAvatarPlaceholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;color:#999;">未设置</div>
+                            </div>
+                            <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                                <button class="data-action-btn secondary-btn" onclick="uploadVideoCallCharAvatar('local')" style="padding:8px 12px;font-size:13px;">本地上传</button>
+                                <button class="data-action-btn secondary-btn" onclick="uploadVideoCallCharAvatar('url')" style="padding:8px 12px;font-size:13px;">URL上传</button>
+                            </div>
+                        </div>
+                        <button class="data-action-btn secondary-btn" onclick="resetVideoCallCharAvatar()" style="width:100%;background:#ff3b30;color:#fff;font-size:13px;">重置</button>
+                    </div>
+
+                    <div class="form-group">
+                        <button class="data-action-btn" onclick="openVideoCallMemoryLibrary()" style="width:100%;background:#5856d6;color:#fff;border:none;border-radius:10px;padding:14px 0;font-size:16px;font-weight:500;cursor:pointer;">
+                            视频通话记忆库
+                        </button>
+                        <div style="margin-top:8px;font-size:12px;color:#999;text-align:center;">
+                            查看所有视频通话记录，支持归档和删除
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 记忆库 -->
                 <div class="adv-section-card">
                     <div class="adv-section-label">记忆库</div>
@@ -6532,6 +7617,138 @@
                     <!-- 存档列表 -->
                     <div id="memoryArchiveList" style="max-height: 300px; overflow-y: auto;">
                         <!-- 存档项将动态生成 -->
+                    </div>
+                </div>
+
+                <!-- API历史查看 -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">API历史查看</div>
+                    <div class="form-group" style="margin: 0;">
+                        <button class="data-action-btn" onclick="openApiHistoryPanel()" style="width: 100%; background: #5856d6; color: #fff; border: none; border-radius: 10px; padding: 14px 0; font-size: 16px; font-weight: 500; cursor: pointer;">
+                            查看API调用历史
+                        </button>
+                        <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                            查看所有API请求和响应数据，需在API设置中开启记录
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 定时主动消息（独立功能） -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">定时主动消息</div>
+
+                    <!-- 主动消息开关 -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 4px;">启用定时消息</label>
+                                <div style="font-size: 12px; color: #999;">角色会按设定的时间间隔主动给你发消息，不受状态影响</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="indProactiveToggle" onchange="toggleIndependentProactive()">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 消息间隔 -->
+                    <div class="form-group">
+                        <label class="form-label">消息间隔（分钟）</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="number" class="form-input" id="indProactiveMin" value="5" min="0.1" step="0.1" max="1440" style="flex:1;">
+                            <span style="color: #999;">~</span>
+                            <input type="number" class="form-input" id="indProactiveMax" value="10" min="0.1" step="0.1" max="1440" style="flex:1;">
+                        </div>
+                        <div style="font-size: 12px; color: #999; margin-top: 6px;">在此范围内随机选择时间发送，支持小数（如0.5=30秒）</div>
+                    </div>
+
+                    <!-- 勿扰模式 -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 4px;">勿扰模式</label>
+                                <div style="font-size: 12px; color: #999;">设定时段内不会发送定时消息</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="indDndToggle">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 勿扰时段 -->
+                    <div class="form-group">
+                        <label class="form-label">勿扰时段</label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="time" class="form-input" id="indDndStart" value="00:00" style="flex:1;">
+                            <span style="color: #999;">至</span>
+                            <input type="time" class="form-input" id="indDndEnd" value="08:00" style="flex:1;">
+                        </div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div style="display: flex; gap: 10px; margin-top: 16px;">
+                        <button class="data-action-btn" onclick="saveIndProactiveSettings()" style="flex: 1; background: #007bff; color: #fff; border: none; border-radius: 10px; padding: 12px 0; font-size: 15px; font-weight: 500; cursor: pointer;">
+                            保存设置
+                        </button>
+                        <button class="data-action-btn" onclick="testIndProactiveMessage()" style="flex: 1; background: #ff9500; color: #fff; border: none; border-radius: 10px; padding: 12px 0; font-size: 15px; font-weight: 500; cursor: pointer;">
+                            立即测试
+                        </button>
+                    </div>
+
+                    <!-- 开发者调试入口 -->
+                    <div style="margin-top: 12px;">
+                        <button class="data-action-btn" onclick="openProactiveDebugPanel()" style="width: 100%; background: #f0f0f0; color: #666; border: none; border-radius: 10px; padding: 10px 0; font-size: 13px; cursor: pointer;">
+                            🛠 开发者调试面板
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 角色后台活动 -->
+                <div class="adv-section-card">
+                    <div class="adv-section-label">角色后台活动</div>
+
+                    <!-- 当前状态 -->
+                    <div style="margin-bottom: 16px; padding: 14px; background: #f8f8f8; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 13px; color: #999;">当前状态</span>
+                        <span class="bg-status-badge bg-status-online" id="bgActivityCurrentStatus">在线</span>
+                    </div>
+
+                    <!-- 总开关 -->
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <label class="form-label" style="margin-bottom: 4px;">启用后台活动</label>
+                                <div style="font-size: 12px; color: #999;">角色拥有自己的生活节奏（睡觉、忙碌等状态模拟）</div>
+                            </div>
+                            <label class="ios-switch">
+                                <input type="checkbox" id="bgActivityToggle" onchange="toggleBgActivity()">
+                                <span class="ios-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 觉醒时间 -->
+                    <div id="bgWakeTimeSection" style="display:none; margin-bottom: 16px; padding: 14px; background: #f8f8f8; border-radius: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span style="font-size: 13px; color: #999;">预计恢复时间</span>
+                            <span id="bgWakeTimeCountdown" style="font-size: 13px; font-weight: 600; color: #007bff;">—</span>
+                        </div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="datetime-local" class="form-input" id="bgWakeTimeInput" style="flex:1; font-size: 13px;">
+                            <button onclick="updateWakeTime()" style="background: #007bff; color: #fff; border: none; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; white-space: nowrap;">修改</button>
+                        </div>
+                        <div style="font-size: 12px; color: #999; margin-top: 6px;">可手动调整角色恢复在线的时间</div>
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div style="display: flex; gap: 10px; margin-top: 16px;">
+                        <button class="data-action-btn" onclick="saveBgActivitySettings()" style="flex: 1; background: #007bff; color: #fff; border: none; border-radius: 10px; padding: 12px 0; font-size: 15px; font-weight: 500; cursor: pointer;">
+                            保存设置
+                        </button>
+                        <button class="data-action-btn" onclick="forceWakeCharacter()" style="flex: 1; background: #34c759; color: #fff; border: none; border-radius: 10px; padding: 12px 0; font-size: 15px; font-weight: 500; cursor: pointer;">
+                            立即唤醒
+                        </button>
                     </div>
                 </div>
 
@@ -6562,8 +7779,177 @@
                     </div>
                 </div>
 
+                <!-- 拉黑此角色 -->
+                <div class="adv-section-card">
+                    <div class="form-group" style="margin: 0;">
+                        <button class="data-action-btn" id="blockCharBtn" onclick="userBlockCharacter(currentChatCharacter && currentChatCharacter.id)" style="width: 100%; background: #1c1c1e; color: #fff; border: none; border-radius: 10px; padding: 14px 0; font-size: 16px; font-weight: 500; cursor: pointer;">
+                            拉黑此角色
+                        </button>
+                        <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                            拉黑后你仍可发消息，但对方不会回复，对方会定时发好友申请
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
+        </div>
+    </div>
+
+    <!-- 拉黑开发者面板 -->
+    <div class="settings-page" id="blockDevPanel" style="z-index: 10006; display: none;">
+        <div class="settings-content" style="max-width: 400px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeBlockDevPanel()">←</div>
+                <div class="settings-title">拉黑管理面板</div>
+                <div style="width: 44px;"></div>
+            </div>
+            <div class="settings-card" id="blockDevPanelContent">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 好友申请列表页面（已废弃，功能移至好友标签页） -->
+    <!--
+    <div class="settings-page" id="friendRequestPage" style="z-index: 10002; display: none;">
+        <div class="settings-content" style="max-width: 400px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeFriendRequestPage()">←</div>
+                <div class="settings-title">好友申请</div>
+                <div style="width: 44px;"></div>
+            </div>
+            <div class="settings-card" style="padding: 0;">
+                <div id="friendRequestListContainer" style="min-height: 200px;">
+                </div>
+            </div>
+        </div>
+    </div>
+    -->
+
+    <!-- 删除气泡装饰预设弹窗 -->
+    <div class="settings-page" id="deleteBubbleDecorationPresetsModal" style="z-index: 10007; display: none;">
+        <div class="settings-content" style="max-width: 400px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeDeleteBubbleDecorationPresets()">←</div>
+                <div class="settings-title">删除装饰预设</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        选择要删除的装饰预设（可多选）
+                    </div>
+                </div>
+
+                <!-- 预设列表 -->
+                <div id="deleteBubbleDecorationPresetsList" style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
+                    <!-- 动态生成预设列表 -->
+                </div>
+
+                <!-- 操作按钮 -->
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-primary" onclick="toggleSelectAllBubbleDecorationPresets()" style="flex: 1; background: #6c757d; color: white; border: none;">
+                        全选/取消
+                    </button>
+                    <button class="btn-primary" onclick="confirmDeleteBubbleDecorationPresets()" style="flex: 1; background: #dc3545; color: white; border: none;">
+                        删除选中
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除自定义CSS预设弹窗 -->
+    <div class="settings-page" id="deleteCustomBubbleCssPresetsModal" style="z-index: 10008; display: none;">
+        <div class="settings-content" style="max-width: 400px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeDeleteCustomBubbleCssPresets()">←</div>
+                <div class="settings-title">删除CSS预设</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        选择要删除的CSS预设（可多选）
+                    </div>
+                </div>
+
+                <!-- 预设列表 -->
+                <div id="deleteCustomBubbleCssPresetsList" style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
+                    <!-- 动态生成预设列表 -->
+                </div>
+
+                <!-- 操作按钮 -->
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-primary" onclick="toggleSelectAllCustomBubbleCssPresets()" style="flex: 1; background: #6c757d; color: white; border: none;">
+                        全选/取消
+                    </button>
+                    <button class="btn-primary" onclick="confirmDeleteCustomBubbleCssPresets()" style="flex: 1; background: #dc3545; color: white; border: none;">
+                        删除选中
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 气泡样式选择器弹窗 -->
+    <div class="settings-page" id="bubbleStyleSelectorModal" style="z-index: 10005; display: none;">
+        <div class="settings-content" style="max-width: 400px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeBubbleStyleSelector()">←</div>
+                <div class="settings-title">选择气泡样式</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        选择你喜欢的气泡形状，颜色保持不变（蓝灰配色）
+                    </div>
+                </div>
+
+                <!-- 气泡样式网格 -->
+                <div id="bubbleStyleGrid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+                    <!-- 动态生成气泡样式卡片 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除颜色方案弹窗 -->
+    <div class="settings-page" id="deleteColorSchemesModal" style="z-index: 10006; display: none;">
+        <div class="settings-content" style="max-width: 400px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeDeleteColorSchemes()">←</div>
+                <div class="settings-title">删除颜色方案</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <div style="margin-bottom: 20px; padding: 12px; background-color: #f8f9fa; border-radius: 10px; border: 1px solid #e9ecef;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                        选择要删除的颜色方案（可多选）
+                    </div>
+                </div>
+
+                <!-- 方案列表 -->
+                <div id="deleteColorSchemesList" style="margin-bottom: 20px; max-height: 400px; overflow-y: auto;">
+                    <!-- 动态生成方案列表 -->
+                </div>
+
+                <!-- 操作按钮 -->
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-primary" onclick="toggleSelectAllColorSchemes()" style="flex: 1; background: #6c757d; color: white; border: none;">
+                        全选/取消
+                    </button>
+                    <button class="btn-primary" onclick="confirmDeleteColorSchemes()" style="flex: 1; background: #dc3545; color: white; border: none;">
+                        删除选中
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -6600,6 +7986,7 @@
                 </div>
                 <div class="chat-detail-info" onclick="showChatCharacterInfo()">
                     <div class="chat-detail-name" id="chatDetailName">角色名称</div>
+                    <div class="chat-detail-status" id="chatDetailStatus" style="display:none;"></div>
                 </div>
                 <div class="chat-detail-settings" onclick="openChatSettings()">
                     <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -6615,6 +8002,13 @@
             <div class="chat-messages-container" id="chatMessagesContainer">
                 <div class="chat-empty-message">
                     <div style="font-size: 14px; color: #999;">开始对话吧</div>
+                </div>
+            </div>
+
+            <!-- 智能表情包推荐区域 -->
+            <div class="sticker-suggestion-panel" id="stickerSuggestionPanel" style="display: none;">
+                <div class="sticker-suggestion-scroll" id="stickerSuggestionScroll">
+                    <!-- 动态生成表情包推荐 -->
                 </div>
             </div>
 
@@ -6809,10 +8203,6 @@
                                     </svg>
                                 </div>
                                 <span class="chat-extend-label">主动说话</span>
-                            </div>
-                            <div class="chat-extend-item chat-extend-item-placeholder">
-                                <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
-                                <span class="chat-extend-label"></span>
                             </div>
                             <div class="chat-extend-item chat-extend-item-placeholder">
                                 <div class="chat-extend-icon chat-extend-icon-placeholder"></div>
@@ -7314,6 +8704,94 @@
                         保存ID
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建群聊界面 -->
+    <div class="settings-page" id="createGroupPage" style="z-index: 10001;">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeCreateGroup()">←</div>
+                <div class="settings-title">创建群聊</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <div class="section-title">
+                    <span class="section-title-text">选择成员</span>
+                </div>
+                
+                <!-- 成员选择列表 -->
+                <div id="groupMemberSelectList" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;"></div>
+
+                <!-- 下一步按钮 -->
+                <button class="btn-primary btn-save" onclick="proceedToGroupSettings()" style="width: 100%;">
+                    下一步
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 群聊设置界面（成员关系） -->
+    <div class="settings-page" id="groupRelationPage" style="z-index: 10002;">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeGroupRelation()">←</div>
+                <div class="settings-title">成员关系设置</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <div class="section-title">
+                    <span class="section-title-text">哪些成员认识你？</span>
+                </div>
+                
+                <div style="padding: 12px; background: #f8f8f8; border-radius: 8px; margin-bottom: 20px; font-size: 13px; color: #666;">
+                    认识你的成员可以访问与你的私聊记忆，不认识的成员只能看到群聊历史
+                </div>
+
+                <!-- 成员关系列表 -->
+                <div id="groupRelationList" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;"></div>
+
+                <!-- 群基本信息 -->
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="section-title-text">群基本信息</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">群名称</label>
+                    <input type="text" class="form-input" id="groupNameInput" placeholder="请输入群名称" maxlength="30">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">群头像</label>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="width: 80px; height: 80px; border-radius: 12px; background: #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 2px solid #e0e0e0;">
+                            <span id="groupAvatarPlaceholder" style="font-size: 12px; color: #999;">群头像</span>
+                            <img id="groupAvatarImage" style="display: none; width: 100%; height: 100%; object-fit: cover;">
+                        </div>
+                        <div style="flex: 1;">
+                            <input type="file" id="groupAvatarUpload" accept="image/*" style="display: none;" onchange="handleGroupAvatarUpload(event)">
+                            <button class="btn-primary" onclick="document.getElementById('groupAvatarUpload').click()" style="width: 100%; margin-bottom: 8px;">
+                                选择图片
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 群主设置 -->
+                <div class="form-group">
+                    <label class="form-label">群主</label>
+                    <select class="form-input" id="groupOwnerSelect">
+                        <option value="">请选择群主</option>
+                    </select>
+                </div>
+
+                <!-- 完成按钮 -->
+                <button class="btn-primary btn-save" onclick="finishCreateGroup()" style="width: 100%; margin-top: 20px;">
+                    完成创建
+                </button>
             </div>
         </div>
     </div>
@@ -8079,9 +9557,16 @@
     <audio id="audioPlayer" style="display: none;"></audio>
 
     <script src="prompts.js"></script>
-    <script src="script.js"></script>
-    <script src="script2.js"></script>
     <script src="script3.js"></script>
+    <script src="video-call.js"></script>
+    <script src="script.js"></script>
+    <script src="data-management.js"></script>
+    <script src="appearance.js"></script>
+    <script src="music-search.js"></script>
+    <script src="persona.js"></script>
+    <script src="worldbook.js"></script>
+    <script src="showcase.js"></script>
+    <script src="script2.js"></script>
     <script src="couple-avatar.js"></script>
     
     <!-- PWA Service Worker 注册和安装提示 -->
@@ -8291,5 +9776,19 @@
             deferredPrompt = null;
         });
     </script>
+
+    <!-- 主动消息开发者调试面板 -->
+    <div id="proactiveDebugOverlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:99999; justify-content:center; align-items:center;">
+        <div id="proactiveDebugPanel" style="background:#fff; border-radius:16px; width:92%; max-width:420px; max-height:80vh; overflow-y:auto; padding:20px; position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <div style="font-size:17px; font-weight:600; color:#333;">🛠 主动消息调试</div>
+                <button onclick="closeProactiveDebugPanel()" style="background:none; border:none; font-size:22px; color:#999; cursor:pointer; padding:4px;">✕</button>
+            </div>
+            <div id="proactiveDebugContent" style="font-size:13px; color:#333; line-height:1.8;"></div>
+            <div style="margin-top:16px;">
+                <button onclick="refreshProactiveDebug()" style="width:100%; background:#007bff; color:#fff; border:none; border-radius:10px; padding:10px 0; font-size:14px; cursor:pointer;">刷新数据</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

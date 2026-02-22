@@ -1,0 +1,600 @@
+/* ========== 视频通话样式 ========== */
+
+/* 视频通话遮罩层 */
+.video-call-overlay {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 400px;
+    height: 100vh;
+    background: #000;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.video-call-overlay.show {
+    opacity: 1;
+}
+
+/* 视频通话容器 */
+.video-call-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* 拨打中界面 */
+.video-call-container.calling {
+    position: relative;
+    background: #000;
+}
+
+.video-call-avatar-large {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-call-avatar-large img,
+.video-call-avatar-large > div {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* 拨打中的遮罩层 */
+.video-call-container.calling::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1;
+}
+
+.video-call-status {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 18px;
+    color: #fff;
+    z-index: 2;
+    text-align: center;
+}
+
+.video-call-name {
+    position: absolute;
+    top: calc(50% + 40px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 16px;
+    color: #ccc;
+    z-index: 2;
+}
+
+.video-call-reason {
+    position: absolute;
+    top: calc(50% + 80px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    color: #999;
+    text-align: center;
+    padding: 0 40px;
+    z-index: 2;
+    max-width: 80%;
+}
+
+/* 已接通界面 */
+.video-call-container.connected {
+    background: #000;
+}
+
+/* 顶部计时器 */
+.video-call-timer {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 6px 16px;
+    border-radius: 20px;
+    z-index: 10;
+}
+
+/* 主视频画面区域 */
+.video-call-main-view {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.video-call-character-avatar {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-call-character-avatar img,
+.video-call-character-avatar > div {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* 呼吸动画 */
+.video-call-character-avatar.breathing {
+    animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+.video-call-environment {
+    display: none;
+}
+
+/* 用户小窗 */
+.video-call-user-view {
+    position: absolute;
+    top: 60px;
+    right: 16px;
+    width: 100px;
+    height: 140px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    z-index: 10;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-call-user-view:hover {
+    transform: scale(1.05);
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+.video-call-user-view:active {
+    transform: scale(0.98);
+}
+
+.video-call-user-view img,
+.video-call-user-view > div {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* 消息显示区域 */
+.video-call-messages {
+    position: absolute;
+    bottom: 120px;
+    left: 0;
+    right: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 5;
+}
+
+.video-call-message {
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    word-break: break-word;
+    max-width: 75%;
+}
+
+/* 旁白消息 - 浅灰色背景 */
+.video-call-message.narration {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ccc;
+    font-style: italic;
+}
+
+/* 角色旁白 - 左边 */
+.video-call-message.narration.character {
+    align-self: flex-start;
+}
+
+/* 用户旁白 - 右边 */
+.video-call-message.narration.user {
+    align-self: flex-end;
+}
+
+/* 语言消息 */
+.video-call-message.speech {
+    color: #333;
+}
+
+/* 角色语言 - 左边，白色背景 */
+.video-call-message.speech.character {
+    background: rgba(255, 255, 255, 0.9);
+    align-self: flex-start;
+}
+
+/* 用户语言 - 右边，绿色背景 */
+.video-call-message.speech.user {
+    background: rgba(149, 236, 105, 0.9);
+    align-self: flex-end;
+}
+
+/* 底部操作按钮 */
+.video-call-actions {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 40px;
+    padding: 24px;
+    background: transparent;
+    z-index: 10;
+}
+
+.video-call-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.2s ease;
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+.video-call-btn svg {
+    width: 56px;
+    height: 56px;
+    filter: none !important;
+    box-shadow: none !important;
+}
+
+.video-call-btn:active {
+    transform: scale(0.9);
+}
+
+.video-call-btn.speak svg circle {
+    fill: rgba(255, 255, 255, 0.25);
+}
+
+.video-call-btn.hangup svg circle {
+    fill: rgba(255, 59, 48, 0.9);
+}
+
+.video-call-btn.api svg circle {
+    fill: rgba(52, 199, 89, 0.9);
+}
+
+.video-call-btn.api:disabled svg circle {
+    fill: rgba(52, 199, 89, 0.4);
+}
+
+.video-call-btn.api:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.video-call-btn.cancel {
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+}
+
+.video-call-btn.cancel svg circle {
+    fill: rgba(255, 255, 255, 0.25);
+}
+
+/* 正在回复中的提示 */
+.video-call-loading {
+    position: absolute;
+    bottom: 140px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.video-call-loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 拒绝状态 */
+.video-call-container.rejected {
+    position: relative;
+    background: #000;
+}
+
+.video-call-container.rejected .video-call-avatar-large {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.video-call-container.rejected::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1;
+}
+
+.video-call-container.rejected .video-call-status,
+.video-call-container.rejected .video-call-reason {
+    z-index: 2;
+}
+
+/* 最小化按钮 */
+.video-call-minimize-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.2s ease;
+}
+
+.video-call-minimize-btn svg {
+    width: 20px;
+    height: 20px;
+    color: #fff;
+}
+
+.video-call-minimize-btn:hover {
+    background: rgba(0, 0, 0, 0.7);
+    transform: scale(1.1);
+}
+
+.video-call-minimize-btn:active {
+    transform: scale(0.95);
+}
+
+/* 悬浮球 */
+.video-call-floating-ball {
+    position: fixed;
+    top: 100px;
+    right: calc(50% - 200px + 20px); /* 相对于小手机右边20px */
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    z-index: 10100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+/* 移动端悬浮球位置 */
+@media (max-width: 767px) {
+    .video-call-floating-ball {
+        right: 20px;
+    }
+}
+
+.video-call-floating-ball:active {
+    transform: scale(0.95);
+}
+
+.floating-ball-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.floating-ball-avatar img,
+.floating-ball-avatar > div {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.floating-ball-status {
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-size: 10px;
+    text-align: center;
+    padding: 2px 4px;
+    white-space: nowrap;
+}
+
+/* 悬浮球呼吸动画 */
+.video-call-floating-ball::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border-radius: 50%;
+    border: 2px solid #34c759;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.05);
+    }
+}
+
+
+/* 视频通话消息简洁样式 */
+.video-call-simple {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px !important;
+}
+
+.video-call-simple svg {
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.video-call-simple span {
+    font-size: 15px;
+}
+
+/* ========== 角色来电样式 ========== */
+
+/* 来电中界面 */
+.video-call-container.incoming {
+    position: relative;
+    background: #000;
+}
+
+.video-call-container.incoming::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1;
+}
+
+.incoming-status {
+    animation: incomingPulse 2s ease-in-out infinite;
+}
+
+@keyframes incomingPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* 来电底部按钮区域 */
+.video-call-incoming-actions {
+    position: absolute;
+    bottom: 60px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 80px;
+    z-index: 3;
+}
+
+.video-call-btn.reject-call svg circle {
+    fill: rgba(255, 59, 48, 0.9);
+}
+
+.video-call-btn.accept-call svg circle {
+    fill: rgba(52, 199, 89, 0.9);
+}
+
+.incoming-btn-label {
+    display: block;
+    color: #fff;
+    font-size: 13px;
+    margin-top: 8px;
+    text-align: center;
+}
+
+/* 来电悬浮球 */
+.video-call-floating-ball.incoming-floating-ball::before {
+    border-color: #ff3b30;
+    animation: incomingBallPulse 1s ease-in-out infinite;
+}
+
+@keyframes incomingBallPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.4;
+        transform: scale(1.1);
+    }
+}

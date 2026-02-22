@@ -761,7 +761,12 @@ async function handleProactiveSpeak() {
         console.log('角色正在主动思考...');
 
         // 调用API获取角色的主动发言
-        const messages = await callProactiveSpeakAPI(targetCharacter);
+        const rawProactiveMessages = await callProactiveSpeakAPI(targetCharacter);
+        
+        // 解析并处理状态标签
+        const messages = (typeof parseStatusTagsFromMessages === 'function')
+            ? parseStatusTagsFromMessages(targetCharacterId, rawProactiveMessages || [])
+            : (rawProactiveMessages || []);
 
         if (!messages || messages.length === 0) {
             showIosAlert('提示', 'AI返回了空响应');
@@ -853,6 +858,17 @@ async function handleProactiveSpeak() {
                     continue;
                 }
                 const transferId = 'tf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                
+                // 获取角色国籍对应的货币信息
+                let currencyCode = 'CNY';
+                let currencySymbol = '¥';
+                if (typeof getCharacterNationality === 'function' && typeof getCurrencyByNationality === 'function') {
+                    const nationality = getCharacterNationality(targetCharacterId);
+                    const currencyInfo = getCurrencyByNationality(nationality);
+                    currencyCode = currencyInfo.code;
+                    currencySymbol = currencyInfo.symbol;
+                }
+                
                 messageObj = {
                     id: Date.now().toString() + Math.random(),
                     characterId: targetCharacterId,
@@ -864,7 +880,10 @@ async function handleProactiveSpeak() {
                     transferAmount: tfAmount,
                     transferRemark: tfRemark,
                     transferId: transferId,
-                    transferStatus: 'pending'
+                    transferStatus: 'pending',
+                    // 保存货币信息
+                    transferCurrencyCode: currencyCode,
+                    transferCurrencySymbol: currencySymbol
                 };
             } else if (bankTransferMatch) {
                 // 银行转账
@@ -2177,6 +2196,44 @@ function appendTransferMessageToChat(messageObj) {
     const remark = messageObj.transferRemark || '';
     const status = messageObj.transferStatus || 'pending';
     const transferId = messageObj.transferId || '';
+    
+    // 获取货币信息（角色发送的转账使用角色国籍对应的货币）
+    let currencySymbol = '¥';
+    let currencyCode = 'CNY';
+    let originalAmount = amount;
+    let convertedAmount = null;
+    
+    // 如果消息中有货币信息，使用消息中的
+    if (messageObj.transferCurrencyCode) {
+        currencyCode = messageObj.transferCurrencyCode;
+        currencySymbol = messageObj.transferCurrencySymbol || '¥';
+        originalAmount = messageObj.transferOriginalAmount || amount;
+        convertedAmount = messageObj.transferConvertedAmount || null;
+    } else if (messageObj.type === 'char' && currentChatCharacter) {
+        // 角色发送的新转账，获取角色国籍对应的货币
+        const nationality = typeof getCharacterNationality === 'function' 
+            ? getCharacterNationality(currentChatCharacter.id) 
+            : 'CN';
+        if (nationality !== 'CN' && typeof getCurrencyByNationality === 'function') {
+            const currencyInfo = getCurrencyByNationality(nationality);
+            currencyCode = currencyInfo.code;
+            currencySymbol = currencyInfo.symbol;
+        }
+    }
+    
+    // 格式化金额显示
+    let amountDisplay = '';
+    if (['JPY', 'KRW', 'VND', 'IDR'].includes(currencyCode)) {
+        amountDisplay = `${currencySymbol}${Math.round(amount).toLocaleString()}`;
+    } else {
+        amountDisplay = `${currencySymbol}${amount.toFixed(2)}`;
+    }
+    
+    // 如果有转换后的金额（已收款的外币转账），显示原始金额和转换后金额
+    let convertedInfo = '';
+    if (convertedAmount !== null && currencyCode !== 'CNY' && status === 'accepted') {
+        convertedInfo = `<div class="chat-transfer-converted">已转换: ¥${convertedAmount.toFixed(2)}</div>`;
+    }
 
     // 状态文字和样式
     let statusText = '';
@@ -2202,16 +2259,14 @@ function appendTransferMessageToChat(messageObj) {
             ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
         </div>
         <div class="chat-message-content">
-            <div class="chat-transfer-bubble${doneClass}" ${transferId ? `data-transfer-id="${transferId}"` : ''}${isCharPending ? ` onclick="openTransferActionModal('${transferId}')" style="cursor:pointer;"` : ''}>
+            <div class="chat-transfer-bubble${doneClass}" ${transferId ? `data-transfer-id="${transferId}"` : ''} data-currency-code="${currencyCode}" data-currency-symbol="${currencySymbol}"${isCharPending ? ` onclick="openTransferActionModal('${transferId}')" style="cursor:pointer;"` : ''}>
                 <div class="chat-transfer-header">
                     <div class="chat-transfer-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="12" y1="1" x2="12" y2="23"/>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                        </svg>
+                        <span class="chat-transfer-currency-symbol">${currencySymbol}</span>
                     </div>
                     <div class="chat-transfer-info">
-                        <div class="chat-transfer-amount">¥${amount.toFixed(2)}</div>
+                        <div class="chat-transfer-amount">${amountDisplay}</div>
+                        ${convertedInfo}
                         ${remark ? `<div class="chat-transfer-remark">${escapeHtml(remark)}</div>` : ''}
                     </div>
                 </div>
@@ -2270,14 +2325,50 @@ async function updateTransferStatusInDB(transferId, status) {
 }
 
 // 打开转账操作弹窗（用户点击角色发来的pending转账）
-function openTransferActionModal(transferId) {
+async function openTransferActionModal(transferId) {
     const bubble = document.querySelector(`.chat-transfer-bubble[data-transfer-id="${transferId}"]`);
     if (!bubble || bubble.classList.contains('transfer-done')) return;
 
     const amountEl = bubble.querySelector('.chat-transfer-amount');
     const remarkEl = bubble.querySelector('.chat-transfer-remark');
-    const amount = amountEl ? amountEl.textContent : '¥0.00';
+    const amountText = amountEl ? amountEl.textContent : '¥0.00';
     const remark = remarkEl ? remarkEl.textContent : '';
+    
+    // 获取货币信息
+    const currencyCode = bubble.dataset.currencyCode || 'CNY';
+    const currencySymbol = bubble.dataset.currencySymbol || '¥';
+    
+    // 从数据库获取原始金额
+    let tfAmount = 0;
+    let tfRemark = '';
+    try {
+        const allChats = await getAllChatsFromDB();
+        const originalMsg = allChats.find(m => m.transferId === transferId && m.type === 'char' && m.messageType === 'transfer');
+        if (originalMsg) {
+            tfAmount = originalMsg.transferAmount || 0;
+            tfRemark = originalMsg.transferRemark || '';
+        }
+    } catch (e) {
+        // fallback: 从DOM解析金额
+        const amountStr = amountText.replace(/[^0-9.]/g, '');
+        tfAmount = parseFloat(amountStr) || 0;
+        tfRemark = remark || '';
+    }
+    
+    // 检查是否是外币转账
+    const isForeignCurrency = currencyCode !== 'CNY';
+    
+    // 如果是外币，获取货币信息用于显示
+    let currencyInfo = null;
+    if (isForeignCurrency && typeof getCurrencyByNationality === 'function') {
+        // 通过货币代码反查货币信息
+        for (const [code, info] of Object.entries(NATIONALITY_CURRENCY_MAP || {})) {
+            if (info.code === currencyCode) {
+                currencyInfo = info;
+                break;
+            }
+        }
+    }
 
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.25s ease;';
@@ -2291,14 +2382,22 @@ function openTransferActionModal(transferId) {
 
     const title = document.createElement('div');
     title.style.cssText = 'font-size:13px;color:#999;letter-spacing:1px;margin-bottom:16px;font-weight:400;';
-    title.textContent = '微信转账';
+    title.textContent = isForeignCurrency ? '外币转账' : '微信转账';
 
     const amountDisplay = document.createElement('div');
     amountDisplay.style.cssText = 'font-size:36px;font-weight:700;color:#333;letter-spacing:-1px;margin-bottom:8px;';
-    amountDisplay.textContent = amount;
+    amountDisplay.textContent = amountText;
 
     topSection.appendChild(title);
     topSection.appendChild(amountDisplay);
+    
+    // 如果是外币，显示货币名称
+    if (isForeignCurrency && currencyInfo) {
+        const currencyName = document.createElement('div');
+        currencyName.style.cssText = 'font-size:12px;color:#999;margin-bottom:8px;';
+        currencyName.textContent = currencyInfo.name;
+        topSection.appendChild(currencyName);
+    }
 
     if (remark) {
         const remarkDisplay = document.createElement('div');
@@ -2369,6 +2468,21 @@ function openTransferActionModal(transferId) {
 
     async function closeAndHandle(action) {
         closeDialog();
+        
+        // 如果是外币收款，显示汇率转换确认弹窗
+        let convertedAmount = tfAmount;
+        let exchangeResult = null;
+        
+        if (action === 'accepted' && isForeignCurrency && currencyInfo && typeof showExchangeConfirmDialog === 'function') {
+            exchangeResult = await showExchangeConfirmDialog(tfAmount, currencyInfo, currentChatCharacter.id);
+            
+            if (!exchangeResult) {
+                // 用户取消了，不处理
+                return;
+            }
+            
+            convertedAmount = exchangeResult.convertedAmount;
+        }
 
         // 1. 更新角色原始转账消息状态（数据库 + 界面变浅色）
         await updateTransferStatusInDB(transferId, action);
@@ -2376,23 +2490,6 @@ function openTransferActionModal(transferId) {
         if (bubble) {
             bubble.removeAttribute('onclick');
             bubble.style.cursor = '';
-        }
-
-        // 2. 从数据库找到原始转账消息，获取数值型金额和备注
-        let tfAmount = 0;
-        let tfRemark = '';
-        try {
-            const allChats = await getAllChatsFromDB();
-            const originalMsg = allChats.find(m => m.transferId === transferId && m.type === 'char' && m.messageType === 'transfer');
-            if (originalMsg) {
-                tfAmount = originalMsg.transferAmount || 0;
-                tfRemark = originalMsg.transferRemark || '';
-            }
-        } catch (e) {
-            // fallback: 从DOM解析金额
-            const amountStr = amount.replace(/[^0-9.]/g, '');
-            tfAmount = parseFloat(amountStr) || 0;
-            tfRemark = remark || '';
         }
 
         // 3. 创建用户的回应消息（转账卡片样式，跟角色处理用户转账一样）
@@ -2407,7 +2504,12 @@ function openTransferActionModal(transferId) {
             transferAmount: tfAmount,
             transferRemark: tfRemark,
             transferId: transferId,
-            transferStatus: action
+            transferStatus: action,
+            // 保存货币信息
+            transferCurrencyCode: currencyCode,
+            transferCurrencySymbol: currencySymbol,
+            transferOriginalAmount: tfAmount,
+            transferConvertedAmount: action === 'accepted' ? convertedAmount : null
         };
 
         // 4. 渲染用户回应卡片到聊天界面
@@ -2420,21 +2522,28 @@ function openTransferActionModal(transferId) {
         const lastMsgText = action === 'accepted' ? '[已收款]' : '[已退还]';
         await updateChatListLastMessage(currentChatCharacter.id, lastMsgText, responseMsg.timestamp);
 
-        // 7. 如果是收款，增加用户余额并添加账单记录
-        if (action === 'accepted' && tfAmount > 0) {
+        // 7. 如果是收款，增加用户余额并添加账单记录（使用转换后的人民币金额）
+        if (action === 'accepted' && convertedAmount > 0) {
             const walletData = JSON.parse(localStorage.getItem('walletData') || '{}');
-            walletData.balance = Math.round((walletData.balance + tfAmount) * 100) / 100;
+            walletData.balance = Math.round((walletData.balance + convertedAmount) * 100) / 100;
             localStorage.setItem('walletData', JSON.stringify(walletData));
             
-            // 添加账单记录
-            const remarkText = tfRemark ? `收款：${tfRemark}` : '收款';
-            addBillRecord('income', tfAmount, remarkText, 'balance');
+            // 添加账单记录（显示原始外币金额）
+            let remarkText = tfRemark ? `收款：${tfRemark}` : '收款';
+            if (isForeignCurrency && exchangeResult) {
+                remarkText += ` (${currencySymbol}${tfAmount} → ¥${convertedAmount.toFixed(2)})`;
+            }
+            addBillRecord('income', convertedAmount, remarkText, 'balance');
         }
 
         // 8. 滚动到底部
         scrollChatToBottom();
 
-        showToast(action === 'accepted' ? '已收款' : '已退还');
+        if (action === 'accepted' && isForeignCurrency && exchangeResult) {
+            showToast(`已收款 ¥${convertedAmount.toFixed(2)}`);
+        } else {
+            showToast(action === 'accepted' ? '已收款' : '已退还');
+        }
     }
 }
 

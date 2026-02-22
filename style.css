@@ -1,4 +1,4 @@
-* {
+﻿* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -215,7 +215,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    border: 14px solid var(--border-color, #ffffff);
+    border: 14px solid #ffffff;
     border-radius: 36px;
     pointer-events: none;
     z-index: 10000;
@@ -3977,22 +3977,20 @@ input[type="range"]::-moz-range-track {
     top: 10px;
     left: 50%;
     transform: translateX(-50%);
-    width: 100%;
+    width: 90%;
     max-width: 400px;
     z-index: 10001;
     pointer-events: none;
 }
 
 .msg-notification {
-    width: calc(100% - 24px);
-    max-width: 376px;
-    margin: 0 auto 10px;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-radius: 16px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
     padding: 14px 16px;
+    margin-bottom: 10px;
     opacity: 0;
     transform: translateY(-20px);
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -4824,457 +4822,683 @@ input[type="range"]::-moz-range-track {
     line-height: 1.4;
 }
 
+/* ========== 气泡形状样式方案 ========== */
 
-/* ========== 挂坠样式 ========== */
-
-/* 挂坠容器 */
-.screen-pendant {
-    position: absolute;
-    pointer-events: none;
-    user-select: none;
-    z-index: 100;
-}
-
-/* 挂坠动画 - 左右摇晃 */
-@keyframes pendantSwingSlow {
-    0%, 100% { transform: translate(-50%, -50%) rotate(-5deg); }
-    50% { transform: translate(-50%, -50%) rotate(5deg); }
-}
-
-@keyframes pendantSwingMedium {
-    0%, 100% { transform: translate(-50%, -50%) rotate(-8deg); }
-    50% { transform: translate(-50%, -50%) rotate(8deg); }
-}
-
-@keyframes pendantSwingFast {
-    0%, 100% { transform: translate(-50%, -50%) rotate(-12deg); }
-    50% { transform: translate(-50%, -50%) rotate(12deg); }
-}
-
-.pendant-anim-swing-slow {
-    animation: pendantSwingSlow 3s ease-in-out infinite;
-}
-
-.pendant-anim-swing-medium {
-    animation: pendantSwingMedium 2s ease-in-out infinite;
-}
-
-.pendant-anim-swing-fast {
-    animation: pendantSwingFast 1s ease-in-out infinite;
-}
-
-/* 挂坠动画 - 上下晃动 */
-@keyframes pendantBounceSlow {
-    0%, 100% { transform: translate(-50%, -50%) translateY(-5px); }
-    50% { transform: translate(-50%, -50%) translateY(5px); }
-}
-
-@keyframes pendantBounceMedium {
-    0%, 100% { transform: translate(-50%, -50%) translateY(-8px); }
-    50% { transform: translate(-50%, -50%) translateY(8px); }
-}
-
-@keyframes pendantBounceFast {
-    0%, 100% { transform: translate(-50%, -50%) translateY(-12px); }
-    50% { transform: translate(-50%, -50%) translateY(12px); }
-}
-
-.pendant-anim-bounce-slow {
-    animation: pendantBounceSlow 3s ease-in-out infinite;
-}
-
-.pendant-anim-bounce-medium {
-    animation: pendantBounceMedium 2s ease-in-out infinite;
-}
-
-.pendant-anim-bounce-fast {
-    animation: pendantBounceFast 1s ease-in-out infinite;
-}
-
-/* 挂坠动画 - 旋转 */
-@keyframes pendantRotateSlow {
-    0% { transform: translate(-50%, -50%) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-@keyframes pendantRotateMedium {
-    0% { transform: translate(-50%, -50%) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-@keyframes pendantRotateFast {
-    0% { transform: translate(-50%, -50%) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-.pendant-anim-rotate-slow {
-    animation: pendantRotateSlow 6s linear infinite;
-}
-
-.pendant-anim-rotate-medium {
-    animation: pendantRotateMedium 3s linear infinite;
-}
-
-.pendant-anim-rotate-fast {
-    animation: pendantRotateFast 1.5s linear infinite;
-}
-
-/* ========== 消息发送动画 ========== */
-
-/* iOS 风格消息气泡飞入动画 */
-@keyframes messageSendFlyIn {
-    0% { 
-        transform: translateY(30px) scale(0.95);
-        opacity: 0;
-    }
-    100% { 
-        transform: translateY(0) scale(1);
-        opacity: 1;
-    }
-}
-
-.message-send-animation {
-    animation: messageSendFlyIn 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-/* 动画预设列表项 */
-.animation-preset-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+/* 气泡样式选择器网格卡片 */
+.bubble-shape-card {
     padding: 12px;
-    background: #fafafa;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    transition: all 0.2s;
-    border: 1px solid #f0f0f0;
-}
-
-.animation-preset-item:hover {
-    background: #f5f5f5;
-    border-color: #e0e0e0;
-}
-
-.animation-preset-item input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-    flex-shrink: 0;
-}
-
-.preset-action-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    border: none;
-    border-radius: 6px;
-    background: #333;
-    color: white;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-
-.preset-action-btn:hover {
-    background: #555;
-}
-
-.preset-action-btn:active {
-    transform: scale(0.95);
-}
-
-.preset-action-btn.danger {
-    background: #dc3545;
-}
-
-.preset-action-btn.danger:hover {
-    background: #c82333;
-}
-
-
-/* 自定义动画编辑器关闭按钮 */
-#customAnimationSection button[onclick*="closeCustomAnimationEditor"]:hover {
-    background: #e8e8e8;
-}
-
-#customAnimationSection button[onclick*="closeCustomAnimationEditor"]:active {
-    transform: scale(0.9);
-}
-
-/* ========== 格式调节面板样式 ========== */
-
-.format-fix-message-item {
-    padding: 15px;
-    background: white;
+    background: #fff;
     border-radius: 12px;
-    border: 1.5px solid #e0e0e0;
-    margin-bottom: 12px;
+    border: 2px solid #e0e0e0;
     cursor: pointer;
     transition: all 0.2s ease;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    text-align: center;
 }
 
-.format-fix-message-item:hover {
+.bubble-shape-card:hover {
     border-color: #007bff;
     box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
 }
 
-.format-fix-message-item:active {
+.bubble-shape-card:active {
     transform: scale(0.98);
 }
 
-.format-fix-message-time {
-    font-size: 11px;
-    color: #999;
-    font-weight: 500;
+.bubble-shape-card.active {
+    border-color: #007bff;
+    background: #f0f8ff;
 }
 
-.format-fix-message-content {
-    font-size: 14px;
+.bubble-shape-name {
+    font-size: 13px;
+    font-weight: 600;
     color: #333;
-    line-height: 1.5;
-    word-break: break-word;
-    flex: 1;
+    margin-bottom: 8px;
 }
 
-.format-fix-message-action {
+.bubble-shape-preview {
     display: flex;
+    flex-direction: column;
+    gap: 6px;
     align-items: center;
-    justify-content: flex-end;
-    color: #007bff;
 }
 
-/* 格式编辑弹窗样式 */
-#formatEditOriginal {
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-#formatEditInput {
-    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-}
-
-/* 参数重置按钮样式 */
-.param-reset-btn {
-    padding: 4px 10px;
+.bubble-shape-preview-user,
+.bubble-shape-preview-char {
+    padding: 8px 12px;
     font-size: 11px;
-    background: #f0f0f0;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    color: #666;
-    cursor: pointer;
-    transition: all 0.2s ease;
+    line-height: 1.3;
+    max-width: 80%;
 }
 
-.param-reset-btn:hover {
-    background: #e0e0e0;
-    border-color: #ccc;
-}
-
-.param-reset-btn:active {
-    transform: scale(0.95);
-}
-
-
-/* ========== 短信消息长按菜单样式 ========== */
-.sms-msg-context-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.3);
-    z-index: 9999;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.sms-msg-context-overlay.show {
-    opacity: 1;
-}
-
-.sms-msg-context-menu {
-    position: fixed;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-radius: 14px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-    padding: 8px 0;
-    min-width: 160px;
-    z-index: 10000;
-    opacity: 0;
-    transform: scale(0.9);
-    transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.sms-msg-context-menu.show {
-    opacity: 1;
-    transform: scale(1);
-}
-
-.sms-msg-context-item {
-    display: flex;
-    align-items: center;
-    padding: 12px 16px;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    font-size: 15px;
-    color: #333;
-    user-select: none;
-}
-
-.sms-msg-context-item:hover {
-    background: rgba(0, 0, 0, 0.05);
-}
-
-.sms-msg-context-item:active {
-    background: rgba(0, 0, 0, 0.1);
-}
-
-.sms-msg-context-item.destructive {
-    color: #ff3b30;
-}
-
-.sms-msg-context-icon {
-    width: 20px;
-    height: 20px;
-    margin-right: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.sms-msg-context-icon svg {
-    width: 18px;
-    height: 18px;
-}
-
-.sms-msg-highlight {
-    background: rgba(0, 122, 255, 0.1) !important;
-}
-
-/* 防止短信消息长按时选中文本 */
-.sms-bubble-row {
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-}
-
-
-/* ========== 短信多选模式样式 ========== */
-.sms-multi-select-mode .sms-bubble-row {
-    cursor: pointer;
-    padding-left: 40px;
-    position: relative;
-    transition: background 0.2s ease;
-}
-
-.sms-multi-select-mode .sms-bubble-row:active {
-    background: rgba(0, 0, 0, 0.05);
-}
-
-.sms-multi-select-mode .sms-bubble-row.sms-msg-selected {
-    background: rgba(0, 122, 255, 0.1);
-}
-
-.sms-msg-checkbox {
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 22px;
-    height: 22px;
-    border: 2px solid #d1d1d6;
-    border-radius: 50%;
-    background: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s ease;
-}
-
-.sms-bubble-row.sms-msg-selected .sms-msg-checkbox {
+.bubble-shape-preview-user {
     background: #007aff;
-    border-color: #007aff;
-}
-
-.sms-bubble-row.sms-msg-selected .sms-msg-checkbox::after {
-    content: '✓';
     color: white;
-    font-size: 14px;
-    font-weight: bold;
+    align-self: flex-end;
 }
 
-.sms-multi-select-toolbar {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    max-width: 400px;
-    background: #fff;
-    border-bottom: 1px solid #e5e5e5;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    gap: 12px;
-    z-index: 2004;
-}
-
-.sms-cancel {
-    color: #576b95;
-    font-size: 15px;
-    cursor: pointer;
-    flex-shrink: 0;
-}
-
-.sms-cancel:active {
-    opacity: 0.6;
-}
-
-.sms-title {
-    flex: 1;
-    text-align: center;
-    font-size: 15px;
+.bubble-shape-preview-char {
+    background: #e9ecef;
     color: #333;
-    font-weight: 500;
+    align-self: flex-start;
 }
 
-.sms-select-all {
-    color: #576b95;
-    font-size: 15px;
+/* 方案1：圆角气泡（默认，当前样式） */
+.bubble-shape-1 .chat-message-user .chat-message-bubble,
+.bubble-shape-1 .bubble-shape-preview-user {
+    border-radius: 18px !important;
+    border-bottom-right-radius: 4px !important;
+}
+
+.bubble-shape-1 .chat-message-char .chat-message-bubble,
+.bubble-shape-1 .bubble-shape-preview-char {
+    border-radius: 18px !important;
+    border-bottom-left-radius: 4px !important;
+}
+
+/* 方案2：全圆角（胶囊） */
+.bubble-shape-2 .chat-message-user .chat-message-bubble,
+.bubble-shape-2 .bubble-shape-preview-user {
+    border-radius: 20px !important;
+}
+
+.bubble-shape-2 .chat-message-char .chat-message-bubble,
+.bubble-shape-2 .bubble-shape-preview-char {
+    border-radius: 20px !important;
+}
+
+/* 隐藏尾巴 */
+.bubble-shape-2 .chat-message-user .chat-message-bubble::after,
+.bubble-shape-2 .chat-message-char .chat-message-bubble::after {
+    display: none !important;
+}
+
+/* 方案3：直角矩形 */
+.bubble-shape-3 .chat-message-user .chat-message-bubble,
+.bubble-shape-3 .bubble-shape-preview-user {
+    border-radius: 4px !important;
+}
+
+.bubble-shape-3 .chat-message-char .chat-message-bubble,
+.bubble-shape-3 .bubble-shape-preview-char {
+    border-radius: 4px !important;
+}
+
+.bubble-shape-3 .chat-message-user .chat-message-bubble::after,
+.bubble-shape-3 .chat-message-char .chat-message-bubble::after {
+    display: none !important;
+}
+
+/* 方案4：大圆角无尾巴 */
+.bubble-shape-4 .chat-message-user .chat-message-bubble,
+.bubble-shape-4 .bubble-shape-preview-user {
+    border-radius: 16px !important;
+}
+
+.bubble-shape-4 .chat-message-char .chat-message-bubble,
+.bubble-shape-4 .bubble-shape-preview-char {
+    border-radius: 16px !important;
+}
+
+.bubble-shape-4 .chat-message-user .chat-message-bubble::after,
+.bubble-shape-4 .chat-message-char .chat-message-bubble::after {
+    display: none !important;
+}
+
+/* 方案5：不规则圆角（iOS拟态） */
+.bubble-shape-5 .chat-message-user .chat-message-bubble,
+.bubble-shape-5 .bubble-shape-preview-user {
+    border-radius: 18px 18px 4px 18px !important;
+}
+
+.bubble-shape-5 .chat-message-char .chat-message-bubble,
+.bubble-shape-5 .bubble-shape-preview-char {
+    border-radius: 18px 18px 18px 4px !important;
+}
+
+.bubble-shape-5 .chat-message-user .chat-message-bubble::after,
+.bubble-shape-5 .chat-message-char .chat-message-bubble::after {
+    display: none !important;
+}
+
+/* 方案6：扁平方形带边框 */
+.bubble-shape-6 .chat-message-user .chat-message-bubble,
+.bubble-shape-6 .bubble-shape-preview-user {
+    border-radius: 8px !important;
+    border: 1.5px solid #0066cc !important;
+}
+
+.bubble-shape-6 .chat-message-char .chat-message-bubble,
+.bubble-shape-6 .bubble-shape-preview-char {
+    border-radius: 8px !important;
+    border: 1.5px solid #d0d0d0 !important;
+}
+
+.bubble-shape-6 .chat-message-user .chat-message-bubble::after,
+.bubble-shape-6 .chat-message-char .chat-message-bubble::after {
+    display: none !important;
+}
+
+/* 方案7：气泡形（对话框） */
+.bubble-shape-7 .chat-message-user .chat-message-bubble,
+.bubble-shape-7 .bubble-shape-preview-user {
+    border-radius: 20px 20px 4px 20px !important;
+}
+
+.bubble-shape-7 .chat-message-char .chat-message-bubble,
+.bubble-shape-7 .bubble-shape-preview-char {
+    border-radius: 20px 20px 20px 4px !important;
+}
+
+/* 方案8：卡片式带阴影 */
+.bubble-shape-8 .chat-message-user .chat-message-bubble,
+.bubble-shape-8 .bubble-shape-preview-user {
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2) !important;
+}
+
+.bubble-shape-8 .chat-message-char .chat-message-bubble,
+.bubble-shape-8 .bubble-shape-preview-char {
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+.bubble-shape-8 .chat-message-user .chat-message-bubble::after,
+.bubble-shape-8 .chat-message-char .chat-message-bubble::after {
+    display: none !important;
+}
+
+
+/* ========== 气泡颜色选择器样式 ========== */
+
+/* 颜色选择器 */
+.color-picker {
+    width: 100%;
+    height: 50px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
     cursor: pointer;
-    flex-shrink: 0;
-}
-
-.sms-select-all:active {
-    opacity: 0.6;
-}
-
-.sms-action-btn {
-    color: #576b95;
-    font-size: 15px;
-    cursor: pointer;
-    flex-shrink: 0;
-    padding: 4px 8px;
-    border-radius: 4px;
     transition: all 0.2s;
 }
 
-.sms-action-btn:active {
-    opacity: 0.6;
+.color-picker:hover {
+    border-color: #007aff;
 }
 
-.sms-action-btn.disabled {
-    color: #ccc;
-    cursor: not-allowed;
+/* 预设颜色按钮 */
+.preset-color-btn {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 10px;
+    border: 2px solid #e0e0e0;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.preset-color-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.preset-color-btn:active {
+    transform: scale(0.95);
+}
+
+.preset-color-btn.selected {
+    border-color: #007aff;
+    border-width: 3px;
+}
+
+.preset-color-btn.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* 预设颜色按钮内部分割 */
+.preset-color-split {
+    display: flex;
+    height: 100%;
+}
+
+.preset-color-left {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.preset-color-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #333;
+}
+
+/* 颜色方案列表项 */
+.color-scheme-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f8f8f8;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.color-scheme-item:hover {
+    background: #f0f0f0;
+}
+
+.color-scheme-item input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.color-scheme-preview {
+    display: flex;
+    gap: 4px;
+}
+
+.color-scheme-preview-box {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
+.color-scheme-info {
+    flex: 1;
+}
+
+.color-scheme-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+.color-scheme-date {
+    font-size: 11px;
+    color: #999;
+}
+
+
+/* ========== 气泡装饰功能样式 ========== */
+
+/* 开关按钮 */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.3s;
+    border-radius: 28px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: #007bff;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(22px);
+}
+
+/* 位置选择按钮 */
+.bubble-decoration-position-btn {
+    padding: 10px;
+    background: #f8f8f8;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.bubble-decoration-position-btn:hover {
+    background: #f0f0f0;
+    border-color: #007bff;
+}
+
+.bubble-decoration-position-btn:active {
+    transform: scale(0.95);
+}
+
+.bubble-decoration-position-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+/* 气泡装饰样式 */
+.chat-message-bubble::before {
+    content: '';
+    position: absolute;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
     pointer-events: none;
+    z-index: 10;
 }
 
-.sms-delete-btn {
-    color: #fa5151;
+/* 装饰预设列表项 */
+.bubble-decoration-preset-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f8f8f8;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.bubble-decoration-preset-item:hover {
+    background: #f0f0f0;
+}
+
+.bubble-decoration-preset-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.bubble-decoration-preset-item .preset-name {
+    flex: 1;
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+}
+
+.bubble-decoration-preset-item .preset-date {
+    font-size: 11px;
+    color: #999;
+}
+
+
+/* 隐藏顶栏分割线 */
+.chat-detail-header.hide-header-divider {
+    border-bottom: none !important;
+}
+
+/* ========== 角色后台活动状态 ========== */
+
+.chat-detail-status {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+    text-align: center;
+    line-height: 1.3;
+}
+
+.bg-status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.bg-status-online {
+    background: #e8f5e9;
+    color: #4caf50;
+}
+
+.bg-status-sleeping {
+    background: #e8eaf6;
+    color: #5c6bc0;
+}
+
+.bg-status-busy {
+    background: #fff3e0;
+    color: #ff9800;
+}
+
+.bg-status-away {
+    background: #fce4ec;
+    color: #e91e63;
+}
+
+.chat-list-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.chat-list-status-dot.online {
+    background: #4caf50;
+}
+
+.chat-list-status-dot.sleeping {
+    background: #5c6bc0;
+}
+
+.chat-list-status-dot.busy {
+    background: #ff9800;
+}
+
+.chat-list-status-dot.away {
+    background: #e91e63;
+}
+
+
+/* ========== 拉黑系统样式 ========== */
+
+.msg-block-indicator {
+    display: inline-block;
+    color: #ff3b30;
+    font-size: 14px;
+    margin-left: 6px;
+    vertical-align: middle;
+    animation: blockPulse 2s ease-in-out infinite;
+}
+
+@keyframes blockPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.friend-request-item {
+    padding: 14px 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.friend-request-item:last-child {
+    border-bottom: none;
+}
+
+.friend-request-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #999;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.friend-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    background: #ff3b30;
+    color: #fff;
+    font-size: 10px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+}
+
+.block-dev-section {
+    padding: 16px;
+    background: #f8f8f8;
+    border-radius: 12px;
+    margin-bottom: 16px;
+}
+
+.block-dev-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+}
+
+.block-dev-info {
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.block-dev-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+}
+
+.block-dev-row:last-child {
+    border-bottom: none;
+}
+
+.block-dev-row span:first-child {
+    color: #999;
+}
+
+.block-dev-row span:last-child {
+    color: #333;
+    font-weight: 500;
+}
+
+
+/* ========== 群聊相关样式 ========== */
+
+/* 群聊成员名字显示 */
+.chat-message-name {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 4px;
+    padding-left: 2px;
+}
+
+/* 输入中指示器 */
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+}
+
+.typing-indicator span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #999;
+    animation: typing 1.4s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typing {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.7;
+    }
+    30% {
+        transform: translateY(-8px);
+        opacity: 1;
+    }
+}
+
+/* 群聊头像按钮样式 */
+.chat-header-add {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.chat-header-add:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.chat-header-add:active {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.chat-header-group-btn svg {
+    color: #333;
+}
+
+.chat-header-group-btn:hover svg {
+    color: #007aff;
 }

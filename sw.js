@@ -7,6 +7,12 @@ const ASSETS_TO_CACHE = [
   './index.html',
   './style.css',
   './script.js',
+  './data-management.js',
+  './appearance.js',
+  './music-search.js',
+  './persona.js',
+  './worldbook.js',
+  './showcase.js',
   './manifest.json'
 ];
 
@@ -118,13 +124,14 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
-// 定期检查更新（每10分钟）
+// 消息处理（更新检查 + 主动消息后台定时）
+let _swProactiveInterval = null;
+
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
   if (event.data && event.data.type === 'CHECK_UPDATE') {
-    // 清除所有缓存，强制重新获取
     event.waitUntil(
       caches.keys().then((cacheNames) => {
         return Promise.all(
@@ -134,6 +141,24 @@ self.addEventListener('message', (event) => {
         return self.registration.update();
       })
     );
+  }
+  if (event.data && event.data.type === 'START_PROACTIVE_TIMER') {
+    if (_swProactiveInterval) clearInterval(_swProactiveInterval);
+    _swProactiveInterval = setInterval(() => {
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({ type: 'PROACTIVE_TICK' });
+        });
+      });
+    }, 20000);
+    console.log('[SW] 主动消息后台定时器已启动');
+  }
+  if (event.data && event.data.type === 'STOP_PROACTIVE_TIMER') {
+    if (_swProactiveInterval) {
+      clearInterval(_swProactiveInterval);
+      _swProactiveInterval = null;
+    }
+    console.log('[SW] 主动消息后台定时器已停止');
   }
 });
 

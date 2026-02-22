@@ -1,4 +1,4 @@
-// ========== iOS风格弹窗系统 ==========
+﻿// ========== iOS风格弹窗系统 ==========
 
 // 创建iOS风格的alert弹窗
 function iosAlert(message, title = '提示') {
@@ -1359,2654 +1359,6 @@ function updateMusicDate() {
 updateMusicDate();
 setInterval(updateMusicDate, 60000);
 
-// API设置相关功能
-const apiUrls = {
-    hakimi: 'https://generativelanguage.googleapis.com/v1beta',
-    claude: 'https://api.anthropic.com/v1',
-    ds: 'https://api.deepseek.com/v1',
-    custom: ''
-};
-
-// 打开API设置界面
-async function openApiSettings() {
-    document.getElementById('apiSettings').classList.add('active');
-    // 加载保存的设置（内部已调用handleProviderChange并恢复保存的地址）
-    await loadSettings();
-    // 加载副API设置
-    if (typeof loadSecSettings === 'function') await loadSecSettings();
-}
-
-// 关闭设置界面
-function closeSettings() {
-    document.getElementById('apiSettings').classList.remove('active');
-}
-
-// 打开数据管理界面（占位）
-// ==================== 数据管理功能 ====================
-
-// 打开数据管理界面
-async function openDataManagement() {
-    document.getElementById('dataManagementSettings').classList.add('active');
-    
-    // 刷新存储信息和数据统计
-    await refreshStorageInfo();
-    await updateDataStatistics();
-}
-
-// 关闭数据管理界面
-function closeDataManagement() {
-    document.getElementById('dataManagementSettings').classList.remove('active');
-}
-
-// 更新数据统计
-let dataChartInstance = null; // 保存图表实例
-
-async function updateDataStatistics() {
-    try {
-        const allImages = await getAllImagesFromDB();
-        const allChats = await getAllChatsFromDB();
-        const allFiles = await getAllFilesFromDB();
-        const allCharacters = await getAllChatCharactersFromDB();
-        
-        const imageCount = allImages.length;
-        const chatCount = allChats.length;
-        const fileCount = allFiles.length;
-        const characterCount = allCharacters.length;
-        
-        // 更新界面数字
-        document.getElementById('imageCount').textContent = imageCount;
-        document.getElementById('chatCount').textContent = chatCount;
-        document.getElementById('characterCount').textContent = characterCount;
-        document.getElementById('fileCount').textContent = fileCount;
-        
-        // 绘制饼状图
-        renderDataChart(imageCount, chatCount, fileCount, characterCount);
-        
-        console.log(`📊 数据统计: ${imageCount}张图片, ${chatCount}条聊天, ${characterCount}个角色, ${fileCount}个文件`);
-    } catch (error) {
-        console.error('更新数据统计失败:', error);
-    }
-}
-
-// 绘制数据饼状图
-function renderDataChart(imageCount, chatCount, fileCount, characterCount) {
-    const canvas = document.getElementById('dataChart');
-    const legendDiv = document.getElementById('chartLegend');
-    
-    if (!canvas) return;
-    
-    // 如果已有图表实例，先销毁
-    if (dataChartInstance) {
-        dataChartInstance.destroy();
-    }
-    
-    const ctx = canvas.getContext('2d');
-    
-    // 数据配置
-    const data = {
-        labels: ['图片', '聊天记录', '文件', '聊天角色'],
-        datasets: [{
-            data: [imageCount, chatCount, fileCount, characterCount],
-            backgroundColor: [
-                '#007aff',  // 蓝色 - 图片
-                '#34c759',  // 绿色 - 聊天
-                '#ff9500',  // 橙色 - 文件
-                '#af52de'   // 紫色 - 角色
-            ],
-            borderWidth: 2,
-            borderColor: '#fff'
-        }]
-    };
-    
-    // 图表配置
-    const config = {
-        type: 'doughnut',
-        data: data,
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: {
-                    display: false // 隐藏默认图例，使用自定义图例
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed || 0;
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                            return `${label}: ${value} (${percentage}%)`;
-                        }
-                    }
-                }
-            }
-        }
-    };
-    
-    // 创建图表
-    dataChartInstance = new Chart(ctx, config);
-    
-    // 创建自定义图例
-    const total = imageCount + chatCount + fileCount + characterCount;
-    const colors = ['#007aff', '#34c759', '#ff9500', '#af52de'];
-    const labels = ['图片', '聊天记录', '文件', '聊天角色'];
-    const values = [imageCount, chatCount, fileCount, characterCount];
-    
-    legendDiv.innerHTML = labels.map((label, index) => {
-        const percentage = total > 0 ? ((values[index] / total) * 100).toFixed(1) : 0;
-        return `
-            <div style="display: flex; align-items: center; gap: 6px;">
-                <div style="width: 12px; height: 12px; background: ${colors[index]}; border-radius: 2px;"></div>
-                <span style="color: #666;">${label}: ${values[index]} (${percentage}%)</span>
-            </div>
-        `;
-    }).join('');
-}
-
-// 显示详细信息
-async function showDataDetails() {
-    try {
-        const allImages = await getAllImagesFromDB();
-        
-        if (allImages.length === 0) {
-            alert('暂无数据');
-            return;
-        }
-        
-        let details = '数据详细信息\n\n';
-        details += `总计：${allImages.length} 张图片\n\n`;
-        
-        allImages.forEach((img, index) => {
-            const sizeKB = ((img.data.length - (img.data.indexOf(',') + 1)) * 0.75 / 1024).toFixed(2);
-            const date = new Date(img.timestamp).toLocaleString('zh-CN');
-            details += `${index + 1}. ${img.id}\n`;
-            details += `   类型: ${img.type}\n`;
-            details += `   大小: ${sizeKB} KB\n`;
-            details += `   时间: ${date}\n\n`;
-        });
-        
-        alert(details);
-    } catch (error) {
-        console.error('获取详细信息失败:', error);
-        alert('获取详细信息失败！');
-    }
-}
-
-// ==================== 导出数据功能（多种方案） ====================
-
-// 显示导出选项弹窗
-async function showExportOptions() {
-    return new Promise((resolve) => {
-        const overlay = document.createElement('div');
-        overlay.className = 'ios-dialog-overlay';
-        
-        const dialog = document.createElement('div');
-        dialog.className = 'ios-dialog';
-        dialog.style.maxWidth = '90%';
-        dialog.style.width = '300px';
-        
-        const titleEl = document.createElement('div');
-        titleEl.className = 'ios-dialog-title';
-        titleEl.textContent = '选择导出方式';
-        
-        const messageEl = document.createElement('div');
-        messageEl.className = 'ios-dialog-message';
-        messageEl.textContent = '请选择导出完整数据的方式：';
-        messageEl.style.paddingBottom = '10px';
-        
-        const buttonsEl = document.createElement('div');
-        buttonsEl.className = 'ios-dialog-buttons vertical';
-        
-        // 方案1：分批导出（推荐）
-        const batchBtn = document.createElement('button');
-        batchBtn.className = 'ios-dialog-button primary';
-        batchBtn.textContent = '分批导出（推荐）';
-        batchBtn.onclick = () => {
-            closeDialog('batch');
-        };
-        
-        // 方案4：基本导出（带检测）
-        const basicBtn = document.createElement('button');
-        basicBtn.className = 'ios-dialog-button';
-        basicBtn.textContent = '基本导出（单文件）';
-        basicBtn.onclick = () => {
-            closeDialog('basic');
-        };
-        
-        // 方案3：压缩导出
-        const compressBtn = document.createElement('button');
-        compressBtn.className = 'ios-dialog-button';
-        compressBtn.textContent = '压缩导出（ZIP）';
-        compressBtn.onclick = () => {
-            closeDialog('compress');
-        };
-        
-        // 方案2：流式导出
-        const streamBtn = document.createElement('button');
-        streamBtn.className = 'ios-dialog-button';
-        streamBtn.textContent = '流式导出（大文件）';
-        streamBtn.onclick = () => {
-            closeDialog('stream');
-        };
-        
-        // 取消按钮
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'ios-dialog-button';
-        cancelBtn.textContent = '取消';
-        cancelBtn.onclick = () => {
-            closeDialog(null);
-        };
-        
-        buttonsEl.appendChild(batchBtn);
-        buttonsEl.appendChild(basicBtn);
-        buttonsEl.appendChild(compressBtn);
-        buttonsEl.appendChild(streamBtn);
-        buttonsEl.appendChild(cancelBtn);
-        
-        dialog.appendChild(titleEl);
-        dialog.appendChild(messageEl);
-        dialog.appendChild(buttonsEl);
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
-        
-        // 显示动画
-        setTimeout(() => {
-            overlay.classList.add('show');
-        }, 10);
-        
-        function closeDialog(result) {
-            overlay.classList.remove('show');
-            setTimeout(() => {
-                document.body.removeChild(overlay);
-                if (result) {
-                    handleExport(result);
-                }
-                resolve(result);
-            }, 300);
-        }
-    });
-}
-
-// 处理导出
-async function handleExport(type) {
-    switch(type) {
-        case 'basic':
-            await exportBasic();
-            break;
-        case 'batch':
-            await exportBatch();
-            break;
-        case 'compress':
-            await exportCompress();
-            break;
-        case 'stream':
-            await exportStream();
-            break;
-    }
-}
-
-// 方案1：基本导出（单文件，带大小检测）
-async function exportBasic() {
-    try {
-        // 获取所有数据
-        const allImages = await getAllImagesFromDB();
-        const allChats = await getAllChatsFromDB();
-        const allFiles = await getAllFilesFromDB();
-        const allCharacters = await getAllChatCharactersFromDB();
-        const allSettings = getAllLocalStorageData();
-        
-        // 获取所有角色的长期记忆
-        const allMemories = {};
-        for (const char of allCharacters) {
-            const memories = await getLongTermMemories(char.id);
-            if (memories && memories.length > 0) {
-                allMemories[char.id] = memories;
-            }
-        }
-        
-        // 检查是否有数据
-        const hasData = allImages.length > 0 || allChats.length > 0 || allFiles.length > 0 || 
-                       allCharacters.length > 0 || Object.keys(allSettings).length > 0;
-        
-        if (!hasData) {
-            await iosAlert('暂无数据可导出', '提示');
-            return;
-        }
-        
-        // 创建导出数据
-        const exportData = {
-            version: '4.0',
-            exportTime: new Date().toISOString(),
-            appName: 'buzhiqiming',
-            appNameCN: '不知其名',
-            description: 'Complete data backup with all features',
-            data: {
-                images: allImages,
-                chats: allChats,
-                files: allFiles,
-                characters: allCharacters,
-                longTermMemories: allMemories,
-                localStorage: allSettings
-            },
-            statistics: {
-                imageCount: allImages.length,
-                chatCount: allChats.length,
-                fileCount: allFiles.length,
-                characterCount: allCharacters.length,
-                memoryCount: Object.values(allMemories).reduce((sum, arr) => sum + arr.length, 0),
-                settingCount: Object.keys(allSettings).length
-            }
-        };
-        
-        // 转换为JSON并计算大小
-        const jsonStr = JSON.stringify(exportData, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const fileSizeMB = (blob.size / (1024 * 1024)).toFixed(2);
-        
-        // 大小检测（超过50MB警告）
-        if (blob.size > 50 * 1024 * 1024) {
-            const confirmed = await iosConfirm(
-                `数据量较大 (${fileSizeMB} MB)，可能导致浏览器卡顿或崩溃。\n\n建议：\n1. 先压缩图片\n2. 使用"分批导出"\n\n确定继续导出吗？`,
-                '⚠️ 数据量过大警告'
-            );
-            
-            if (!confirmed) return;
-        }
-        
-        // 下载文件
-        downloadFile(blob, `buzhiqiming_backup_${new Date().getTime()}.json`);
-        
-        console.log('✅ 基本导出完成');
-        await iosAlert(
-            `导出成功！\n\n图片: ${allImages.length}张\n聊天: ${allChats.length}条\n角色: ${allCharacters.length}个\n记忆: ${exportData.statistics.memoryCount}条\n文件: ${allFiles.length}个\n设置: ${Object.keys(allSettings).length}项\n\n文件大小: ${fileSizeMB} MB`,
-            '导出完成'
-        );
-        
-    } catch (error) {
-        console.error('导出失败:', error);
-        await iosAlert('导出失败：' + error.message, '错误');
-    }
-}
-
-// 方案2：分批导出（多个文件）
-async function exportBatch() {
-    try {
-        const timestamp = new Date().getTime();
-        let fileCount = 0;
-        
-        // 导出图片
-        const allImages = await getAllImagesFromDB();
-        if (allImages.length > 0) {
-            const imagesData = {
-                version: '4.0',
-                type: 'images',
-                exportTime: new Date().toISOString(),
-                appName: 'buzhiqiming',
-                data: allImages
-            };
-            const blob = new Blob([JSON.stringify(imagesData, null, 2)], { type: 'application/json' });
-            downloadFile(blob, `buzhiqiming_images_${timestamp}.json`);
-            fileCount++;
-            await sleep(500);
-        }
-        
-        // 导出聊天
-        const allChats = await getAllChatsFromDB();
-        if (allChats.length > 0) {
-            const chatsData = {
-                version: '4.0',
-                type: 'chats',
-                exportTime: new Date().toISOString(),
-                appName: 'buzhiqiming',
-                data: allChats
-            };
-            const blob = new Blob([JSON.stringify(chatsData, null, 2)], { type: 'application/json' });
-            downloadFile(blob, `buzhiqiming_chats_${timestamp}.json`);
-            fileCount++;
-            await sleep(500);
-        }
-        
-        // 导出角色
-        const allCharacters = await getAllChatCharactersFromDB();
-        if (allCharacters.length > 0) {
-            const charactersData = {
-                version: '4.0',
-                type: 'characters',
-                exportTime: new Date().toISOString(),
-                appName: 'buzhiqiming',
-                data: allCharacters
-            };
-            const blob = new Blob([JSON.stringify(charactersData, null, 2)], { type: 'application/json' });
-            downloadFile(blob, `buzhiqiming_characters_${timestamp}.json`);
-            fileCount++;
-            await sleep(500);
-        }
-        
-        // 导出长期记忆
-        const allMemories = {};
-        for (const char of allCharacters) {
-            const memories = await getLongTermMemories(char.id);
-            if (memories && memories.length > 0) {
-                allMemories[char.id] = memories;
-            }
-        }
-        if (Object.keys(allMemories).length > 0) {
-            const memoriesData = {
-                version: '4.0',
-                type: 'memories',
-                exportTime: new Date().toISOString(),
-                appName: 'buzhiqiming',
-                data: allMemories
-            };
-            const blob = new Blob([JSON.stringify(memoriesData, null, 2)], { type: 'application/json' });
-            downloadFile(blob, `buzhiqiming_memories_${timestamp}.json`);
-            fileCount++;
-            await sleep(500);
-        }
-        
-        // 导出文件
-        const allFiles = await getAllFilesFromDB();
-        if (allFiles.length > 0) {
-            const filesData = {
-                version: '4.0',
-                type: 'files',
-                exportTime: new Date().toISOString(),
-                appName: 'buzhiqiming',
-                data: allFiles
-            };
-            const blob = new Blob([JSON.stringify(filesData, null, 2)], { type: 'application/json' });
-            downloadFile(blob, `buzhiqiming_files_${timestamp}.json`);
-            fileCount++;
-            await sleep(500);
-        }
-        
-        // 导出设置
-        const allSettings = getAllLocalStorageData();
-        if (Object.keys(allSettings).length > 0) {
-            const settingsData = {
-                version: '4.0',
-                type: 'settings',
-                exportTime: new Date().toISOString(),
-                appName: 'buzhiqiming',
-                data: allSettings
-            };
-            const blob = new Blob([JSON.stringify(settingsData, null, 2)], { type: 'application/json' });
-            downloadFile(blob, `buzhiqiming_settings_${timestamp}.json`);
-            fileCount++;
-        }
-        
-        if (fileCount === 0) {
-            await iosAlert('暂无数据可导出', '提示');
-            return;
-        }
-        
-        await iosAlert(
-            `分批导出成功！\n\n已导出 ${fileCount} 个文件\n\n注意：部分浏览器可能需要您手动允许多次下载`,
-            '导出完成'
-        );
-        
-    } catch (error) {
-        console.error('分批导出失败:', error);
-        await iosAlert('导出失败：' + error.message, '错误');
-    }
-}
-
-// 方案3：压缩导出（使用JSZip）
-async function exportCompress() {
-    try {
-        // 检查是否已加载JSZip库
-        if (typeof JSZip === 'undefined') {
-            const confirmed = await iosConfirm(
-                '压缩导出需要加载 JSZip 库（约100KB）\n\n是否继续？',
-                '需要加载外部库'
-            );
-            
-            if (!confirmed) return;
-            
-            // 动态加载JSZip库
-            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
-            
-            // 检查是否加载成功
-            if (typeof JSZip === 'undefined') {
-                await iosAlert('JSZip 库加载失败，请检查网络连接或使用其他导出方式', '加载失败');
-                return;
-            }
-        }
-        
-        await iosAlert('正在准备数据并压缩，请稍候...', '处理中');
-        
-        // 获取所有数据
-        const allImages = await getAllImagesFromDB();
-        const allChats = await getAllChatsFromDB();
-        const allFiles = await getAllFilesFromDB();
-        const allCharacters = await getAllChatCharactersFromDB();
-        const allSettings = getAllLocalStorageData();
-        
-        // 获取所有角色的长期记忆
-        const allMemories = {};
-        for (const char of allCharacters) {
-            const memories = await getLongTermMemories(char.id);
-            if (memories && memories.length > 0) {
-                allMemories[char.id] = memories;
-            }
-        }
-        
-        // 检查是否有数据
-        const hasData = allImages.length > 0 || allChats.length > 0 || allFiles.length > 0 || 
-                       allCharacters.length > 0 || Object.keys(allSettings).length > 0;
-        
-        if (!hasData) {
-            await iosAlert('暂无数据可导出', '提示');
-            return;
-        }
-        
-        // 创建ZIP文件
-        const zip = new JSZip();
-        const timestamp = new Date().getTime();
-        
-        // 添加主数据文件
-        const exportData = {
-            version: '4.0',
-            exportTime: new Date().toISOString(),
-            appName: 'buzhiqiming',
-            appNameCN: '不知其名',
-            description: 'Complete data backup (Compressed)',
-            statistics: {
-                imageCount: allImages.length,
-                chatCount: allChats.length,
-                fileCount: allFiles.length,
-                characterCount: allCharacters.length,
-                memoryCount: Object.values(allMemories).reduce((sum, arr) => sum + arr.length, 0),
-                settingCount: Object.keys(allSettings).length
-            }
-        };
-        
-        zip.file('info.json', JSON.stringify(exportData, null, 2));
-        
-        // 分别添加各类数据
-        if (allImages.length > 0) {
-            zip.file('images.json', JSON.stringify(allImages, null, 2));
-        }
-        if (allChats.length > 0) {
-            zip.file('chats.json', JSON.stringify(allChats, null, 2));
-        }
-        if (allCharacters.length > 0) {
-            zip.file('characters.json', JSON.stringify(allCharacters, null, 2));
-        }
-        if (Object.keys(allMemories).length > 0) {
-            zip.file('memories.json', JSON.stringify(allMemories, null, 2));
-        }
-        if (allFiles.length > 0) {
-            zip.file('files.json', JSON.stringify(allFiles, null, 2));
-        }
-        if (Object.keys(allSettings).length > 0) {
-            zip.file('settings.json', JSON.stringify(allSettings, null, 2));
-        }
-        
-        // 生成ZIP文件
-        const blob = await zip.generateAsync({ 
-            type: 'blob',
-            compression: 'DEFLATE',
-            compressionOptions: { level: 9 }
-        });
-        
-        const fileSizeMB = (blob.size / (1024 * 1024)).toFixed(2);
-        
-        // 下载文件
-        downloadFile(blob, `buzhiqiming_backup_${timestamp}.zip`);
-        
-        await iosAlert(
-            `压缩导出成功！\n\n图片: ${allImages.length}张\n聊天: ${allChats.length}条\n角色: ${allCharacters.length}个\n记忆: ${exportData.statistics.memoryCount}条\n文件: ${allFiles.length}个\n设置: ${Object.keys(allSettings).length}项\n\n压缩后大小: ${fileSizeMB} MB`,
-            '导出完成'
-        );
-        
-    } catch (error) {
-        console.error('压缩导出失败:', error);
-        await iosAlert('压缩导出失败：' + error.message, '错误');
-    }
-}
-
-// 方案2：流式导出（使用StreamSaver.js）
-async function exportStream() {
-    try {
-        // 提示用户这个功能需要外部库
-        const confirmed = await iosConfirm(
-            '流式导出适合超大数据量（>100MB）\n\n需要加载 StreamSaver.js 库\n\n注意：此功能在某些浏览器可能不稳定\n\n是否继续？',
-            '流式导出'
-        );
-        
-        if (!confirmed) return;
-        
-        // 由于StreamSaver.js较为复杂且需要Service Worker，暂时使用优化的分块导出方案
-        await iosAlert(
-            '流式导出功能开发中...\n\n建议使用：\n1. 分批导出（多文件，最稳定）\n2. 压缩导出（ZIP格式，体积小）\n\n或先压缩图片再导出',
-            '功能提示'
-        );
-        
-    } catch (error) {
-        console.error('流式导出失败:', error);
-        await iosAlert('流式导出失败：' + error.message, '错误');
-    }
-}
-
-// 辅助函数：动态加载外部脚本
-function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('脚本加载失败'));
-        document.head.appendChild(script);
-    });
-}
-
-// 辅助函数：下载文件
-function downloadFile(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// 辅助函数：延迟
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// ==================== 导入备份数据功能 ====================
-
-// 导入备份数据
-async function importBackupData() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,.zip';
-    
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        try {
-            const fileName = file.name.toLowerCase();
-            
-            if (fileName.endsWith('.zip')) {
-                // ZIP文件导入
-                await importFromZip(file);
-            } else if (fileName.endsWith('.json')) {
-                // JSON文件导入
-                await importFromJson(file);
-            } else {
-                await iosAlert('不支持的文件格式，请选择 .json 或 .zip 文件', '错误');
-            }
-        } catch (error) {
-            console.error('导入失败:', error);
-            await iosAlert('导入失败：' + error.message, '错误');
-        }
-    };
-    
-    input.click();
-}
-
-// 从JSON文件导入
-async function importFromJson(file) {
-    try {
-        const text = await file.text();
-        const importData = JSON.parse(text);
-        
-        // 验证数据格式
-        if (!importData.version || !importData.appName || importData.appName !== 'buzhiqiming') {
-            await iosAlert('文件格式不正确或不是本应用的备份文件', '错误');
-            return;
-        }
-        
-        // 显示导入选项
-        await showImportOptions(importData);
-        
-    } catch (error) {
-        console.error('解析JSON失败:', error);
-        await iosAlert('文件解析失败，请检查文件格式', '错误');
-    }
-}
-
-// 从ZIP文件导入
-async function importFromZip(file) {
-    try {
-        // 检查JSZip库
-        if (typeof JSZip === 'undefined') {
-            await iosAlert('需要加载 JSZip 库来解压文件，请稍候...', '提示');
-            await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
-            
-            if (typeof JSZip === 'undefined') {
-                await iosAlert('JSZip 库加载失败，请检查网络连接', '错误');
-                return;
-            }
-        }
-        
-        const zip = new JSZip();
-        const zipData = await zip.loadAsync(file);
-        
-        // 读取info.json
-        const infoFile = zipData.file('info.json');
-        if (!infoFile) {
-            await iosAlert('ZIP文件中缺少 info.json，可能不是有效的备份文件', '错误');
-            return;
-        }
-        
-        const infoText = await infoFile.async('text');
-        const info = JSON.parse(infoText);
-        
-        // 验证
-        if (!info.version || !info.appName || info.appName !== 'buzhiqiming') {
-            await iosAlert('不是本应用的备份文件', '错误');
-            return;
-        }
-        
-        // 读取各类数据
-        const importData = {
-            version: info.version,
-            appName: info.appName,
-            exportTime: info.exportTime,
-            data: {}
-        };
-        
-        // 读取images.json
-        const imagesFile = zipData.file('images.json');
-        if (imagesFile) {
-            const imagesText = await imagesFile.async('text');
-            importData.data.images = JSON.parse(imagesText);
-        }
-        
-        // 读取chats.json
-        const chatsFile = zipData.file('chats.json');
-        if (chatsFile) {
-            const chatsText = await chatsFile.async('text');
-            importData.data.chats = JSON.parse(chatsText);
-        }
-        
-        // 读取characters.json
-        const charactersFile = zipData.file('characters.json');
-        if (charactersFile) {
-            const charactersText = await charactersFile.async('text');
-            importData.data.characters = JSON.parse(charactersText);
-        }
-        
-        // 读取memories.json
-        const memoriesFile = zipData.file('memories.json');
-        if (memoriesFile) {
-            const memoriesText = await memoriesFile.async('text');
-            importData.data.longTermMemories = JSON.parse(memoriesText);
-        }
-        
-        // 读取files.json
-        const filesFile = zipData.file('files.json');
-        if (filesFile) {
-            const filesText = await filesFile.async('text');
-            importData.data.files = JSON.parse(filesText);
-        }
-        
-        // 读取settings.json
-        const settingsFile = zipData.file('settings.json');
-        if (settingsFile) {
-            const settingsText = await settingsFile.async('text');
-            importData.data.localStorage = JSON.parse(settingsText);
-        }
-        
-        // 显示导入选项
-        await showImportOptions(importData);
-        
-    } catch (error) {
-        console.error('解压ZIP失败:', error);
-        await iosAlert('ZIP文件解压失败：' + error.message, '错误');
-    }
-}
-
-// 显示导入选项对话框
-async function showImportOptions(importData) {
-    return new Promise((resolve) => {
-        const overlay = document.createElement('div');
-        overlay.className = 'ios-dialog-overlay';
-        
-        const dialog = document.createElement('div');
-        dialog.className = 'ios-dialog';
-        dialog.style.maxWidth = '90%';
-        dialog.style.width = '340px';
-        
-        const titleEl = document.createElement('div');
-        titleEl.className = 'ios-dialog-title';
-        titleEl.textContent = '选择导入内容';
-        
-        const messageEl = document.createElement('div');
-        messageEl.className = 'ios-dialog-message';
-        
-        // 统计信息
-        const stats = [];
-        if (importData.data.images && importData.data.images.length > 0) {
-            stats.push(`${importData.data.images.length} 张图片`);
-        }
-        if (importData.data.chats && importData.data.chats.length > 0) {
-            stats.push(`${importData.data.chats.length} 条聊天`);
-        }
-        if (importData.data.characters && importData.data.characters.length > 0) {
-            stats.push(`${importData.data.characters.length} 个角色`);
-        }
-        if (importData.data.longTermMemories) {
-            const memCount = Object.values(importData.data.longTermMemories).reduce((sum, arr) => sum + arr.length, 0);
-            if (memCount > 0) stats.push(`${memCount} 条记忆`);
-        }
-        if (importData.data.files && importData.data.files.length > 0) {
-            stats.push(`${importData.data.files.length} 个文件`);
-        }
-        
-        messageEl.innerHTML = `
-            <div style="margin-bottom: 15px;">备份文件包含：</div>
-            <div style="font-size: 13px; color: #666; line-height: 1.8;">
-                ${stats.join('<br>')}
-            </div>
-            <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 8px; font-size: 12px; color: #856404;">
-                ⚠️ 导入将覆盖现有数据，建议先导出当前数据备份
-            </div>
-        `;
-        
-        const buttonsEl = document.createElement('div');
-        buttonsEl.className = 'ios-dialog-buttons vertical';
-        
-        // 完整导入按钮
-        const fullBtn = document.createElement('button');
-        fullBtn.className = 'ios-dialog-button primary';
-        fullBtn.textContent = '完整导入（覆盖所有）';
-        fullBtn.onclick = async () => {
-            closeDialog();
-            await performImport(importData, 'full');
-        };
-        
-        // 合并导入按钮
-        const mergeBtn = document.createElement('button');
-        mergeBtn.className = 'ios-dialog-button';
-        mergeBtn.textContent = '合并导入（保留现有）';
-        mergeBtn.onclick = async () => {
-            closeDialog();
-            await performImport(importData, 'merge');
-        };
-        
-        // 取消按钮
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'ios-dialog-button';
-        cancelBtn.textContent = '取消';
-        cancelBtn.onclick = () => {
-            closeDialog();
-        };
-        
-        buttonsEl.appendChild(fullBtn);
-        buttonsEl.appendChild(mergeBtn);
-        buttonsEl.appendChild(cancelBtn);
-        
-        dialog.appendChild(titleEl);
-        dialog.appendChild(messageEl);
-        dialog.appendChild(buttonsEl);
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
-        
-        setTimeout(() => {
-            overlay.classList.add('show');
-        }, 10);
-        
-        function closeDialog() {
-            overlay.classList.remove('show');
-            setTimeout(() => {
-                document.body.removeChild(overlay);
-                resolve();
-            }, 300);
-        }
-    });
-}
-
-// 执行导入
-async function performImport(importData, mode) {
-    try {
-        showToast('正在导入数据，请稍候...');
-        
-        let importedCount = {
-            images: 0,
-            chats: 0,
-            characters: 0,
-            memories: 0,
-            files: 0,
-            settings: 0
-        };
-        
-        // 导入图片
-        if (importData.data.images && importData.data.images.length > 0) {
-            if (mode === 'full') {
-                // 清空现有图片
-                const transaction = db.transaction(['images'], 'readwrite');
-                const store = transaction.objectStore('images');
-                await new Promise((resolve, reject) => {
-                    const request = store.clear();
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-            
-            // 导入图片
-            for (const img of importData.data.images) {
-                await saveImageToDB(img.id, img.data, img.type);
-                importedCount.images++;
-            }
-        }
-        
-        // 导入聊天记录
-        if (importData.data.chats && importData.data.chats.length > 0) {
-            if (mode === 'full') {
-                // 清空现有聊天
-                const transaction = db.transaction(['chats'], 'readwrite');
-                const store = transaction.objectStore('chats');
-                await new Promise((resolve, reject) => {
-                    const request = store.clear();
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-            
-            // 导入聊天
-            const transaction = db.transaction(['chats'], 'readwrite');
-            const store = transaction.objectStore('chats');
-            for (const chat of importData.data.chats) {
-                await new Promise((resolve, reject) => {
-                    const request = store.add(chat);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => {
-                        // 如果是合并模式且ID冲突，跳过
-                        if (mode === 'merge') {
-                            resolve();
-                        } else {
-                            reject(request.error);
-                        }
-                    };
-                });
-                importedCount.chats++;
-            }
-        }
-        
-        // 导入角色
-        if (importData.data.characters && importData.data.characters.length > 0) {
-            if (mode === 'full') {
-                // 清空现有角色
-                const transaction = db.transaction(['chatCharacters'], 'readwrite');
-                const store = transaction.objectStore('chatCharacters');
-                await new Promise((resolve, reject) => {
-                    const request = store.clear();
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-            
-            // 导入角色
-            for (const char of importData.data.characters) {
-                await saveChatCharacterToDB(char);
-                importedCount.characters++;
-            }
-        }
-        
-        // 导入长期记忆
-        if (importData.data.longTermMemories) {
-            for (const [charId, memories] of Object.entries(importData.data.longTermMemories)) {
-                if (mode === 'full') {
-                    // 覆盖模式：直接保存
-                    await saveLongTermMemories(charId, memories);
-                } else {
-                    // 合并模式：追加到现有记忆
-                    const existing = await getLongTermMemories(charId);
-                    const merged = [...existing, ...memories];
-                    await saveLongTermMemories(charId, merged);
-                }
-                importedCount.memories += memories.length;
-            }
-        }
-        
-        // 导入文件
-        if (importData.data.files && importData.data.files.length > 0) {
-            if (mode === 'full') {
-                // 清空现有文件
-                const transaction = db.transaction(['files'], 'readwrite');
-                const store = transaction.objectStore('files');
-                await new Promise((resolve, reject) => {
-                    const request = store.clear();
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
-                });
-            }
-            
-            // 导入文件
-            const transaction = db.transaction(['files'], 'readwrite');
-            const store = transaction.objectStore('files');
-            for (const file of importData.data.files) {
-                await new Promise((resolve, reject) => {
-                    const request = store.put(file);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => {
-                        if (mode === 'merge') {
-                            resolve();
-                        } else {
-                            reject(request.error);
-                        }
-                    };
-                });
-                importedCount.files++;
-            }
-        }
-        
-        // 导入设置
-        if (importData.data.localStorage) {
-            if (mode === 'full') {
-                // 清空现有设置（保留一些关键设置）
-                const keysToKeep = ['lockScreenEnabled', 'lockPassword', 'lockGesture'];
-                const savedSettings = {};
-                keysToKeep.forEach(key => {
-                    const value = localStorage.getItem(key);
-                    if (value) savedSettings[key] = value;
-                });
-                
-                localStorage.clear();
-                
-                // 恢复保留的设置
-                Object.entries(savedSettings).forEach(([key, value]) => {
-                    localStorage.setItem(key, value);
-                });
-            }
-            
-            // 导入设置
-            Object.entries(importData.data.localStorage).forEach(([key, value]) => {
-                // 跳过一些敏感设置
-                if (mode === 'merge' && ['lockScreenEnabled', 'lockPassword', 'lockGesture'].includes(key)) {
-                    return;
-                }
-                localStorage.setItem(key, value);
-                importedCount.settings++;
-            });
-        }
-        
-        // 刷新界面
-        await updateDataStatistics();
-        await refreshStorageInfo();
-        
-        // 如果导入了角色，刷新聊天列表
-        if (importedCount.characters > 0) {
-            if (typeof loadChatCharacters === 'function') {
-                await loadChatCharacters();
-            }
-        }
-        
-        // 显示结果
-        await iosAlert(
-            `导入完成！\n\n图片: ${importedCount.images}张\n聊天: ${importedCount.chats}条\n角色: ${importedCount.characters}个\n记忆: ${importedCount.memories}条\n文件: ${importedCount.files}个\n设置: ${importedCount.settings}项\n\n${mode === 'full' ? '已覆盖所有数据' : '已合并到现有数据'}`,
-            '导入成功'
-        );
-        
-        console.log('✅ 导入完成:', importedCount);
-        
-    } catch (error) {
-        console.error('导入失败:', error);
-        await iosAlert('导入失败：' + error.message, '错误');
-    }
-}
-
-// 辅助函数：延迟
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// 清空所有图片
-async function clearAllImages() {
-    const confirmed = await iosConfirm(
-        '此操作将删除：\n- 头像\n- 壁纸\n- 封面图\n- 所有其他图片\n\n此操作不可恢复！',
-        '确定要清空所有图片吗？'
-    );
-    
-    if (!confirmed) return;
-    
-    const doubleConfirm = await iosConfirm(
-        '再次确认：真的要删除所有图片吗？',
-        '最后确认'
-    );
-    
-    if (!doubleConfirm) return;
-    
-    try {
-        const transaction = db.transaction(['images'], 'readwrite');
-        const store = transaction.objectStore('images');
-        const request = store.clear();
-        
-        await new Promise((resolve, reject) => {
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
-        
-        // 更新统计
-        await updateDataStatistics();
-        await refreshStorageInfo();
-        
-        // 清除界面上的图片
-        const avatarImage = document.getElementById('avatarImage');
-        const avatarPlaceholder = document.getElementById('avatarPlaceholder');
-        if (avatarImage) avatarImage.style.display = 'none';
-        if (avatarPlaceholder) avatarPlaceholder.style.display = 'block';
-        
-        const lockScreen = document.getElementById('lockScreen');
-        if (lockScreen) {
-            lockScreen.style.backgroundImage = 'none';
-            lockScreen.style.backgroundColor = '#ffffff';
-        }
-        
-        await iosAlert('所有图片已清空！', '完成');
-        console.log('所有图片已清空');
-    } catch (error) {
-        console.error('清空图片失败:', error);
-        await iosAlert('清空失败：' + error.message, '错误');
-    }
-}
-
-// 清除冗余数据
-async function cleanRedundantData() {
-    try {
-        // 确认操作
-        const confirmed = await iosConfirm(
-            '此操作将清理：\n\n• 未被引用的图片\n• 无效的缓存数据\n• 过期的临时数据\n\n建议在清理前先导出备份',
-            '确定要清除冗余数据吗？'
-        );
-        
-        if (!confirmed) return;
-        
-        await iosAlert('正在分析冗余数据，请稍候...', '处理中');
-        
-        let cleanedCount = 0;
-        let freedSpaceKB = 0;
-        const cleanLog = [];
-        
-        // 1. 清理未使用的图片
-        const allImages = await getAllImagesFromDB();
-        const usedImageIds = new Set();
-        
-        // 收集所有正在使用的图片ID
-        // - 聊天角色头像
-        chatCharacters.forEach(char => {
-            if (char.avatar && char.avatar.startsWith('data:image')) {
-                usedImageIds.add(char.avatar);
-            }
-        });
-        
-        // - 人设头像
-        personas.forEach(persona => {
-            if (persona.avatar && persona.avatar.startsWith('data:image')) {
-                usedImageIds.add(persona.avatar);
-            }
-        });
-        
-        // - 用户头像（从localStorage）
-        try {
-            const userDataStr = localStorage.getItem('chatUserData');
-            if (userDataStr) {
-                const userData = JSON.parse(userDataStr);
-                if (userData.avatar) {
-                    usedImageIds.add(userData.avatar);
-                }
-            }
-        } catch (e) {}
-        
-        // - 锁屏壁纸和主屏壁纸
-        const lockWallpaper = await getImageFromDB('lock-wallpaper');
-        if (lockWallpaper) usedImageIds.add(lockWallpaper);
-        
-        const mainWallpaper = await getImageFromDB('main-wallpaper');
-        if (mainWallpaper) usedImageIds.add(mainWallpaper);
-        
-        // - 音乐封面、贴纸等
-        const musicCover = await getImageFromDB('music-cover');
-        if (musicCover) usedImageIds.add(musicCover);
-        
-        const sticker = await getImageFromDB('sticker');
-        if (sticker) usedImageIds.add(sticker);
-        
-        // 检查未使用的图片
-        const unusedImages = [];
-        for (const img of allImages) {
-            let isUsed = false;
-            
-            // 检查是否在使用中
-            if (usedImageIds.has(img.data)) {
-                isUsed = true;
-            }
-            
-            // 检查固定ID的图片
-            if (['avatar', 'lock-wallpaper', 'main-wallpaper', 'music-cover', 'music-avatar', 'sticker'].includes(img.id)) {
-                isUsed = true;
-            }
-            
-            if (!isUsed) {
-                unusedImages.push(img);
-            }
-        }
-        
-        // 删除未使用的图片
-        if (unusedImages.length > 0) {
-            for (const img of unusedImages) {
-                try {
-                    await deleteImageFromDB(img.id);
-                    const sizeKB = ((img.data.length - (img.data.indexOf(',') + 1)) * 0.75 / 1024).toFixed(2);
-                    freedSpaceKB += parseFloat(sizeKB);
-                    cleanedCount++;
-                } catch (e) {
-                    console.error('删除图片失败:', e);
-                }
-            }
-            cleanLog.push(`清理未使用图片: ${unusedImages.length}张`);
-        }
-        
-        // 2. 清理无效的localStorage数据
-        let localStorageCleaned = 0;
-        const validKeys = [
-            'chatCharacters', 'personas', 'chatUserData', 'lockScreenEnabled', 
-            'lockScreenSlideMode', 'lockPasswordEnabled', 'passwordType', 
-            'lockPassword', 'lockGesture', 'lockWallpaperEnabled', 
-            'customStyleEnabled', 'statusBarEnabled', 'phoneBorderEnabled', 
-            'mainWallpaperEnabled'
-        ];
-        
-        for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i);
-            if (key && !validKeys.includes(key)) {
-                // 检查是否是临时数据或过期数据
-                if (key.startsWith('temp_') || key.startsWith('cache_') || key.includes('backup_old')) {
-                    localStorage.removeItem(key);
-                    localStorageCleaned++;
-                }
-            }
-        }
-        
-        if (localStorageCleaned > 0) {
-            cleanLog.push(`清理无效缓存: ${localStorageCleaned}项`);
-        }
-        
-        // 3. 清理无效的聊天记录
-        try {
-            const allChats = await getAllChatsFromDB();
-            const validCharacterIds = new Set(chatCharacters.map(c => c.id));
-            const invalidChats = allChats.filter(chat => !validCharacterIds.has(chat.characterId));
-            
-            if (invalidChats.length > 0) {
-                const chatsTransaction = db.transaction(['chats'], 'readwrite');
-                const chatsStore = chatsTransaction.objectStore('chats');
-                
-                for (const chat of invalidChats) {
-                    try {
-                        await new Promise((resolve, reject) => {
-                            const request = chatsStore.delete(chat.id);
-                            request.onsuccess = () => resolve();
-                            request.onerror = () => reject(request.error);
-                        });
-                    } catch (e) {}
-                }
-                
-                cleanLog.push(`清理无效聊天记录: ${invalidChats.length}条`);
-            }
-        } catch (e) {
-            console.error('清理聊天记录失败:', e);
-        }
-        
-        // 更新统计
-        await updateDataStatistics();
-        await refreshStorageInfo();
-        
-        // 显示结果
-        let resultMsg = '清理完成！\n\n';
-        
-        if (cleanLog.length > 0) {
-            resultMsg += cleanLog.join('\n') + '\n\n';
-        } else {
-            resultMsg += '未发现冗余数据\n\n';
-        }
-        
-        if (freedSpaceKB > 0) {
-            const freedSpaceMB = (freedSpaceKB / 1024).toFixed(2);
-            if (freedSpaceKB < 1024) {
-                resultMsg += `释放空间: ${freedSpaceKB.toFixed(2)} KB`;
-            } else {
-                resultMsg += `释放空间: ${freedSpaceMB} MB`;
-            }
-        }
-        
-        await iosAlert(resultMsg, '清理完成');
-        
-        console.log('冗余数据清理完成:', cleanLog);
-        
-    } catch (error) {
-        console.error('清理冗余数据失败:', error);
-        await iosAlert('清理失败：' + error.message, '错误');
-    }
-}
-
-// 清空所有数据（整个小手机的所有数据）
-async function clearAllData() {
-    // 第一次确认
-    const confirmed = await iosConfirm(
-        '此操作将删除整个小手机的所有数据：\n\n- 所有聊天角色\n- 所有聊天记录\n- 所有图片（头像、壁纸、封面等）\n- 所有文件\n- 所有人设和世界书\n- 所有设置和配置\n\n此操作不可恢复！\n\n⚠️ 注意：仅清空当前页面的数据，不影响其他页面的小手机。',
-        '确定要清空所有数据吗？'
-    );
-    
-    if (!confirmed) return;
-    
-    // 第二次确认
-    const doubleConfirm = await iosConfirm(
-        '最后确认：\n\n真的要清空整个小手机的所有数据吗？\n\n建议先导出数据备份！',
-        '⚠️ 最后确认'
-    );
-    
-    if (!doubleConfirm) return;
-    
-    try {
-        // 清空IndexedDB中的所有数据
-        console.log('开始清空IndexedDB数据...');
-        
-        // 清空images
-        try {
-            const imagesTransaction = db.transaction(['images'], 'readwrite');
-            const imagesStore = imagesTransaction.objectStore('images');
-            await new Promise((resolve, reject) => {
-                const request = imagesStore.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-            console.log('✓ 图片数据已清空');
-        } catch (error) {
-            console.warn('清空图片数据失败:', error);
-        }
-        
-        // 清空chats
-        try {
-            const chatsTransaction = db.transaction(['chats'], 'readwrite');
-            const chatsStore = chatsTransaction.objectStore('chats');
-            await new Promise((resolve, reject) => {
-                const request = chatsStore.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-            console.log('✓ 聊天记录已清空');
-        } catch (error) {
-            console.warn('清空聊天记录失败:', error);
-        }
-        
-        // 清空files
-        try {
-            const filesTransaction = db.transaction(['files'], 'readwrite');
-            const filesStore = filesTransaction.objectStore('files');
-            await new Promise((resolve, reject) => {
-                const request = filesStore.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-            console.log('✓ 文件数据已清空');
-        } catch (error) {
-            console.warn('清空文件数据失败:', error);
-        }
-        
-        // 清空chatCharacters
-        try {
-            const charactersTransaction = db.transaction(['chatCharacters'], 'readwrite');
-            const charactersStore = charactersTransaction.objectStore('chatCharacters');
-            await new Promise((resolve, reject) => {
-                const request = charactersStore.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-            });
-            console.log('✓ 聊天角色已清空');
-            // 清空内存中的角色数组
-            chatCharacters = [];
-        } catch (error) {
-            console.warn('清空聊天角色失败:', error);
-        }
-        
-        // 先清空storageDB（API设置等）- 必须在localStorage之前清空
-        console.log('开始清空storageDB数据...');
-        try {
-            await storageDB.clear();
-            console.log('✓ StorageDB已清空 (API设置、预设等)');
-        } catch (error) {
-            console.warn('清空StorageDB失败:', error);
-        }
-        
-        // 清空localStorage
-        console.log('开始清空localStorage数据...');
-        const keysToRemove = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            keysToRemove.push(localStorage.key(i));
-        }
-        keysToRemove.forEach(key => {
-            localStorage.removeItem(key);
-        });
-        console.log(`✓ localStorage已清空 (${keysToRemove.length}项)`);
-        
-        // 再次确保清空storageDB（防止localStorage清空时触发了某些保存操作）
-        try {
-            await storageDB.clear();
-            console.log('✓ StorageDB二次清空完成');
-        } catch (error) {
-            console.warn('StorageDB二次清空失败:', error);
-        }
-        
-        // 更新统计
-        await updateDataStatistics();
-        await refreshStorageInfo();
-        
-        // 清除聊天列表界面
-        renderChatList();
-        
-        // 清除界面显示
-        const avatarImage = document.getElementById('avatarImage');
-        const avatarPlaceholder = document.getElementById('avatarPlaceholder');
-        if (avatarImage) avatarImage.style.display = 'none';
-        if (avatarPlaceholder) avatarPlaceholder.style.display = 'block';
-        
-        const lockScreen = document.getElementById('lockScreen');
-        if (lockScreen) {
-            lockScreen.style.backgroundImage = 'none';
-            lockScreen.style.backgroundColor = '#ffffff';
-        }
-        
-        const mainScreen = document.getElementById('mainScreen');
-        if (mainScreen) {
-            mainScreen.style.backgroundImage = 'none';
-        }
-        
-        console.log('所有数据已清空完成');
-        await iosAlert(
-            '所有数据已清空！\n\n页面将在3秒后刷新...',
-            '清空完成'
-        );
-        
-        // 3秒后刷新页面
-        setTimeout(() => {
-            window.location.reload();
-        }, 3000);
-        
-    } catch (error) {
-        console.error('清空数据失败:', error);
-        await iosAlert('清空失败：' + error.message, '错误');
-    }
-}
-
-// 刷新存储信息
-async function refreshStorageInfo() {
-    try {
-        const usage = await getStorageUsage();
-        if (usage) {
-            document.getElementById('storageUsage').textContent = `${usage.usage} MB`;
-            document.getElementById('storageQuota').textContent = `${usage.quota} MB`;
-            document.getElementById('storageBar').style.width = `${usage.percentage}%`;
-            
-            // 更新百分比显示（如果存在）
-            const percentageEl = document.getElementById('storagePercentage');
-            if (percentageEl) {
-                percentageEl.textContent = `${usage.percentage}% 已使用`;
-            }
-            
-            console.log(` 存储: ${usage.usage}MB / ${usage.quota}MB (${usage.percentage}%)`);
-        }
-    } catch (error) {
-        console.error('获取存储信息失败:', error);
-    }
-}
-
-// ==================== 图片压缩功能 ====================
-
-// 压缩进行中标志（防止重复点击）
-let isCompressing = false;
-
-// 更新压缩质量显示
-function updateCompressionQuality(value) {
-    document.getElementById('compressionQuality').textContent = value + '%';
-}
-
-// 切换是否压缩小组件图片
-function toggleWidgetCompression(checked) {
-    console.log('压缩小组件图片:', checked);
-}
-
-// 压缩单个图片
-async function compressImageBase64(base64Data, quality) {
-    return new Promise((resolve, reject) => {
-        try {
-            // 检查是否为有效的base64数据
-            if (!base64Data || typeof base64Data !== 'string' || !base64Data.includes('data:image')) {
-                reject(new Error('无效的图片数据'));
-                return;
-            }
-            
-            // 创建一个Image对象
-            const img = new Image();
-            
-            // 设置crossOrigin以避免污染canvas
-            img.crossOrigin = 'anonymous';
-            
-            img.onload = function() {
-                try {
-                    // 创建canvas
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                    
-                    // 设置canvas尺寸为图片尺寸
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    
-                    // 绘制图片到canvas
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // 尝试压缩图片
-                    try {
-                        // 先尝试压缩为jpeg
-                        const compressedBase64 = canvas.toDataURL('image/jpeg', quality / 100);
-                        
-                        // 检查压缩是否成功（有些透明图片压缩后可能变大）
-                        if (compressedBase64 && compressedBase64.length > 0) {
-                            resolve(compressedBase64);
-                        } else {
-                            // 压缩失败，返回原图
-                            resolve(base64Data);
-                        }
-                    } catch (canvasError) {
-                        // Canvas操作失败，返回原图
-                        console.warn('Canvas压缩失败，使用原图:', canvasError.message);
-                        resolve(base64Data);
-                    }
-                } catch (error) {
-                    console.warn('图片处理失败，使用原图:', error.message);
-                    resolve(base64Data);
-                }
-            };
-            
-            img.onerror = function(error) {
-                console.warn('图片加载失败，使用原图');
-                // 图片加载失败时返回原图而不是reject
-                resolve(base64Data);
-            };
-            
-            // 设置图片源
-            img.src = base64Data;
-            
-        } catch (error) {
-            console.warn('压缩过程出错，使用原图:', error.message);
-            // 出错时返回原图而不是reject
-            resolve(base64Data);
-        }
-    });
-}
-
-// 压缩所有图片
-async function compressAllImages() {
-    // 防止重复点击
-    if (isCompressing) {
-        await iosAlert('图片压缩正在进行中，请稍候...', '提示');
-        return;
-    }
-    
-    try {
-        // 获取压缩质量
-        const quality = parseInt(document.getElementById('compressionSlider').value);
-        const compressWidget = document.getElementById('compressWidgetImages').checked;
-        
-        // 确认操作（使用自定义iOS风格弹窗）
-        const confirmed = await iosConfirm(
-            `压缩质量: ${quality}%\n压缩小组件图片: ${compressWidget ? '是' : '否'}\n\n此操作将覆盖原图片且不可恢复！`,
-            '确定要压缩所有图片吗？'
-        );
-        
-        if (!confirmed) return;
-        
-        // 设置压缩标志
-        isCompressing = true;
-        
-        // 显示进度条
-        const progressDiv = document.getElementById('compressionProgress');
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
-        const progressDetail = document.getElementById('progressDetail');
-        const compressBtn = document.getElementById('compressBtn');
-        
-        progressDiv.style.display = 'block';
-        compressBtn.disabled = true;
-        compressBtn.style.opacity = '0.5';
-        compressBtn.textContent = '正在压缩...';
-        
-        // 获取所有图片
-        const allImages = await getAllImagesFromDB();
-        
-        if (allImages.length === 0) {
-            await iosAlert('暂无图片需要压缩', '提示');
-            progressDiv.style.display = 'none';
-            compressBtn.disabled = false;
-            compressBtn.style.opacity = '1';
-            compressBtn.textContent = '开始压缩图片';
-            isCompressing = false;
-            return;
-        }
-        
-        // 小组件类型列表
-        const widgetTypes = ['avatar', 'music-avatar', 'music-cover', 'sticker'];
-        
-        let successCount = 0;
-        let skipCount = 0;
-        let errorCount = 0;
-        let totalSizeBefore = 0;
-        let totalSizeAfter = 0;
-        
-        // 逐个压缩图片
-        for (let i = 0; i < allImages.length; i++) {
-            const img = allImages[i];
-            
-            // 计算原始大小（所有图片都要计算）
-            const originalSize = (img.data.length - (img.data.indexOf(',') + 1)) * 0.75;
-            totalSizeBefore += originalSize;
-            
-            // 如果不压缩小组件图片，则跳过小组件类型
-            if (!compressWidget && widgetTypes.includes(img.type)) {
-                totalSizeAfter += originalSize;
-                skipCount++;
-                progressDetail.textContent = `跳过小组件图片 (${i + 1}/${allImages.length})`;
-                
-                // 更新进度
-                const progress = Math.round(((i + 1) / allImages.length) * 100);
-                progressBar.style.width = `${progress}%`;
-                progressText.textContent = `${progress}%`;
-                continue;
-            }
-            
-            try {
-                
-                // 压缩图片
-                progressDetail.textContent = `正在压缩 ${img.type} (${i + 1}/${allImages.length})`;
-                const compressedData = await compressImageBase64(img.data, quality);
-                
-                // 计算压缩后大小
-                const compressedSize = (compressedData.length - (compressedData.indexOf(',') + 1)) * 0.75;
-                
-                // 检查是否真的压缩了（如果返回的是原图，大小会一样）
-                if (compressedData === img.data) {
-                    // 没有压缩，跳过
-                    totalSizeAfter += originalSize;
-                    skipCount++;
-                    progressDetail.textContent = `跳过无法压缩的图片 ${img.type} (${i + 1}/${allImages.length})`;
-                } else {
-                    totalSizeAfter += compressedSize;
-                    
-                    // 更新数据库
-                    const transaction = db.transaction(['images'], 'readwrite');
-                    const store = transaction.objectStore('images');
-                    
-                    img.data = compressedData;
-                    img.timestamp = Date.now(); // 更新时间戳
-                    
-                    await new Promise((resolve, reject) => {
-                        const request = store.put(img);
-                        request.onsuccess = () => resolve();
-                        request.onerror = () => reject(request.error);
-                    });
-                    
-                    successCount++;
-                }
-            } catch (error) {
-                console.error(`压缩图片失败 (${img.type}):`, error);
-                // 压缩失败，保持原大小
-                totalSizeAfter += originalSize;
-                errorCount++;
-            }
-            
-            // 更新进度
-            const progress = Math.round(((i + 1) / allImages.length) * 100);
-            progressBar.style.width = `${progress}%`;
-            progressText.textContent = `${progress}%`;
-        }
-        
-        // 压缩完成
-        const savedSizeKB = ((totalSizeBefore - totalSizeAfter) / 1024).toFixed(2);
-        const savedPercentage = totalSizeBefore > 0 ? ((1 - totalSizeAfter / totalSizeBefore) * 100).toFixed(1) : 0;
-        
-        progressDetail.textContent = `压缩完成！成功: ${successCount}张，跳过: ${skipCount}张，失败: ${errorCount}张`;
-        
-        // 刷新统计信息
-        await updateDataStatistics();
-        await refreshStorageInfo();
-        
-        // 重置按钮
-        compressBtn.disabled = false;
-        compressBtn.style.opacity = '1';
-        compressBtn.textContent = '开始压缩图片';
-        
-        // 显示结果（使用自定义弹窗）
-        await iosAlert(
-            `成功: ${successCount}张\n跳过: ${skipCount}张\n失败: ${errorCount}张\n\n节省空间: ${savedSizeKB} KB (${savedPercentage}%)`,
-            '压缩完成！'
-        );
-        
-        // 隐藏进度条
-        progressDiv.style.display = 'none';
-        
-        // 重置压缩标志
-        isCompressing = false;
-        
-        console.log(`图片压缩完成: 成功${successCount}张, 跳过${skipCount}张, 失败${errorCount}张, 节省${savedSizeKB}KB`);
-        
-    } catch (error) {
-        console.error('压缩图片失败:', error);
-        
-        // 重置UI
-        const progressDiv = document.getElementById('compressionProgress');
-        const compressBtn = document.getElementById('compressBtn');
-        if (progressDiv) progressDiv.style.display = 'none';
-        if (compressBtn) {
-            compressBtn.disabled = false;
-            compressBtn.style.opacity = '1';
-            compressBtn.textContent = '开始压缩图片';
-        }
-        
-        // 重置压缩标志
-        isCompressing = false;
-        
-        // 显示错误（使用自定义弹窗）
-        await iosAlert('压缩失败：' + error.message, '错误');
-    }
-}
-
-// 打开外观设置界面
-async function openAppearanceSettings() {
-    document.getElementById('appearanceSettings').classList.add('active');
-    
-    // 加载保存的锁屏设置
-    const lockScreenEnabled = localStorage.getItem('lockScreenEnabled') === 'true';
-    const lockScreenToggle = document.getElementById('lockScreenToggle');
-    if (lockScreenToggle) {
-        lockScreenToggle.checked = lockScreenEnabled;
-    }
-    
-    // 显示/隐藏子选项（如果元素存在）
-    const lockScreenOptions = document.getElementById('lockScreenOptions');
-    if (lockScreenOptions) {
-        lockScreenOptions.style.display = lockScreenEnabled ? 'block' : 'none';
-    }
-    
-    // 加载自定义样式开关状态
-    const customStyleEnabled = localStorage.getItem('customStyleEnabled') === 'true';
-    const customStyleToggle = document.getElementById('customStyleToggle');
-    if (customStyleToggle) {
-        customStyleToggle.checked = customStyleEnabled;
-    }
-    
-    // 显示/隐藏自定义样式选项（如果元素存在）
-    const customStyleOptions = document.getElementById('customStyleOptions');
-    if (customStyleOptions) {
-        customStyleOptions.style.display = customStyleEnabled ? 'block' : 'none';
-    }
-    
-    // 加载滑动方式设置
-    const slideMode = localStorage.getItem('lockScreenSlideMode') || 'horizontal';
-    const horizontalToggle = document.getElementById('horizontalToggle');
-    const verticalToggle = document.getElementById('verticalToggle');
-    
-    if (horizontalToggle && verticalToggle) {
-        if (slideMode === 'horizontal') {
-            horizontalToggle.checked = true;
-            verticalToggle.checked = false;
-        } else {
-            horizontalToggle.checked = false;
-            verticalToggle.checked = true;
-        }
-    }
-    
-    // 加载密码设置
-    const passwordEnabled = localStorage.getItem('lockPasswordEnabled') === 'true';
-    const lockPasswordToggle = document.getElementById('lockPasswordToggle');
-    if (lockPasswordToggle) {
-        lockPasswordToggle.checked = passwordEnabled;
-    }
-    
-    const passwordOptions = document.getElementById('passwordOptions');
-    if (passwordOptions) {
-        passwordOptions.style.display = passwordEnabled ? 'block' : 'none';
-    }
-    
-    // 加载密码类型
-    const passwordType = localStorage.getItem('passwordType') || 'number';
-    switchPasswordType(passwordType);
-    
-    // 更新密码状态显示
-    updatePasswordStatus();
-    updateGestureStatus();
-    
-    // 加载壁纸设置
-    const wallpaperEnabled = localStorage.getItem('lockWallpaperEnabled') === 'true';
-    const lockWallpaperToggle = document.getElementById('lockWallpaperToggle');
-    if (lockWallpaperToggle) {
-        lockWallpaperToggle.checked = wallpaperEnabled;
-    }
-    
-    const wallpaperOptions = document.getElementById('wallpaperOptions');
-    if (wallpaperOptions) {
-        wallpaperOptions.style.display = wallpaperEnabled ? 'block' : 'none';
-    }
-    
-    // 加载壁纸预览
-    try {
-        const wallpaperData = await getImageFromDB('lockWallpaper');
-        if (wallpaperData) {
-            const preview = document.getElementById('wallpaperPreview');
-            const placeholder = document.getElementById('wallpaperPlaceholder');
-            if (preview && placeholder) {
-                preview.src = wallpaperData;
-                preview.style.display = 'block';
-                placeholder.style.display = 'none';
-                tempWallpaperData = wallpaperData;
-            }
-        }
-    } catch (error) {
-        console.error('加载壁纸预览失败:', error);
-    }
-    
-    // 更新壁纸状态显示
-    await updateWallpaperStatus();
-    
-    // 加载顶栏设置
-    const statusBarEnabled = localStorage.getItem('statusBarEnabled');
-    // 默认为true（开启状态）
-    const isStatusBarEnabled = statusBarEnabled === null ? true : statusBarEnabled === 'true';
-    const statusBarToggle = document.getElementById('statusBarToggle');
-    if (statusBarToggle) {
-        statusBarToggle.checked = isStatusBarEnabled;
-    }
-    
-    // 加载手机边框设置
-    const phoneBorderEnabled = localStorage.getItem('phoneBorderEnabled');
-    // 默认为false（关闭状态）
-    const isPhoneBorderEnabled = phoneBorderEnabled === 'true';
-    const phoneBorderToggle = document.getElementById('phoneBorderToggle');
-    if (phoneBorderToggle) {
-        phoneBorderToggle.checked = isPhoneBorderEnabled;
-    }
-    
-    // 显示/隐藏边框颜色选择区域
-    const borderColorSection = document.getElementById('borderColorSection');
-    if (borderColorSection) {
-        borderColorSection.style.display = isPhoneBorderEnabled ? 'block' : 'none';
-    }
-    
-    // 恢复边框颜色设置
-    const savedBorderColor = localStorage.getItem('phoneBorderColor') || '#ffffff';
-    const customColorPicker = document.getElementById('customBorderColor');
-    if (customColorPicker) {
-        customColorPicker.value = savedBorderColor;
-    }
-    
-    // 更新颜色选项的选中状态
-    document.querySelectorAll('.color-option').forEach(option => {
-        if (option.dataset.color === savedBorderColor) {
-            option.classList.add('selected');
-        }
-    });
-    
-    // 加载主屏幕壁纸设置
-    const mainWallpaperEnabled = localStorage.getItem('mainWallpaperEnabled');
-    const isMainWallpaperEnabled = mainWallpaperEnabled === 'true';
-    const mainWallpaperToggle = document.getElementById('mainWallpaperToggle');
-    if (mainWallpaperToggle) {
-        mainWallpaperToggle.checked = isMainWallpaperEnabled;
-    }
-    
-    const mainWallpaperOptions = document.getElementById('mainWallpaperOptions');
-    if (mainWallpaperOptions) {
-        mainWallpaperOptions.style.display = isMainWallpaperEnabled ? 'block' : 'none';
-    }
-    
-    // 加载主屏幕壁纸预览
-    try {
-        const mainWallpaperData = await getImageFromDB('mainWallpaper');
-        if (mainWallpaperData) {
-            const preview = document.getElementById('mainWallpaperPreview');
-            const placeholder = document.getElementById('mainWallpaperPlaceholder');
-            if (preview && placeholder) {
-                preview.src = mainWallpaperData;
-                preview.style.display = 'block';
-                placeholder.style.display = 'none';
-                tempMainWallpaperData = mainWallpaperData;
-            }
-        }
-    } catch (error) {
-        console.error('加载主屏幕壁纸预览失败:', error);
-    }
-    
-    // 更新主屏幕壁纸状态显示
-    await updateMainWallpaperStatus();
-    
-    // 渲染APP图标设置网格
-    await renderAppIconGrid();
-    
-    // 渲染APP名称设置网格
-    renderAppNameGrid();
-    
-    // 加载聊天列表背景预览
-    try {
-        const chatListBgData = await getImageFromDB('chatListBg');
-        if (chatListBgData) {
-            const preview = document.getElementById('chatListBgPreview');
-            if (preview) {
-                preview.style.backgroundImage = `url(${chatListBgData})`;
-                preview.textContent = '';
-                tempChatListBgData = chatListBgData;
-            }
-        }
-    } catch (error) {
-        console.error('加载聊天列表背景预览失败:', error);
-    }
-    
-    // 加载聊天背景预览
-    try {
-        const chatDetailBgData = await getImageFromDB('chatDetailBg');
-        if (chatDetailBgData) {
-            const preview = document.getElementById('chatDetailBgPreview');
-            if (preview) {
-                preview.style.backgroundImage = `url(${chatDetailBgData})`;
-                preview.textContent = '';
-                tempChatDetailBgData = chatDetailBgData;
-            }
-        }
-    } catch (error) {
-        console.error('加载聊天背景预览失败:', error);
-    }
-    
-    // 加载消息通知弹窗设置
-    const notifStackEnabled = localStorage.getItem('notifStackEnabled') === 'true';
-    const notifStackToggle = document.getElementById('notifStackToggle');
-    if (notifStackToggle) notifStackToggle.checked = notifStackEnabled;
-    
-    const notifOnlyOtherEnabled = localStorage.getItem('notifOnlyOtherEnabled') !== 'false'; // 默认true
-    const notifOnlyOtherToggle = document.getElementById('notifOnlyOtherToggle');
-    if (notifOnlyOtherToggle) notifOnlyOtherToggle.checked = notifOnlyOtherEnabled;
-
-    // 渲染主屏幕方案列表
-    renderLayoutSchemes();
-
-    // 渲染UI风格列表
-    renderUiStyles();
-    
-    // 初始化触感反馈设置
-    if (typeof initHapticFeedbackSettings === 'function') {
-        initHapticFeedbackSettings();
-    }
-    
-    // 初始化发送动画设置
-    if (typeof initSendAnimationSettings === 'function') {
-        initSendAnimationSettings();
-    }
-    
-    // 初始化挂坠设置
-    if (typeof initPendantSettings === 'function') {
-        initPendantSettings();
-    }
-}
-
-// 关闭外观设置界面
-function closeAppearanceSettings() {
-    document.getElementById('appearanceSettings').classList.remove('active');
-}
-
-// 切换外观设置标签页
-function switchAppearanceTab(tabName) {
-    // 移除所有标签的active类
-    const tabs = document.querySelectorAll('.appearance-tab');
-    tabs.forEach(tab => tab.classList.remove('active'));
-    
-    // 移除所有内容的active类
-    const contents = document.querySelectorAll('.appearance-tab-content');
-    contents.forEach(content => content.classList.remove('active'));
-    
-    // 激活当前标签
-    const activeTab = Array.from(tabs).find(tab => 
-        tab.textContent.includes(getTabLabel(tabName))
-    );
-    if (activeTab) {
-        activeTab.classList.add('active');
-    }
-    
-    // 显示对应内容
-    const tabContent = document.getElementById(tabName + 'Tab');
-    if (tabContent) {
-        tabContent.classList.add('active');
-    }
-}
-
-// 获取标签显示文本
-function getTabLabel(tabName) {
-    const labels = {
-        'lockscreen': '锁屏',
-        'wallpaper': '壁纸',
-        'interface': '界面',
-        'pendant': '挂坠',
-        'border': '边框'
-    };
-    return labels[tabName] || tabName;
-}
-
-// ========== 主屏幕方案功能 ==========
-
-// 内置方案定义
-const BUILTIN_SCHEMES = [
-    { id: 'scheme_1', name: '方案一', available: true },
-    { id: 'scheme_2', name: '方案二', available: true },
-    { id: 'scheme_3', name: '方案三', available: false },
-    { id: 'scheme_4', name: '方案四', available: false },
-    { id: 'scheme_5', name: '方案五', available: false }
-];
-
-// 获取当前激活的方案ID
-function getActiveSchemeId() {
-    return localStorage.getItem('activeLayoutScheme') || 'scheme_1';
-}
-
-// 渲染方案选择列表
-function renderLayoutSchemes() {
-    const container = document.getElementById('layoutSchemeList');
-    if (!container) return;
-
-    const activeId = getActiveSchemeId();
-    let html = '';
-
-    BUILTIN_SCHEMES.forEach(scheme => {
-        const isActive = scheme.id === activeId;
-        if (scheme.available) {
-            html += `
-                <div class="layout-scheme-card ${isActive ? 'active' : ''}" onclick="applyLayoutScheme('${scheme.id}')">
-                    ${isActive ? '<div class="scheme-badge">✓</div>' : ''}
-                    <div class="scheme-preview">
-                        <div class="scheme-preview-bar"></div>
-                        <div class="scheme-preview-block"></div>
-                        <div class="scheme-preview-block" style="height:60%;"></div>
-                        <div class="scheme-preview-bar"></div>
-                    </div>
-                    <div class="scheme-name">${scheme.name}</div>
-                </div>`;
-        } else {
-            html += `
-                <div class="layout-scheme-card empty">
-                    <div class="scheme-preview" style="opacity: 0.4;">
-                        <div class="scheme-preview-bar"></div>
-                        <div class="scheme-preview-block"></div>
-                        <div class="scheme-preview-block" style="height:60%;"></div>
-                        <div class="scheme-preview-bar"></div>
-                    </div>
-                    <div class="scheme-name" style="color: #aaa;">${scheme.name}</div>
-                    <div style="font-size: 9px; color: #bbb;">敬请期待</div>
-                </div>`;
-        }
-    });
-
-    container.innerHTML = html;
-}
-
-// 应用方案
-async function applyLayoutScheme(schemeId) {
-    const scheme = BUILTIN_SCHEMES.find(s => s.id === schemeId);
-    if (!scheme || !scheme.available) return;
-
-    const activeId = getActiveSchemeId();
-    if (schemeId === activeId) return;
-
-    localStorage.setItem('activeLayoutScheme', schemeId);
-    renderLayoutSchemes();
-    renderActiveScheme();
-}
-
-// 方案一原始HTML（缓存）
-let _scheme1Html = null;
-
-// 渲染当前激活的方案到 widgetArea
-async function renderActiveScheme() {
-    const schemeId = getActiveSchemeId();
-    const widgetArea = document.getElementById('widgetArea');
-    if (!widgetArea) return;
-
-    if (schemeId === 'scheme_1') {
-        if (_scheme1Html) {
-            widgetArea.innerHTML = _scheme1Html;
-            // 重新加载方案一的数据
-            await reloadScheme1Data();
-        }
-    } else if (schemeId === 'scheme_2') {
-        // 先缓存方案一的HTML（如果还没缓存）
-        if (!_scheme1Html) {
-            _scheme1Html = widgetArea.innerHTML;
-        }
-        // 确保函数已定义
-        if (typeof getScheme2Html === 'function') {
-            widgetArea.innerHTML = getScheme2Html();
-            await loadScheme2Data();
-        } else {
-            console.error('getScheme2Html函数未定义，请确保script2.js已正确加载');
-        }
-    }
-}
-
-// 重新加载方案一的数据到DOM
-async function reloadScheme1Data() {
-    try {
-        const savedName = await storageDB.getItem('widgetName');
-        if (savedName) document.getElementById('widgetName').textContent = savedName;
-        
-        const savedId = await storageDB.getItem('widgetId');
-        if (savedId) document.getElementById('widgetId').textContent = '@' + savedId;
-        
-        const savedContent = await storageDB.getItem('widgetContent');
-        if (savedContent) document.getElementById('widgetContent').textContent = savedContent;
-        
-        const savedAvatar = await storageDB.getItem('widgetAvatar');
-        if (savedAvatar) {
-            const img = document.getElementById('avatarImage');
-            const placeholder = document.getElementById('avatarPlaceholder');
-            if (img) { img.src = savedAvatar; img.style.display = 'block'; }
-            if (placeholder) placeholder.style.display = 'none';
-        }
-        
-        const savedLoveDate = await storageDB.getItem('notebookLoveDate');
-        if (savedLoveDate) {
-            const el = document.getElementById('notebookLoveDate');
-            if (el) el.textContent = savedLoveDate;
-        }
-        
-        const savedNbText = await storageDB.getItem('notebookText');
-        if (savedNbText) {
-            const el = document.getElementById('notebookText');
-            if (el) el.textContent = savedNbText;
-        }
-        
-        const savedNbImage = await storageDB.getItem('notebookImage');
-        if (savedNbImage) {
-            const img = document.getElementById('notebookImage');
-            const placeholder = document.getElementById('notebookImagePlaceholder');
-            if (img) { img.src = savedNbImage; img.style.display = 'block'; }
-            if (placeholder) placeholder.style.display = 'none';
-        }
-        
-        const savedMusicAvatar = await storageDB.getItem('musicAvatar');
-        if (savedMusicAvatar) {
-            const img = document.getElementById('musicAvatarImage');
-            const placeholder = document.getElementById('musicAvatarPlaceholder');
-            if (img) { img.src = savedMusicAvatar; img.style.display = 'block'; }
-            if (placeholder) placeholder.style.display = 'none';
-        }
-        
-        const savedMusicUsername = await storageDB.getItem('musicUsername');
-        if (savedMusicUsername) {
-            const el = document.getElementById('musicUsername');
-            if (el) el.textContent = savedMusicUsername;
-        }
-        
-        const savedMusicBirthday = await storageDB.getItem('musicBirthday');
-        if (savedMusicBirthday) {
-            const el = document.getElementById('musicBirthday');
-            if (el) el.textContent = savedMusicBirthday;
-        }
-        
-        const savedMusicCover = await storageDB.getItem('musicCover');
-        if (savedMusicCover) {
-            const img = document.getElementById('musicCoverImage');
-            const placeholder = document.getElementById('musicCoverPlaceholder');
-            if (img) { img.src = savedMusicCover; img.style.display = 'block'; }
-            if (placeholder) placeholder.style.display = 'none';
-        }
-        
-        // 重新加载APP图标
-        await loadAppIcons();
-        loadAppNames();
-        
-        // 更新日期时间
-        if (typeof updateNotebookDateTime === 'function') updateNotebookDateTime();
-        if (typeof updateMusicDate === 'function') updateMusicDate();
-        if (typeof updateWidgetDate === 'function') updateWidgetDate();
-    } catch (e) {
-        console.error('重新加载方案一数据失败:', e);
-    }
-}
-
-// ========== 方案二：个人资料卡片 ==========
-// 方案二的HTML、数据加载和编辑弹窗函数在 script2.js 中
-
-// 加载APP图标（方案一和方案二共用，由原有loadAppIcons处理）
-
-// ========== UI风格功能 ==========
-
-const BUILTIN_UI_STYLES = [
-    { id: 'ui_style_1', name: '风格一', available: true },
-    { id: 'ui_style_2', name: '风格二', available: false },
-    { id: 'ui_style_3', name: '风格三', available: false }
-];
-
-function getActiveUiStyle() {
-    return localStorage.getItem('activeUiStyle') || 'ui_style_1';
-}
-
-function renderUiStyles() {
-    const container = document.getElementById('uiStyleList');
-    if (!container) return;
-
-    const activeId = getActiveUiStyle();
-    let html = '';
-
-    BUILTIN_UI_STYLES.forEach(style => {
-        const isActive = style.id === activeId;
-        if (style.available) {
-            html += `
-                <div class="layout-scheme-card ${isActive ? 'active' : ''}" onclick="applyUiStyle('${style.id}')">
-                    ${isActive ? '<div class="scheme-badge">✓</div>' : ''}
-                    <div class="scheme-preview">
-                        <div class="scheme-preview-bar"></div>
-                        <div class="scheme-preview-block"></div>
-                        <div class="scheme-preview-block" style="height:60%;"></div>
-                        <div class="scheme-preview-bar"></div>
-                    </div>
-                    <div class="scheme-name">${style.name}</div>
-                </div>`;
-        } else {
-            html += `
-                <div class="layout-scheme-card empty">
-                    <div class="scheme-preview" style="opacity: 0.4;">
-                        <div class="scheme-preview-bar"></div>
-                        <div class="scheme-preview-block"></div>
-                        <div class="scheme-preview-block" style="height:60%;"></div>
-                        <div class="scheme-preview-bar"></div>
-                    </div>
-                    <div class="scheme-name" style="color: #aaa;">${style.name}</div>
-                    <div style="font-size: 9px; color: #bbb;">敬请期待</div>
-                </div>`;
-        }
-    });
-
-    container.innerHTML = html;
-}
-
-function applyUiStyle(styleId) {
-    const style = BUILTIN_UI_STYLES.find(s => s.id === styleId);
-    if (!style || !style.available) return;
-
-    const activeId = getActiveUiStyle();
-    if (styleId === activeId) return;
-
-    localStorage.setItem('activeUiStyle', styleId);
-    renderUiStyles();
-}
-
-// ========== APP图标自定义功能 ==========
-
-const APP_ICON_LIST = [
-    { id: 'chat', label: '聊天' },
-    { id: 'worldbook', label: '世界书' },
-    { id: 'wallet', label: '钱包' },
-    { id: 'couple', label: '情侣空间' },
-    { id: 'api', label: 'API设置' },
-    { id: 'appearance', label: '外观设置' },
-    { id: 'data', label: '数据管理' },
-    { id: 'font', label: '字体设置' }
-];
-
-let currentEditingIconId = null;
-let tempAppIconData = null;
-
-// 渲染图标设置网格
-async function renderAppIconGrid() {
-    const grid = document.getElementById('appIconGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
-
-    for (const item of APP_ICON_LIST) {
-        const el = document.getElementById('appIcon-' + item.id);
-        const saved = await getImageFromDB('appIcon-' + item.id);
-        const defaultText = el ? el.getAttribute('data-default-text') : '';
-
-        const cell = document.createElement('div');
-        cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;';
-        cell.onclick = () => openAppIconModal(item.id, item.label);
-
-        const box = document.createElement('div');
-        box.style.cssText = 'width:50px;height:50px;border-radius:12px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1.5px solid #e0e0e0;font-size:14px;color:#333;';
-
-        if (saved) {
-            const img = document.createElement('img');
-            img.src = saved;
-            img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-            box.appendChild(img);
-        } else if (APP_ICON_DEFAULTS[item.id]) {
-            const img = document.createElement('img');
-            img.src = APP_ICON_DEFAULTS[item.id];
-            img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-            box.appendChild(img);
-        } else {
-            box.textContent = defaultText;
-        }
-
-        const name = document.createElement('div');
-        name.style.cssText = 'font-size:10px;color:#666;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;';
-        name.textContent = item.label;
-
-        cell.appendChild(box);
-        cell.appendChild(name);
-        grid.appendChild(cell);
-    }
-}
-
-// 打开图标编辑弹窗
-async function openAppIconModal(iconId, label) {
-    currentEditingIconId = iconId;
-    tempAppIconData = null;
-
-    document.getElementById('appIconModalLabel').textContent = label;
-    document.getElementById('appIconUrlInput').value = '';
-
-    const saved = await getImageFromDB('appIcon-' + iconId);
-    const previewImg = document.getElementById('appIconPreviewImg');
-    const previewText = document.getElementById('appIconPreviewText');
-    const el = document.getElementById('appIcon-' + iconId);
-    const defaultText = el ? el.getAttribute('data-default-text') : '';
-
-    if (saved) {
-        previewImg.src = saved;
-        previewImg.style.display = 'block';
-        previewText.style.display = 'none';
-        tempAppIconData = saved;
-    } else if (APP_ICON_DEFAULTS[iconId]) {
-        previewImg.src = APP_ICON_DEFAULTS[iconId];
-        previewImg.style.display = 'block';
-        previewText.style.display = 'none';
-    } else {
-        previewImg.style.display = 'none';
-        previewText.style.display = '';
-        previewText.textContent = defaultText;
-    }
-
-    document.getElementById('appIconModal').classList.add('active');
-}
-
-function closeAppIconModal() {
-    document.getElementById('appIconModal').classList.remove('active');
-    currentEditingIconId = null;
-    tempAppIconData = null;
-    document.getElementById('appIconUrlInput').value = '';
-}
-
-// 本地文件上传
-async function handleAppIconFileUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-        const compressed = await compressImage(file, {
-            maxWidth: 256,
-            maxHeight: 256,
-            quality: 0.85,
-            maxSizeKB: 100
-        });
-        tempAppIconData = compressed;
-        document.getElementById('appIconPreviewImg').src = compressed;
-        document.getElementById('appIconPreviewImg').style.display = 'block';
-        document.getElementById('appIconPreviewText').style.display = 'none';
-    } catch (err) {
-        console.error('图标上传失败:', err);
-        alert('图片处理失败，请重试');
-    }
-    event.target.value = '';
-}
-
-// URL上传
-function handleAppIconUrlUpload() {
-    const url = document.getElementById('appIconUrlInput').value.trim();
-    if (!url) { alert('请输入图片URL'); return; }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function () {
-        tempAppIconData = url;
-        document.getElementById('appIconPreviewImg').src = url;
-        document.getElementById('appIconPreviewImg').style.display = 'block';
-        document.getElementById('appIconPreviewText').style.display = 'none';
-        alert('图片加载成功！');
-    };
-    img.onerror = function () {
-        alert('图片加载失败，请检查URL');
-    };
-    img.src = url;
-}
-
-// 重置图标
-async function resetAppIcon() {
-    if (!currentEditingIconId) return;
-    const ok = await iosConfirm('确定要重置此图标为默认吗？', '重置图标');
-    if (!ok) return;
-
-    try {
-        await deleteImageFromDB('appIcon-' + currentEditingIconId);
-        applyAppIcon(currentEditingIconId, null);
-        // 更新预览
-        const el = document.getElementById('appIcon-' + currentEditingIconId);
-        const defaultText = el ? el.getAttribute('data-default-text') : '';
-        document.getElementById('appIconPreviewImg').style.display = 'none';
-        document.getElementById('appIconPreviewText').style.display = '';
-        document.getElementById('appIconPreviewText').textContent = defaultText;
-        tempAppIconData = null;
-        await renderAppIconGrid();
-        alert('已重置为默认图标');
-    } catch (err) {
-        console.error('重置图标失败:', err);
-        alert('重置失败，请重试');
-    }
-}
-
-// 保存图标
-async function saveAppIcon() {
-    if (!currentEditingIconId || !tempAppIconData) {
-        alert('请先选择或上传图片');
-        return;
-    }
-    try {
-        await saveImageToDB('appIcon-' + currentEditingIconId, tempAppIconData, 'appIcon');
-        applyAppIcon(currentEditingIconId, tempAppIconData);
-        await renderAppIconGrid();
-        alert('图标保存成功！');
-        closeAppIconModal();
-    } catch (err) {
-        console.error('保存图标失败:', err);
-        alert('保存失败，请重试');
-    }
-}
-
-// 将图标应用到主界面
-function applyAppIcon(iconId, imageData) {
-    const el = document.getElementById('appIcon-' + iconId);
-    if (!el) return;
-    const defaultText = el.getAttribute('data-default-text') || '';
-
-    if (imageData) {
-        el.textContent = '';
-        el.style.backgroundImage = "url('" + imageData + "')";
-        el.style.backgroundSize = 'cover';
-        el.style.backgroundPosition = 'center';
-        el.style.color = 'transparent';
-    } else {
-        el.style.backgroundImage = '';
-        el.style.backgroundSize = '';
-        el.style.backgroundPosition = '';
-        el.style.color = '';
-        el.textContent = defaultText;
-    }
-}
-
-// 重置所有图标
-async function resetAllAppIcons() {
-    const ok = await iosConfirm('确定要将所有APP图标重置为默认吗？', '重置所有图标');
-    if (!ok) return;
-
-    try {
-        for (const item of APP_ICON_LIST) {
-            await deleteImageFromDB('appIcon-' + item.id);
-            applyAppIcon(item.id, null);
-        }
-        await renderAppIconGrid();
-        alert('所有图标已重置为默认');
-    } catch (err) {
-        console.error('重置所有图标失败:', err);
-        alert('重置失败，请重试');
-    }
-}
-
-// ========== APP名称自定义功能 ==========
-
-let currentEditingNameId = null;
-
-// 渲染名称设置网格
-function renderAppNameGrid() {
-    const grid = document.getElementById('appNameGrid');
-    if (!grid) return;
-    grid.innerHTML = '';
-
-    for (const item of APP_ICON_LIST) {
-        const el = document.getElementById('appName-' + item.id);
-        const currentName = el ? el.textContent : item.label;
-
-        const cell = document.createElement('div');
-        cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;';
-        cell.onclick = () => openAppNameModal(item.id, item.label);
-
-        const box = document.createElement('div');
-        box.style.cssText = 'width:60px;height:32px;border-radius:8px;background:#f5f5f5;display:flex;align-items:center;justify-content:center;overflow:hidden;border:1.5px solid #e0e0e0;padding:0 4px;';
-
-        const text = document.createElement('div');
-        text.style.cssText = 'font-size:10px;color:#333;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56px;';
-        text.textContent = currentName;
-        box.appendChild(text);
-
-        const label = document.createElement('div');
-        label.style.cssText = 'font-size:9px;color:#999;text-align:center;';
-        label.textContent = '点击修改';
-
-        cell.appendChild(box);
-        cell.appendChild(label);
-        grid.appendChild(cell);
-    }
-}
-
-// 打开名称编辑弹窗
-function openAppNameModal(iconId, defaultLabel) {
-    currentEditingNameId = iconId;
-    const el = document.getElementById('appName-' + iconId);
-    const currentName = el ? el.textContent : defaultLabel;
-
-    document.getElementById('appNameModalLabel').textContent = defaultLabel;
-    document.getElementById('appNameInput').value = currentName;
-    document.getElementById('appNamePreview').textContent = currentName;
-    document.getElementById('appNameModal').classList.add('active');
-}
-
-function closeAppNameModal() {
-    document.getElementById('appNameModal').classList.remove('active');
-    currentEditingNameId = null;
-}
-
-// 保存单个名称
-function saveAppName() {
-    if (!currentEditingNameId) return;
-    const newName = document.getElementById('appNameInput').value.trim();
-    if (!newName) { alert('名称不能为空'); return; }
-
-    const el = document.getElementById('appName-' + currentEditingNameId);
-    if (el) el.textContent = newName;
-
-    // 持久化
-    const saved = JSON.parse(localStorage.getItem('appCustomNames') || '{}');
-    saved[currentEditingNameId] = newName;
-    localStorage.setItem('appCustomNames', JSON.stringify(saved));
-
-    renderAppNameGrid();
-    alert('名称保存成功！');
-    closeAppNameModal();
-}
-
-// 重置单个名称
-async function resetSingleAppName() {
-    if (!currentEditingNameId) return;
-    const ok = await iosConfirm('确定要重置此名称为默认吗？', '重置名称');
-    if (!ok) return;
-
-    const el = document.getElementById('appName-' + currentEditingNameId);
-    const defaultName = el ? el.getAttribute('data-default-name') : '';
-    if (el) el.textContent = defaultName;
-
-    const saved = JSON.parse(localStorage.getItem('appCustomNames') || '{}');
-    delete saved[currentEditingNameId];
-    localStorage.setItem('appCustomNames', JSON.stringify(saved));
-
-    document.getElementById('appNameInput').value = defaultName;
-    document.getElementById('appNamePreview').textContent = defaultName;
-    renderAppNameGrid();
-    alert('已重置为默认名称');
-}
-
-// 重置所有名称
-async function resetAllAppNames() {
-    const ok = await iosConfirm('确定要将所有APP名称重置为默认吗？', '重置所有名称');
-    if (!ok) return;
-
-    localStorage.removeItem('appCustomNames');
-    for (const item of APP_ICON_LIST) {
-        const el = document.getElementById('appName-' + item.id);
-        if (el) el.textContent = el.getAttribute('data-default-name') || item.label;
-    }
-    renderAppNameGrid();
-    alert('所有名称已重置为默认');
-}
-
-// 加载所有自定义名称
-function loadAppNames() {
-    const saved = JSON.parse(localStorage.getItem('appCustomNames') || '{}');
-    for (const item of APP_ICON_LIST) {
-        if (saved[item.id]) {
-            const el = document.getElementById('appName-' + item.id);
-            if (el) el.textContent = saved[item.id];
-        }
-    }
-}
-
-// APP图标默认图片映射（未自定义时使用的默认图片）
-const APP_ICON_DEFAULTS = {
-    'couple': 'https://i.postimg.cc/6QLvsPTm/png-(1).png',
-    'worldbook': 'https://i.postimg.cc/hPc46GT5/png-(7).png',
-    'wallet': 'https://i.postimg.cc/8z3Spkfj/png-(28).png',
-    'chat': 'https://i.postimg.cc/RZ8BSCJ3/png-(52).png',
-    'api': 'https://i.postimg.cc/bYC8CRYJ/png-(10).png',
-    'appearance': 'https://i.postimg.cc/zDt5tkDH/png-(11).png',
-    'data': 'https://i.postimg.cc/fW2Z2vW3/png-(24).png',
-    'font': 'https://i.postimg.cc/G37r7j38/png-(50).png'
-};
-
-// 加载所有自定义图标
-async function loadAppIcons() {
-    for (const item of APP_ICON_LIST) {
-        try {
-            const saved = await getImageFromDB('appIcon-' + item.id);
-            if (saved) {
-                applyAppIcon(item.id, saved);
-            } else if (APP_ICON_DEFAULTS[item.id]) {
-                applyAppIcon(item.id, APP_ICON_DEFAULTS[item.id]);
-            }
-        } catch (err) {
-            console.error('加载图标失败:', item.id, err);
-        }
-    }
-}
 
 // ========== 字体设置功能 ==========
 
@@ -6048,6 +3400,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         // 加载聊天角色
         await loadChatCharacters();
         renderChatList();
+        
+        // 初始化角色后台活动系统
+        if (typeof initAllBgActivities === 'function') {
+            initAllBgActivities();
+            console.log('角色后台活动系统已初始化');
+        }
+        
+        // 初始化表情包匹配功能
+        if (typeof initStickerMatch === 'function') {
+            initStickerMatch();
+            console.log('智能表情包匹配已初始化');
+        }
         
         // 缓存方案一HTML并渲染当前方案
         const widgetArea = document.getElementById('widgetArea');
@@ -8336,886 +5700,6 @@ if (audioPlayer) {
 }
 
 // 更新API描述
-function updateApiDescription() {
-    const apiSelect = document.getElementById('musicApiSelect');
-    const desc = document.getElementById('apiDescription');
-    
-    const descriptions = {
-        'meting1': '实测可用 - 支持网易云、QQ、酷狗、酷我',
-        'meting2': '实测可用 - 稳定快速，多平台聚合',
-        'meting3': '实测可用 - 支持网易云和QQ音乐',
-        'aa1': '聚合多个音乐平台，一次搜索全部结果',
-        'nanyi': '全平台聚合API，支持网易云、QQ、酷狗等'
-    };
-    
-    desc.textContent = descriptions[apiSelect.value] || '';
-}
-
-// 智能提取歌手信息的辅助函数
-function extractArtistInfo(song) {
-    // 尝试从多个可能的字段中提取歌手信息
-    let artist = null;
-    
-    // 1. 处理数组格式的歌手信息（如网易云的 ar 字段）
-    if (song.ar && Array.isArray(song.ar) && song.ar.length > 0) {
-        artist = song.ar.map(a => a.name).filter(Boolean).join(', ');
-    }
-    // 2. 处理 artists 数组
-    else if (song.artists && Array.isArray(song.artists) && song.artists.length > 0) {
-        artist = song.artists.map(a => a.name || a).filter(Boolean).join(', ');
-    }
-    // 3. 处理 artist 数组格式
-    else if (Array.isArray(song.artist) && song.artist.length > 0) {
-        artist = song.artist.map(a => (typeof a === 'object' ? a.name : a)).filter(Boolean).join(', ');
-    }
-    // 4. 处理字符串格式的各种字段
-    else if (song.singer) {
-        artist = song.singer;
-    }
-    else if (song.artist) {
-        artist = song.artist;
-    }
-    else if (song.artistName) {
-        artist = song.artistName;
-    }
-    else if (song.author) {
-        artist = song.author;
-    }
-    else if (song.auther) { // 注意：有些API拼写错误
-        artist = song.auther;
-    }
-    else if (song.singerName) {
-        artist = song.singerName;
-    }
-    
-    // 清理和验证结果
-    if (artist) {
-        artist = String(artist).trim();
-        // 过滤掉无效值
-        if (artist === '' || artist === 'null' || artist === 'undefined' || artist === 'None') {
-            artist = null;
-        }
-    }
-    
-    // 返回结果，如果没有找到则返回"未知歌手"
-    return artist || '未知歌手';
-}
-
-// 智能提取专辑信息的辅助函数
-function extractAlbumInfo(song) {
-    // 尝试从多个可能的字段中提取专辑信息
-    let album = null;
-    
-    // 1. 处理对象格式的专辑信息（如网易云的 al 字段）
-    if (song.al && typeof song.al === 'object' && song.al.name) {
-        album = song.al.name;
-    }
-    // 2. 处理 album 对象格式
-    else if (song.album && typeof song.album === 'object' && song.album.name) {
-        album = song.album.name;
-    }
-    // 3. 处理字符串格式的各种字段
-    else if (typeof song.album === 'string') {
-        album = song.album;
-    }
-    else if (song.albumName) {
-        album = song.albumName;
-    }
-    else if (song.albumTitle) {
-        album = song.albumTitle;
-    }
-    else if (song.disc) {
-        album = song.disc;
-    }
-    else if (song.albumname) {
-        album = song.albumname;
-    }
-    
-    // 清理和验证结果
-    if (album) {
-        album = String(album).trim();
-        // 过滤掉无效值
-        if (album === '' || album === 'null' || album === 'undefined' || album === 'None' || album === '未知' || album === 'unknown') {
-            album = null;
-        }
-    }
-    
-    // 返回结果，如果没有找到则返回"未知专辑"
-    return album || '未知专辑';
-}
-
-// 搜索音乐（聚合多平台）
-async function searchMusic() {
-    const searchInput = document.getElementById('musicSearchInput').value.trim();
-    const apiSource = document.getElementById('musicApiSelect').value;
-    
-    if (!searchInput) {
-        alert('请输入搜索关键词！');
-        return;
-    }
-
-    // 显示加载提示
-    document.getElementById('musicSearchLoading').style.display = 'block';
-    document.getElementById('musicSearchResults').style.display = 'none';
-
-    try {
-        let results = [];
-        
-        if (apiSource === 'meting1') {
-            results = await searchWithMetingAPINew(searchInput);
-        } else if (apiSource === 'meting2') {
-            results = await searchWithMetingAPINew2(searchInput);
-        } else if (apiSource === 'meting3') {
-            results = await searchWithVkeysAPI(searchInput);
-        } else if (apiSource === 'aa1') {
-            results = await searchWithAA1API(searchInput);
-        } else if (apiSource === 'nanyi') {
-            results = await searchWithNanYiAPI(searchInput);
-        }
-
-        if (results.length > 0) {
-            displayMusicResults(results);
-        } else {
-            document.getElementById('musicSearchLoading').style.display = 'none';
-            alert('没有找到相关音乐，请尝试其他关键词或切换API！');
-        }
-    } catch (error) {
-        console.error('搜索音乐失败:', error);
-        document.getElementById('musicSearchLoading').style.display = 'none';
-        alert('搜索失败：' + error.message + '\n\n建议：\n1. 尝试切换其他API服务\n2. 检查网络连接\n3. 稍后重试');
-    }
-}
-
-// 新版Meting API 1 (i-meto.com) - 实测可用
-async function searchWithMetingAPINew(keyword) {
-    const baseUrl = 'https://api.i-meto.com/meting/api';
-    return await searchWithMetingCore(baseUrl, keyword);
-}
-
-// 新版Meting API 2 (qjqq.cn) - 实测可用
-async function searchWithMetingAPINew2(keyword) {
-    const baseUrl = 'https://meting.qjqq.cn/api.php';
-    return await searchWithMetingCore(baseUrl, keyword);
-}
-
-// Meting核心搜索函数
-async function searchWithMetingCore(baseUrl, keyword) {
-    try {
-        const platforms = ['netease', 'tencent', 'kugou', 'kuwo'];
-        const allResults = [];
-        
-        for (const platform of platforms) {
-            try {
-                const searchTerm = keyword.replace(/\s/g, '');
-                const searchUrl = `${baseUrl}?server=${platform}&type=search&id=${encodeURIComponent(searchTerm)}`;
-                
-                console.log(`🎵 搜索${platform}:`, searchUrl);
-                const response = await fetch(searchUrl);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    if (Array.isArray(data) && data.length > 0) {
-                        console.log(`${platform} 返回 ${data.length} 条结果`);
-                        
-                        // 处理前5条结果
-                        for (const song of data.slice(0, 5)) {
-                            // Meting API直接在搜索结果中返回URL
-                            if (song.url) {
-                                const platformNames = {
-                                    'netease': '网易云',
-                                    'tencent': 'QQ音乐',
-                                    'kugou': '酷狗',
-                                    'kuwo': '酷我'
-                                };
-                                
-                                allResults.push({
-                                    id: `${platform}_${song.id || Math.random()}`,
-                                    name: song.name || song.title || '未知歌曲',
-                                    artist: extractArtistInfo(song),
-                                    album: extractAlbumInfo(song),
-                                    cover: song.pic || song.cover,
-                                    coverSmall: song.pic || song.cover,
-                                    playUrl: song.url,
-                                    source: platform,
-                                    platform: platformNames[platform] || platform
-                                });
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.log(`${platform}搜索失败:`, err);
-            }
-        }
-        
-        return allResults;
-    } catch (error) {
-        console.error('Meting API搜索失败:', error);
-        throw error;
-    }
-}
-
-// Vkeys API - 自定义实现
-async function searchWithVkeysAPI(keyword) {
-    const baseUrl = 'https://api.vkeys.cn/v2/music';
-    return await searchWithVkeysCore(baseUrl, keyword);
-}
-
-// Vkeys核心搜索函数（参考METING风格编写）
-async function searchWithVkeysCore(baseUrl, keyword) {
-    try {
-        const platforms = [
-            { name: 'netease', label: '网易云' },
-            { name: 'tencent', label: 'QQ音乐' }
-        ];
-        const allResults = [];
-        
-        for (const platform of platforms) {
-            try {
-                const searchTerm = keyword.replace(/\s/g, '');
-                const searchUrl = `${baseUrl}/${platform.name}?word=${encodeURIComponent(searchTerm)}`;
-                
-                console.log(`🎵 搜索${platform.label}:`, searchUrl);
-                const response = await fetch(searchUrl);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    if (data.code === 200 && Array.isArray(data.data) && data.data.length > 0) {
-                        console.log(`${platform.label} 返回 ${data.data.length} 条结果`);
-                        
-                        // 处理前6条结果
-                        for (const song of data.data.slice(0, 6)) {
-                            try {
-                                // 获取播放链接（Vkeys API需要额外请求获取URL）
-                                const urlResponse = await fetch(`${baseUrl}/${platform.name}?id=${song.id}`);
-                                const urlData = await urlResponse.json();
-                                
-                                if (urlData.code === 200 && urlData.data?.url) {
-                                    allResults.push({
-                                        id: `${platform.name}_${song.id}`,
-                                        name: song.name || song.song || song.title || '未知歌曲',
-                                        artist: extractArtistInfo(song),
-                                        album: extractAlbumInfo(song),
-                                        cover: song.al?.picUrl || song.pic || song.cover || '',
-                                        coverSmall: song.al?.picUrl || song.pic || song.cover || '',
-                                        playUrl: urlData.data.url,
-                                        source: platform.name,
-                                        platform: platform.label
-                                    });
-                                }
-                            } catch (urlErr) {
-                                console.log(`${platform.label} 获取播放链接失败:`, urlErr);
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.log(`${platform.label} 搜索失败:`, err);
-            }
-        }
-        
-        return allResults;
-    } catch (error) {
-        console.error('Vkeys API 搜索失败:', error);
-        return [];
-    }
-}
-
-// AA1 聚合API
-async function searchWithAA1API(keyword) {
-    try {
-        const url = `https://api.aa1.cn/api/api-wenan-wangyiyunyinyue/index.php?msg=${encodeURIComponent(keyword)}&n=20`;
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-            throw new Error('AA1 API请求失败');
-        }
-        
-        const data = await response.json();
-        const results = [];
-        
-        if (data && Array.isArray(data)) {
-            for (const song of data) {
-                if (song.url) {
-                    results.push({
-                        id: `aa1_${song.id || Math.random()}`,
-                        name: song.name || song.title,
-                        artist: extractArtistInfo(song),
-                        album: extractAlbumInfo(song),
-                        cover: song.pic || song.cover,
-                        coverSmall: song.pic || song.cover,
-                        playUrl: song.url,
-                        source: 'netease',
-                        platform: '网易云'
-                    });
-                }
-            }
-        }
-        
-        return results;
-    } catch (error) {
-        console.error('AA1 API搜索失败:', error);
-        throw error;
-    }
-}
-
-// NanYi 聚合API
-async function searchWithNanYiAPI(keyword) {
-    try {
-        const platforms = ['netease', 'qq', 'kugou', 'kuwo'];
-        const allResults = [];
-        
-        for (const platform of platforms) {
-            try {
-                const url = `https://api.nanyinet.com/api/music/${platform}?msg=${encodeURIComponent(keyword)}&n=5`;
-                const response = await fetch(url);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    if (data && data.data && Array.isArray(data.data)) {
-                        for (const song of data.data) {
-                            if (song.url) {
-                                allResults.push({
-                                    id: `${platform}_${song.id || Math.random()}`,
-                                    name: song.name || song.title,
-                                    artist: extractArtistInfo(song),
-                                    album: extractAlbumInfo(song),
-                                    cover: song.pic || song.cover,
-                                    coverSmall: song.pic || song.cover,
-                                    playUrl: song.url,
-                                    source: platform,
-                                    platform: platform
-                                });
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.log(`NanYi ${platform}搜索失败:`, err);
-            }
-        }
-        
-        return allResults;
-    } catch (error) {
-        console.error('NanYi API搜索失败:', error);
-        throw error;
-    }
-}
-
-// 显示音乐搜索结果
-function displayMusicResults(results) {
-    const resultsContainer = document.getElementById('musicSearchList');
-    resultsContainer.innerHTML = '';
-
-    if (results.length === 0) {
-        resultsContainer.innerHTML = '<div style="text-align: center; padding: 30px; color: #999;">没有找到相关音乐</div>';
-        document.getElementById('musicSearchLoading').style.display = 'none';
-        document.getElementById('musicSearchResults').style.display = 'block';
-        return;
-    }
-
-    // 平台标识和颜色
-    const platformColors = {
-        'netease': '#e60012',
-        'qq': '#31c27c',
-        'kugou': '#2ca7f8',
-        'kuwo': '#f63',
-        '网易云': '#e60012',
-        'QQ音乐': '#31c27c'
-    };
-
-    const platformNames = {
-        'netease': '网易云',
-        'qq': 'QQ音乐',
-        'kugou': '酷狗',
-        'kuwo': '酷我'
-    };
-
-    results.forEach((music, index) => {
-        const musicItem = document.createElement('div');
-        musicItem.style.cssText = `
-            display: flex;
-            align-items: center;
-            padding: 12px;
-            border-bottom: 1px solid #e0e0e0;
-            transition: background-color 0.2s;
-            position: relative;
-        `;
-        
-        musicItem.onmouseover = function() {
-            this.style.backgroundColor = '#fff';
-        };
-        
-        musicItem.onmouseout = function() {
-            this.style.backgroundColor = 'transparent';
-        };
-
-        const platformName = music.platform || platformNames[music.source] || music.source;
-        const platformColor = platformColors[music.source] || platformColors[music.platform] || '#666';
-
-        musicItem.innerHTML = `
-            <img src="${music.coverSmall}" alt="封面" style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover; margin-right: 12px;" 
-                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27100%27 height=%27100%27%3E%3Crect fill=%27%23ddd%27 width=%27100%27 height=%27100%27/%3E%3Ctext x=%2750%25%27 y=%2750%25%27 text-anchor=%27middle%27 dy=%27.3em%27 fill=%27%23999%27 font-size=%2714%27%3E封面%3C/text%3E%3C/svg%3E'">
-            <div style="flex: 1; min-width: 0;">
-                <div style="font-size: 15px; font-weight: 500; color: #333; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${music.name}
-                    <span style="display: inline-block; padding: 2px 6px; background: ${platformColor}; color: white; border-radius: 4px; font-size: 10px; margin-left: 6px; vertical-align: middle;">
-                        ${platformName}
-                    </span>
-                </div>
-                <div style="font-size: 13px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${music.artist}
-                </div>
-                <div style="font-size: 12px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${music.album}
-                </div>
-            </div>
-            <button onclick='addToMusicLibrary(${JSON.stringify(music).replace(/'/g, "&apos;").replace(/"/g, "&quot;")})' 
-                    style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; white-space: nowrap;">
-                添加
-            </button>
-        `;
-
-        resultsContainer.appendChild(musicItem);
-    });
-
-    // 隐藏加载提示，显示结果
-    document.getElementById('musicSearchLoading').style.display = 'none';
-    document.getElementById('musicSearchResults').style.display = 'block';
-}
-
-// 添加到音乐库
-async function addToMusicLibrary(music) {
-    try {
-        // 检查是否已存在
-        const exists = musicLibrary.some(item => item.id === music.id && item.source === music.source);
-        if (exists) {
-            alert('该音乐已在音乐库中！');
-            return;
-        }
-
-        // 获取歌词
-        let lyric = null;
-        const apiSource = document.getElementById('musicApiSelect')?.value || 'meting1';
-        const songId = music.id.split('_').pop(); // 提取原始ID
-        
-        try {
-            if (apiSource === 'meting1') {
-                lyric = await getLyricFromMeting('https://api.i-meto.com/meting/api', music.source, songId);
-            } else if (apiSource === 'meting2') {
-                lyric = await getLyricFromMeting('https://meting.qjqq.cn/api.php', music.source, songId);
-            } else if (apiSource === 'meting3') {
-                lyric = await getLyricFromVkeys(music.source, songId);
-            } else if (apiSource === 'nanyi') {
-                lyric = await getLyricFromNanYi(music.source, songId);
-            }
-            
-            if (lyric) {
-                music.lyric = lyric;
-                console.log('✅ 歌词获取成功');
-            } else {
-                console.log('⚠️ 未获取到歌词');
-            }
-        } catch (error) {
-            console.error('获取歌词出错:', error);
-        }
-
-        // 添加到音乐库
-        musicLibrary.push(music);
-        
-        // 保存到 IndexedDB
-        await storageDB.setItem('musicLibrary', musicLibrary);
-        
-        // 更新显示
-        displayMusicLibrary();
-        
-        alert(`已添加《${music.name}》到音乐库！${music.lyric ? '\n✅ 歌词已同步' : '\n⚠️ 暂无歌词'}`);
-    } catch (error) {
-        console.error('添加音乐失败:', error);
-        alert('添加失败，请重试！');
-    }
-}
-
-// 切换自定义音乐上传表单显示
-function toggleCustomMusicUpload() {
-    const toggle = document.getElementById('customMusicToggle');
-    const form = document.getElementById('customMusicForm');
-    
-    if (toggle.checked) {
-        form.style.display = 'block';
-    } else {
-        form.style.display = 'none';
-    }
-}
-
-// 处理歌词文件上传
-function handleLyricFileUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    // 验证文件类型
-    if (!file.name.endsWith('.lrc') && !file.name.endsWith('.txt')) {
-        alert('请上传LRC或TXT格式的歌词文件！');
-        event.target.value = '';
-        return;
-    }
-    
-    // 读取文件内容
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const content = e.target.result;
-        document.getElementById('customMusicLyric').value = content;
-        alert('歌词文件已加载！');
-    };
-    reader.onerror = function() {
-        alert('读取文件失败，请重试！');
-    };
-    reader.readAsText(file, 'UTF-8');
-    
-    // 清空文件选择，允许重复上传同一文件
-    event.target.value = '';
-}
-
-// 清空自定义歌词
-function clearCustomLyric() {
-    document.getElementById('customMusicLyric').value = '';
-}
-
-// 添加自定义音乐
-async function addCustomMusic() {
-    try {
-        const name = document.getElementById('customMusicName').value.trim();
-        const artist = document.getElementById('customMusicArtist').value.trim();
-        const album = document.getElementById('customMusicAlbum').value.trim();
-        const cover = document.getElementById('customMusicCover').value.trim();
-        const playUrl = document.getElementById('customMusicUrl').value.trim();
-        const lyric = document.getElementById('customMusicLyric').value.trim();
-        
-        // 验证必填项
-        if (!name) {
-            alert('请输入歌曲名称！');
-            return;
-        }
-        
-        if (!artist) {
-            alert('请输入歌手名称！');
-            return;
-        }
-        
-        if (!playUrl) {
-            alert('请输入音乐URL！');
-            return;
-        }
-        
-        // 验证URL格式
-        try {
-            new URL(playUrl);
-        } catch (e) {
-            alert('音乐URL格式不正确，请输入有效的URL！');
-            return;
-        }
-        
-        // 如果有封面URL，验证格式
-        if (cover) {
-            try {
-                new URL(cover);
-            } catch (e) {
-                alert('封面URL格式不正确，请输入有效的URL！');
-                return;
-            }
-        }
-        
-        // 创建音乐对象
-        const customMusic = {
-            id: `custom_${Date.now()}`,
-            name: name,
-            artist: artist,
-            album: album || '自定义专辑',
-            cover: cover || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23ddd" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999" font-size="14"%3E封面%3C/text%3E%3C/svg%3E',
-            coverSmall: cover || 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23ddd" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23999" font-size="14"%3E封面%3C/text%3E%3C/svg%3E',
-            playUrl: playUrl,
-            source: 'custom',
-            platform: '本地上传',
-            lyric: lyric || null
-        };
-        
-        // 检查是否已存在
-        const exists = musicLibrary.some(item => item.playUrl === playUrl);
-        if (exists) {
-            alert('该音乐URL已在音乐库中！');
-            return;
-        }
-        
-        // 添加到音乐库
-        musicLibrary.push(customMusic);
-        
-        // 保存到 IndexedDB
-        await storageDB.setItem('musicLibrary', musicLibrary);
-        
-        // 更新显示
-        displayMusicLibrary();
-        
-        // 清空表单
-        document.getElementById('customMusicName').value = '';
-        document.getElementById('customMusicArtist').value = '';
-        document.getElementById('customMusicAlbum').value = '';
-        document.getElementById('customMusicCover').value = '';
-        document.getElementById('customMusicUrl').value = '';
-        document.getElementById('customMusicLyric').value = '';
-        
-        alert(`已添加《${name}》到音乐库！${lyric ? '\n✅ 歌词已同步' : '\n⚠️ 未添加歌词'}`);
-    } catch (error) {
-        console.error('添加自定义音乐失败:', error);
-        alert('添加失败，请重试！');
-    }
-}
-
-// 显示音乐库
-function displayMusicLibrary() {
-    const libraryContainer = document.getElementById('musicLibraryList');
-    
-    if (musicLibrary.length === 0) {
-        libraryContainer.innerHTML = `
-            <div style="text-align: center; color: #999; padding: 30px;">
-                暂无音乐，请先搜索并添加
-            </div>
-        `;
-        return;
-    }
-
-    libraryContainer.innerHTML = '';
-
-    musicLibrary.forEach((music, index) => {
-        const musicItem = document.createElement('div');
-        musicItem.style.cssText = `
-            display: flex;
-            align-items: center;
-            padding: 10px;
-            margin-bottom: 8px;
-            background: white;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid ${index === currentMusicIndex ? '#007bff' : 'transparent'};
-        `;
-        
-        musicItem.onclick = function() {
-            playMusicByIndex(index);
-        };
-
-        musicItem.innerHTML = `
-            <img src="${music.coverSmall}" alt="封面" style="width: 50px; height: 50px; border-radius: 6px; object-fit: cover; margin-right: 10px;">
-            <div style="flex: 1; min-width: 0;">
-                <div style="font-size: 14px; font-weight: 500; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${music.name}
-                </div>
-                <div style="font-size: 12px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${music.artist}
-                </div>
-            </div>
-            <button onclick="event.stopPropagation(); removeFromLibrary(${index})" 
-                    style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
-                删除
-            </button>
-        `;
-
-        libraryContainer.appendChild(musicItem);
-    });
-}
-
-// 从音乐库删除
-async function removeFromLibrary(index) {
-    if (confirm('确定要删除这首音乐吗？')) {
-        musicLibrary.splice(index, 1);
-        await storageDB.setItem('musicLibrary', musicLibrary);
-        
-        // 如果删除的是当前播放的歌曲
-        if (index === currentMusicIndex) {
-            audioPlayer.pause();
-            isPlaying = false;
-            updatePlayPauseButton();
-            if (musicLibrary.length > 0) {
-                currentMusicIndex = 0;
-                loadMusic(currentMusicIndex);
-            }
-        } else if (index < currentMusicIndex) {
-            currentMusicIndex--;
-        }
-        
-        displayMusicLibrary();
-    }
-}
-
-// 清空音乐库
-async function clearMusicLibrary() {
-    const confirmed = await iosConfirm('确定要清空音乐库吗？', '确认清空');
-    if (confirmed) {
-        musicLibrary = [];
-        currentMusicIndex = 0;
-        audioPlayer.pause();
-        isPlaying = false;
-        updatePlayPauseButton();
-        await storageDB.setItem('musicLibrary', []);
-        displayMusicLibrary();
-        showIosAlert('成功', '音乐库已清空');
-    }
-}
-
-// 加载音乐库
-async function loadMusicLibrary() {
-    try {
-        const savedLibrary = await storageDB.getItem('musicLibrary');
-        if (savedLibrary && Array.isArray(savedLibrary)) {
-            musicLibrary = savedLibrary;
-            displayMusicLibrary();
-            if (musicLibrary.length > 0) {
-                loadMusic(0);
-            }
-        }
-    } catch (error) {
-        console.error('加载音乐库失败:', error);
-    }
-}
-
-// 播放指定索引的音乐
-function playMusicByIndex(index) {
-    if (index >= 0 && index < musicLibrary.length) {
-        currentMusicIndex = index;
-        loadMusic(index);
-        audioPlayer.play();
-        isPlaying = true;
-        updatePlayPauseButton();
-        displayMusicLibrary(); // 更新高亮
-    }
-}
-
-// 加载音乐
-function loadMusic(index) {
-    if (index < 0 || index >= musicLibrary.length) return;
-    
-    const music = musicLibrary[index];
-    
-    // 设置音频源
-    audioPlayer.src = music.playUrl;
-    
-    // 更新界面显示
-    document.getElementById('currentMusicTitle').textContent = music.name;
-    document.getElementById('currentMusicSong').textContent = `♪ ${music.artist}`;
-    
-    // 更新封面
-    document.getElementById('musicCoverImage').src = music.cover;
-    document.getElementById('musicCoverImage').style.display = 'block';
-    document.getElementById('musicCoverPlaceholder').style.display = 'none';
-    
-    // 保存当前封面
-    storageDB.setItem('musicCover', music.cover);
-    
-    // 加载歌词
-    if (music.lyric) {
-        loadLyric(music.lyric);
-    } else {
-        clearLyric();
-    }
-}
-
-// 播放/暂停切换
-function togglePlayPause() {
-    if (musicLibrary.length === 0) {
-        alert('音乐库为空！请先搜索并添加音乐。');
-        return;
-    }
-
-    if (isPlaying) {
-        audioPlayer.pause();
-        isPlaying = false;
-    } else {
-        audioPlayer.play();
-        isPlaying = true;
-    }
-    
-    updatePlayPauseButton();
-}
-
-// 更新播放/暂停按钮
-function updatePlayPauseButton() {
-    const btn = document.getElementById('playPauseBtn');
-    if (btn) {
-        btn.textContent = isPlaying ? '⏸' : '▶';
-    }
-}
-
-// 上一首
-function playPreviousSong() {
-    if (musicLibrary.length === 0) return;
-    
-    currentMusicIndex = (currentMusicIndex - 1 + musicLibrary.length) % musicLibrary.length;
-    loadMusic(currentMusicIndex);
-    
-    if (isPlaying) {
-        audioPlayer.play();
-    }
-    
-    displayMusicLibrary();
-}
-
-// 下一首
-function playNextSong() {
-    if (musicLibrary.length === 0) return;
-    
-    currentMusicIndex = (currentMusicIndex + 1) % musicLibrary.length;
-    loadMusic(currentMusicIndex);
-    
-    if (isPlaying) {
-        audioPlayer.play();
-    }
-    
-    displayMusicLibrary();
-}
-
-// 切换播放模式
-function togglePlayMode() {
-    const playModeBtn = document.getElementById('playModeBtn');
-    
-    if (playMode === 'list') {
-        // 切换到单曲循环
-        playMode = 'single';
-        playModeBtn.textContent = '单';
-        playModeBtn.style.color = '#007bff';
-        playModeBtn.title = '单曲循环';
-        console.log('切换到单曲循环模式');
-    } else {
-        // 切换到连续播放
-        playMode = 'list';
-        playModeBtn.textContent = '列';
-        playModeBtn.style.color = '';
-        playModeBtn.title = '连续播放';
-        console.log('切换到列表播放模式');
-    }
-}
-
-// 更新进度条
-function updateProgressBar() {
-    if (audioPlayer.duration) {
-        const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-        const fill = document.getElementById('musicProgressFill');
-        if (fill) {
-            fill.style.width = progress + '%';
-        }
-    }
-}
-
-// 点击进度条跳转
-function seekMusic(event) {
-    if (audioPlayer.duration) {
-        const progressBar = document.getElementById('musicProgressBar');
-        const rect = progressBar.getBoundingClientRect();
-        const percent = (event.clientX - rect.left) / rect.width;
-        audioPlayer.currentTime = percent * audioPlayer.duration;
-    }
-}
-
 // ========== 聊天功能 ==========
 
 // 打开聊天页面
@@ -9260,22 +5744,36 @@ function switchChatTab(tab) {
     // 隐藏所有标签页内容
     const chatTabContent = document.getElementById('chatTabContent');
     const profileTabContent = document.getElementById('profileTabContent');
+    const friendsTabContent = document.getElementById('friendsTabContent');
     
     if (chatTabContent) chatTabContent.style.display = 'none';
     if (profileTabContent) profileTabContent.style.display = 'none';
+    if (friendsTabContent) friendsTabContent.style.display = 'none';
 
     // 显示对应的标签页内容
     switch(tab) {
         case 'chat':
             if (chatTabContent) chatTabContent.style.display = 'flex';
             if (chatHeader) chatHeader.style.display = 'flex';
+            // 如果聊天详情页正在显示，刷新拉黑UI
+            const chatDetailPage = document.getElementById('chatDetailPage');
+            if (chatDetailPage && chatDetailPage.style.display !== 'none' && currentChatCharacter) {
+                if (typeof updateBlockUI === 'function') {
+                    if (typeof loadBlockConfigFromDB === 'function') {
+                        loadBlockConfigFromDB(currentChatCharacter.id).then(() => {
+                            updateBlockUI(currentChatCharacter.id);
+                        });
+                    } else {
+                        updateBlockUI(currentChatCharacter.id);
+                    }
+                }
+            }
             renderChatList(); // 刷新聊天列表
             break;
         case 'friends':
-            // 好友页面待开发
-            if (chatTabContent) chatTabContent.style.display = 'flex';
+            if (friendsTabContent) friendsTabContent.style.display = 'flex';
             if (chatHeader) chatHeader.style.display = 'flex';
-            alert('好友功能待开发');
+            if (typeof renderFriendRequestList === 'function') renderFriendRequestList();
             break;
         case 'moments':
             // 朋友圈页面待开发
@@ -9292,6 +5790,16 @@ function switchChatTab(tab) {
             if (chatHeader) chatHeader.style.display = 'none';
             break;
     }
+}
+
+// 打开好友申请页面（已废弃，保留为空函数避免报错）
+function openFriendRequestPage() {
+    // 好友申请已移至好友标签页内
+}
+
+// 关闭好友申请页面（已废弃）
+function closeFriendRequestPage() {
+    // 好友申请已移至好友标签页内
 }
 
 // 加载我的页面数据
@@ -10351,7 +6859,7 @@ async function renderChatList() {
                  ontouchmove="handleChatItemTouchMove(event)">
                 <div class="chat-list-avatar">${avatarHtml}</div>
                 <div class="chat-list-info">
-                    <div class="chat-list-name">${escapeHtml(char.remark)}${char.isPinned ? ' <span style="color: #999; font-size: 11px;">[置顶]</span>' : ''}</div>
+                    <div class="chat-list-name">${escapeHtml(char.remark)}${char.isPinned ? ' <span style="color: #999; font-size: 11px;">[置顶]</span>' : ''}${typeof getCharacterStatusDot === 'function' ? (() => { const dot = getCharacterStatusDot(char.id); return dot ? `<span class="chat-list-status-dot ${dot}"></span>` : ''; })() : ''}</div>
                     <div class="chat-list-message">${escapeHtml(displayMessage)}</div>
                 </div>
                 <div class="chat-list-right">
@@ -10366,6 +6874,63 @@ async function renderChatList() {
     
     // 初始化聊天列表项的右键菜单（事件委托）
     initChatListContextMenu();
+    
+    // 如果搜索框有内容，重新应用过滤
+    const searchInput = document.getElementById('chatSearchInput');
+    if (searchInput && searchInput.value.trim()) {
+        filterChatList(searchInput.value);
+    }
+}
+
+// 搜索过滤聊天列表
+function filterChatList(keyword) {
+    const container = document.getElementById('chatListContainer');
+    if (!container) return;
+    const items = container.querySelectorAll('.chat-list-item[data-char-id]');
+    const kw = (keyword || '').trim().toLowerCase();
+    
+    if (!kw) {
+        // 没有关键词，显示全部
+        items.forEach(item => item.style.display = '');
+        // 隐藏空状态
+        const emptyState = container.querySelector('.chat-empty-state');
+        if (emptyState) emptyState.style.display = chatCharacters.length === 0 ? '' : 'none';
+        return;
+    }
+    
+    let visibleCount = 0;
+    items.forEach(item => {
+        const charId = item.dataset.charId;
+        const char = chatCharacters.find(c => c.id === charId);
+        if (!char) { item.style.display = 'none'; return; }
+        
+        // 匹配备注名、角色名
+        const remark = (char.remark || '').toLowerCase();
+        const name = (char.name || '').toLowerCase();
+        const desc = (char.description || '').toLowerCase();
+        
+        if (remark.includes(kw) || name.includes(kw) || desc.includes(kw)) {
+            item.style.display = '';
+            visibleCount++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    // 如果没有匹配结果，显示提示
+    let noResult = container.querySelector('.chat-search-no-result');
+    if (visibleCount === 0) {
+        if (!noResult) {
+            noResult = document.createElement('div');
+            noResult.className = 'chat-search-no-result';
+            noResult.style.cssText = 'text-align:center;padding:40px 20px;color:#999;font-size:14px;';
+            container.appendChild(noResult);
+        }
+        noResult.textContent = `没有找到"${keyword}"相关的角色`;
+        noResult.style.display = '';
+    } else if (noResult) {
+        noResult.style.display = 'none';
+    }
 }
 
 // 初始化聊天列表右键菜单（只初始化一次）
@@ -10611,6 +7176,11 @@ async function openChatDetail(characterId) {
     // 设置备注名称
     document.getElementById('chatDetailName').textContent = character.remark;
     
+    // 更新角色后台活动状态显示
+    if (typeof updateBgActivityStatusUI === 'function') {
+        updateBgActivityStatusUI(characterId);
+    }
+    
     // 初始化用户头像（从 localStorage 加载）
     const savedUserData = localStorage.getItem('chatUserData');
     if (savedUserData) {
@@ -10651,6 +7221,14 @@ async function openChatDetail(characterId) {
     setTimeout(() => {
         initMsgContextMenu();
     }, 300);
+
+    // 更新拉黑UI
+    if (typeof updateBlockUI === 'function') {
+        if (typeof loadBlockConfigFromDB === 'function') {
+            await loadBlockConfigFromDB(characterId);
+        }
+        updateBlockUI(characterId);
+    }
 }
 
 // 加载聊天历史消息
@@ -10789,6 +7367,15 @@ function openChatSettings() {
     const timeAwareness = currentChatCharacter.timeAwareness !== undefined ? currentChatCharacter.timeAwareness : true;
     document.getElementById('timeAwarenessToggle').checked = timeAwareness;
     
+    // 加载角色主动来电设置（默认开启）
+    const incomingCallEnabled = currentChatCharacter.incomingCallEnabled !== undefined ? currentChatCharacter.incomingCallEnabled : true;
+    document.getElementById('incomingCallToggle').checked = incomingCallEnabled;
+    
+    // 加载自定义时间设置
+    if (typeof loadCustomTimeSettings === 'function') {
+        loadCustomTimeSettings();
+    }
+    
     // 加载系统卡片显示设置（默认开启）
     const showSystemCardBubbles = localStorage.getItem('showSystemCardBubbles') !== 'false';
     document.getElementById('showSystemCardBubblesToggle').checked = showSystemCardBubbles;
@@ -10804,13 +7391,56 @@ function openChatSettings() {
         renderMemoryArchiveList();
     }
     
+    // 加载表情包匹配设置
+    if (typeof initStickerMatchSettings === 'function') {
+        initStickerMatchSettings();
+    }
+    
+    // 初始化角色后台活动设置
+    if (typeof initBgActivitySettings === 'function') {
+        initBgActivitySettings();
+    }
+    
+    // 初始化独立定时主动消息设置
+    if (typeof initIndProactiveSettings === 'function') {
+        initIndProactiveSettings();
+    }
+    
+    // 初始化气泡颜色设置
+    if (typeof initBubbleColorSettings === 'function') {
+        initBubbleColorSettings();
+    }
+    
+    // 初始化国籍选择器和汇率模式选择器
+    if (typeof initNationalitySelector === 'function') {
+        initNationalitySelector();
+    }
+    if (typeof initExchangeRateModeSelector === 'function') {
+        initExchangeRateModeSelector();
+    }
+    
     // 显示设置界面
     document.getElementById('chatSettingsPage').style.display = 'block';
+
+    // 更新拉黑按钮状态
+    if (typeof updateBlockButtonInSettings === 'function') {
+        updateBlockButtonInSettings();
+    }
+    
+    // 如果是群聊，添加群聊专属设置
+    if (typeof addGroupChatSettingsUI === 'function') {
+        addGroupChatSettingsUI();
+    }
 }
 
 // 关闭聊天设置界面
 function closeChatSettingsPage() {
     document.getElementById('chatSettingsPage').style.display = 'none';
+    // 清理觉醒时间刷新定时器
+    if (typeof _wakeTimeRefreshInterval !== 'undefined' && _wakeTimeRefreshInterval) {
+        clearInterval(_wakeTimeRefreshInterval);
+        _wakeTimeRefreshInterval = null;
+    }
 }
 
 // 切换聊天设置标签页
@@ -10828,7 +7458,8 @@ function switchChatSettingsTab(tabName) {
         const labels = {
             'char': '角色',
             'user': '用户',
-            'advanced': '高级'
+            'advanced': '高级',
+            'beautify': '美化'
         };
         return tab.textContent.includes(labels[tabName]);
     });
@@ -10840,6 +7471,11 @@ function switchChatSettingsTab(tabName) {
     const tabContent = document.getElementById(tabName + 'Tab');
     if (tabContent) {
         tabContent.classList.add('active');
+    }
+    
+    // 如果切换到美化标签页，更新当前气泡形状显示
+    if (tabName === 'beautify' && typeof updateCurrentBubbleShapeDisplay === 'function') {
+        updateCurrentBubbleShapeDisplay();
     }
 }
 
@@ -11853,6 +8489,14 @@ async function saveChatSettings() {
     // 保存时间感知设置
     currentChatCharacter.timeAwareness = document.getElementById('timeAwarenessToggle').checked;
     
+    // 保存角色主动来电设置
+    currentChatCharacter.incomingCallEnabled = document.getElementById('incomingCallToggle').checked;
+    
+    // 保存自定义时间设置
+    if (typeof saveCustomTimeSettings === 'function') {
+        saveCustomTimeSettings();
+    }
+    
     // 保存系统卡片显示设置
     const showSystemCardBubbles = document.getElementById('showSystemCardBubblesToggle').checked;
     localStorage.setItem('showSystemCardBubbles', showSystemCardBubbles.toString());
@@ -11865,6 +8509,29 @@ async function saveChatSettings() {
     // 保存挂载聊天记录设置
     if (typeof saveMountChatSettings === 'function') {
         saveMountChatSettings();
+    }
+    
+    // 保存国籍设置
+    if (typeof saveNationalitySettings === 'function') {
+        saveNationalitySettings();
+    }
+    
+    // 保存群聊设置
+    if (currentChatCharacter.groupType === 'group') {
+        if (!currentChatCharacter.settings) {
+            currentChatCharacter.settings = {};
+        }
+        
+        // 保存后台活动设置
+        const bgActivityToggle = document.getElementById('groupBgActivityToggle');
+        if (bgActivityToggle) {
+            currentChatCharacter.settings.bgActivityEnabled = bgActivityToggle.checked;
+        }
+        
+        const bgActivityInterval = document.getElementById('groupBgActivityInterval');
+        if (bgActivityInterval) {
+            currentChatCharacter.settings.bgActivityInterval = parseInt(bgActivityInterval.value) || 60;
+        }
     }
     
     // 保存到chatCharacters数组
@@ -11941,6 +8608,24 @@ async function showEmojiPicker() {
         return;
     }
     
+    // 检查角色后台活动状态 - 如果角色不在线则拦截AI回复
+    if (typeof shouldBlockAIReply === 'function' && shouldBlockAIReply(currentChatCharacter.id)) {
+        const statusText = typeof getCharacterStatusText === 'function' ? getCharacterStatusText(currentChatCharacter.id) : '不在线';
+        showToast(`对方${statusText}，暂时无法回复`);
+        return;
+    }
+
+    // 检查拉黑状态 - 用户拉黑了角色则不触发AI回复
+    if (typeof isUserBlockedChar === 'function' && isUserBlockedChar(currentChatCharacter.id)) {
+        showToast('你已拉黑对方，对方无法回复');
+        return;
+    }
+    // 角色拉黑了用户则不触发AI回复
+    if (typeof isCharBlockedUser === 'function' && isCharBlockedUser(currentChatCharacter.id)) {
+        showToast('对方已将你拉黑，消息无法送达');
+        return;
+    }
+    
     // 【关键】在异步调用前捕获当前角色引用，防止用户切换角色后消息串到错误的对话
     const targetCharacter = currentChatCharacter;
     const targetCharacterId = currentChatCharacter.id;
@@ -11958,7 +8643,17 @@ async function showEmojiPicker() {
         console.log('AI正在思考中...');
         
         // 调用AI生成消息（传入捕获的角色，避免使用全局变量）
-        const messages = await callAIRolePlay(targetCharacter);
+        const rawMessages = await callAIRolePlay(targetCharacter);
+        
+        // 解析并处理状态标签
+        let messages = (typeof parseStatusTagsFromMessages === 'function')
+            ? parseStatusTagsFromMessages(targetCharacterId, rawMessages || [])
+            : (rawMessages || []);
+
+        // 解析拉黑标签
+        if (typeof parseBlockTagsFromMessages === 'function') {
+            messages = parseBlockTagsFromMessages(targetCharacterId, messages);
+        }
         
         if (messages && messages.length > 0) {
             // 将AI生成的消息添加到聊天界面
@@ -12019,6 +8714,8 @@ async function showEmojiPicker() {
                 const locationMatch = msg.match(/^\[location:([^:\]]+)(?::([^:\]]*))?(?::([^\]]*))?\]$/);
                 // 检查是否是引用消息指令 [quote:消息ID]
                 const quoteMatch = msg.match(/^\[quote:([^\]]+)\]$/);
+                // 检查是否是角色主动来电指令 [video-call:原因]
+                const videoCallMatch = msg.match(/^\[video-call:(.+)\]$/);
                 let messageObj;
                 
                 if (stickerMatch && stickerMap[stickerMatch[1]]) {
@@ -12096,6 +8793,17 @@ async function showEmojiPicker() {
                         continue; // 金额无效，跳过
                     }
                     const transferId = 'tf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+                    
+                    // 获取角色国籍对应的货币信息
+                    let currencyCode = 'CNY';
+                    let currencySymbol = '¥';
+                    if (typeof getCharacterNationality === 'function' && typeof getCurrencyByNationality === 'function') {
+                        const nationality = getCharacterNationality(targetCharacterId);
+                        const currencyInfo = getCurrencyByNationality(nationality);
+                        currencyCode = currencyInfo.code;
+                        currencySymbol = currencyInfo.symbol;
+                    }
+                    
                     messageObj = {
                         id: Date.now().toString() + Math.random(),
                         characterId: targetCharacterId,
@@ -12107,7 +8815,10 @@ async function showEmojiPicker() {
                         transferAmount: tfAmount,
                         transferRemark: tfRemark,
                         transferId: transferId,
-                        transferStatus: 'pending'
+                        transferStatus: 'pending',
+                        // 保存货币信息
+                        transferCurrencyCode: currencyCode,
+                        transferCurrencySymbol: currencySymbol
                     };
                 } else if (bankTransferMatch) {
                     // 角色发送银行转账
@@ -12242,6 +8953,7 @@ async function showEmojiPicker() {
                                 .replace(/\[image:[^\]]*\]/g, '')
                                 .replace(/\[location:[^\]]*\]/g, '')
                                 .replace(/\[quote:[^\]]*\]/g, '')
+                                .replace(/\[video-call:[^\]]*\]/g, '')
                                 .trim();
                             
                             // 如果下一条是有效的回复内容，跳过下一条消息的处理
@@ -12271,6 +8983,14 @@ async function showEmojiPicker() {
                         // 找不到被引用的消息，跳过
                         continue;
                     }
+                } else if (videoCallMatch) {
+                    // 角色主动发起视频通话
+                    const reason = videoCallMatch[1].trim();
+                    if (typeof showIncomingCallUI === 'function') {
+                        showIncomingCallUI(targetCharacter, reason);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
                 } else {
                     // 普通文本消息 - 清洗未被处理的指令标记
                     let cleanMsg = msg
@@ -12281,6 +9001,7 @@ async function showEmojiPicker() {
                         .replace(/\[image:[^\]]*\]/g, '')
                         .replace(/\[location:[^\]]*\]/g, '')
                         .replace(/\[quote:[^\]]*\]/g, '')
+                        .replace(/\[video-call:[^\]]*\]/g, '')
                         .trim();
                     
                     // 清洗后为空则跳过（AI只发了一个无效指令）
@@ -12320,7 +9041,8 @@ async function showEmojiPicker() {
             const lastMsgImage = lastMsg.match(/^\[image:.+\]$/);
             const lastMsgLocation = lastMsg.match(/^\[location:[^\]]+\]$/);
             const lastMsgQuote = lastMsg.match(/^\[quote:[^\]]+\]$/);
-            targetCharacter.lastMessage = lastMsgSticker ? '[表情包]' : lastMsgVoice ? '[语音消息]' : (lastMsgTransfer || lastMsgTransferSend) ? '[转账]' : lastMsgImage ? '[图片]' : lastMsgLocation ? '[位置]' : lastMsgQuote ? '[引用消息]' : lastMsg.substring(0, 50) + (lastMsg.length > 50 ? '...' : '');
+            const lastMsgVideoCall = lastMsg.match(/^\[video-call:[^\]]+\]$/);
+            targetCharacter.lastMessage = lastMsgSticker ? '[表情包]' : lastMsgVoice ? '[语音消息]' : (lastMsgTransfer || lastMsgTransferSend) ? '[转账]' : lastMsgImage ? '[图片]' : lastMsgLocation ? '[位置]' : lastMsgQuote ? '[引用消息]' : lastMsgVideoCall ? '[视频通话]' : lastMsg.substring(0, 50) + (lastMsg.length > 50 ? '...' : '');
             await saveChatCharacters();
             
             // 只有当用户仍在查看目标角色的聊天界面时才滚动
@@ -12525,6 +9247,22 @@ ${character.description ? `\n${character.description}` : ''}
             }
         }
 
+        // 5.01 视频通话记忆注入
+        if (typeof buildVideoCallMemoryContent === 'function') {
+            const videoCallMemory = await buildVideoCallMemoryContent(character.id);
+            if (videoCallMemory) {
+                parts.push(videoCallMemory);
+            }
+        }
+
+        // 5.02 最近视频通话状态感知（script3.js中定义）
+        if (typeof buildRecentVideoCallStatusPrompt === 'function') {
+            const recentCallPrompt = await buildRecentVideoCallStatusPrompt(character.id);
+            if (recentCallPrompt) {
+                parts.push(recentCallPrompt);
+            }
+        }
+
         // 5.05 挂载聊天记录注入
         if (typeof buildMountedChatPrompt === 'function') {
             const mountedPrompt = await buildMountedChatPrompt(character.id);
@@ -12591,6 +9329,11 @@ ${character.description ? `\n${character.description}` : ''}
     // 5.77 角色引用消息能力
     parts.push(QUOTE_ABILITY_PROMPT);
 
+    // 5.775 角色主动来电能力（条件注入）
+    if (character && character.incomingCallEnabled !== false) {
+        parts.push(INCOMING_CALL_PROMPT);
+    }
+
     // 5.78 角色更换头像能力
     // 检查角色是否有头像库
     if (character) {
@@ -12637,9 +9380,32 @@ ${character.description ? `\n${character.description}` : ''}
         }
     }
 
+    // 5.795 角色后台活动状态提示词注入
+    if (character && typeof getBgActivityConfig === 'function') {
+        const bgCfg = getBgActivityConfig(character.id);
+        if (bgCfg.enabled && typeof BG_ACTIVITY_STATUS_PROMPT !== 'undefined') {
+            parts.push(BG_ACTIVITY_STATUS_PROMPT);
+        }
+    }
+
+    // 5.796 角色拉黑能力提示词注入
+    if (character && typeof BLOCK_USER_ABILITY_PROMPT !== 'undefined') {
+        // 只有在没有被拉黑的情况下才注入拉黑能力
+        const blockActive = typeof isAnyBlockActive === 'function' && isAnyBlockActive(character.id);
+        if (!blockActive) {
+            parts.push(BLOCK_USER_ABILITY_PROMPT);
+        }
+    }
+
     // 5.8 时间感知
     if (character && character.timeAwareness !== false) {
-        const now = new Date();
+        // 获取当前时间（可能是自定义时间）
+        const now = typeof getCurrentTime === 'function' ? getCurrentTime() : new Date();
+        const isCustomTime = character && character.customTime && character.customTime.enabled;
+        
+        console.log('⏰ 时间感知模式:', isCustomTime ? '自定义时间' : '真实时间');
+        console.log('⏰ 当前时间:', now.toLocaleString('zh-CN'));
+        
         const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
         const year = now.getFullYear();
         const month = now.getMonth() + 1;
@@ -12649,83 +9415,58 @@ ${character.description ? `\n${character.description}` : ''}
         const minutes = String(now.getMinutes()).padStart(2, '0');
         const seconds = String(now.getSeconds()).padStart(2, '0');
         
+        console.log('⏰ 格式化时间:', `${year}年${month}月${day}日 星期${weekDay} ${hours}:${minutes}:${seconds}`);
+        
         // 计算距离上一次聊天（最后一条消息，不管是谁发的）到现在的间隔
         let timeDiffText = '';
         let timeDiffDetail = '';
-        try {
-            const chatHistory = await getChatHistory(character.id, 30);
-            // 找最后一条消息（不管是用户还是角色发的）
-            if (chatHistory.length > 0) {
-                const lastMsg = chatHistory[chatHistory.length - 1];
-                if (lastMsg && lastMsg.timestamp) {
-                    const lastTime = new Date(lastMsg.timestamp);
-                    const diffMs = now - lastTime;
-                    const diffSec = Math.floor(diffMs / 1000);
-                    const diffMin = Math.floor(diffMs / 60000);
-                    const diffHour = Math.floor(diffMs / 3600000);
-                    const diffDay = Math.floor(diffMs / 86400000);
-                    
-                    // 精确描述
-                    if (diffDay >= 1) {
-                        const remainHours = Math.floor((diffMs % 86400000) / 3600000);
-                        timeDiffText = remainHours > 0 ? `${diffDay}天${remainHours}小时` : `${diffDay}天`;
-                    } else if (diffHour >= 1) {
-                        const remainMin = Math.floor((diffMs % 3600000) / 60000);
-                        timeDiffText = remainMin > 0 ? `${diffHour}小时${remainMin}分钟` : `${diffHour}小时`;
-                    } else if (diffMin >= 1) {
-                        timeDiffText = `${diffMin}分钟`;
-                    } else if (diffSec >= 10) {
-                        timeDiffText = `${diffSec}秒`;
+        
+        // 只有在非自定义时间模式下才计算时间间隔
+        if (!isCustomTime) {
+            try {
+                const chatHistory = await getChatHistory(character.id, 30);
+                // 找最后一条消息（不管是用户还是角色发的）
+                if (chatHistory.length > 0) {
+                    const lastMsg = chatHistory[chatHistory.length - 1];
+                    if (lastMsg && lastMsg.timestamp) {
+                        const lastTime = new Date(lastMsg.timestamp);
+                        const diffMs = now - lastTime;
+                        const diffSec = Math.floor(diffMs / 1000);
+                        const diffMin = Math.floor(diffMs / 60000);
+                        const diffHour = Math.floor(diffMs / 3600000);
+                        const diffDay = Math.floor(diffMs / 86400000);
+                        
+                        // 精确描述
+                        if (diffDay >= 1) {
+                            const remainHours = Math.floor((diffMs % 86400000) / 3600000);
+                            timeDiffText = remainHours > 0 ? `${diffDay}天${remainHours}小时` : `${diffDay}天`;
+                        } else if (diffHour >= 1) {
+                            const remainMin = Math.floor((diffMs % 3600000) / 60000);
+                            timeDiffText = remainMin > 0 ? `${diffHour}小时${remainMin}分钟` : `${diffHour}小时`;
+                        } else if (diffMin >= 1) {
+                            timeDiffText = `${diffMin}分钟`;
+                        } else if (diffSec >= 10) {
+                            timeDiffText = `${diffSec}秒`;
+                        }
+                        
+                        // 详细时间点
+                        const lastTimeStr = `${lastTime.getFullYear()}年${lastTime.getMonth()+1}月${lastTime.getDate()}日 ${String(lastTime.getHours()).padStart(2,'0')}:${String(lastTime.getMinutes()).padStart(2,'0')}:${String(lastTime.getSeconds()).padStart(2,'0')}`;
+                        timeDiffDetail = `上一条消息是${lastMsg.type === 'user' ? '对方' : '你'}在 ${lastTimeStr} 发的`;
                     }
-                    
-                    // 详细时间点
-                    const lastTimeStr = `${lastTime.getFullYear()}年${lastTime.getMonth()+1}月${lastTime.getDate()}日 ${String(lastTime.getHours()).padStart(2,'0')}:${String(lastTime.getMinutes()).padStart(2,'0')}:${String(lastTime.getSeconds()).padStart(2,'0')}`;
-                    timeDiffDetail = `上一条消息是${lastMsg.type === 'user' ? '对方' : '你'}在 ${lastTimeStr} 发的`;
                 }
+            } catch (e) {
+                console.error('计算消息间隔失败:', e);
             }
-        } catch (e) {
-            console.error('计算消息间隔失败:', e);
         }
         
-        let timeAwarenessPrompt = `\n现在的时间是：${year}年${month}月${day}日 星期${weekDay} ${hours}:${minutes}:${seconds}
-
-【时间感知——极其重要，你必须严格遵守】
-你对时间的流逝有真实的、强烈的感知。你的生活不会因为聊天暂停而暂停——对方没找你的时候，你的生活照样在过。
-
-聊天记录中每条消息的开头都有精确到秒的时间标记，格式是 [YYYY年M月D日 HH:MM:SS]。你必须仔细看这些时间标记，它们告诉你每条消息是什么时候发的。
-
-核心规则：
-- 仔细看聊天记录里每条消息开头的时间标记。两条消息之间隔了多久，你的生活就真实地过了那么久。
-- 如果你上一条消息说"我在吃饭"，然后过了30分钟对方才回你，那你现在已经吃完了。绝对不能还说"我还在吃"。
-- 如果过了几个小时，你早就在做完全不同的事了。你要自然地告诉对方你现在在干嘛，而不是接着上一个话题假装时间没过。
-- 如果过了一整天甚至更久，那就是全新的一天，你经历了睡觉、起床、新的一天的生活。
-- 时间间隔越长，你的状态变化必须越明显。3分钟内可能还在做同一件事；20分钟就该有变化了；1小时以上你肯定已经换了件事在做；隔天了那就是完全不同的状态。
-
-时间过了就是过了。比如你中午说要去午睡，对方下午3点才找你，你早就睡醒了，可能在做别的事。不需要等对方问"你睡醒了吗"——你自己知道时间过了多久，你的生活一直在继续。
-
-注意：你回复的消息内容里不要带时间标记，时间标记只是给你看的参考信息。你正常说话就好。
-
-如果你的设定中有明确的所在地，而那个地方跟这个时间有时差，你自己换算一下就好。`;
-
-        // 追加对方消息间隔感知
-        if (timeDiffText) {
-            timeAwarenessPrompt += `\n\n【重要：距离我们上一次聊天已经过去了 ${timeDiffText}】
-${timeDiffDetail}。现在是 ${hours}:${minutes}:${seconds}。
-
-这段时间的空白你是有真实感受的。你清清楚楚地知道已经过了${timeDiffText}没有聊天了。
-
-你【必须】在回复中主动提到这个时间间隔，并且关心对方这段时间去做什么了。这是你作为一个真实的人最自然的反应——有人隔了一段时间才找你，你当然会好奇他去干嘛了。
-
-具体要求：
-- 过了几分钟（5分钟以上）：随口问一句，比如"刚去干嘛了"、"怎么突然不说话了"
-- 过了半小时到一小时：明确表达你注意到了，比如"你刚刚跑哪去了半小时"、"怎么突然消失了这么久"
-- 过了几个小时：你的语气要更明显，比如"你这几个小时干嘛去了"、"消失了这么久"、"终于想起我了？"
-- 过了一天以上：这是很长的时间了，你一定会有强烈反应，比如"你这一整天都没找我"、"昨天怎么不理我了"、"你消失了好久啊"
-
-你的具体措辞和情绪取决于你的性格和你跟对方的关系，但【必须主动问对方这段时间去干嘛了】。这不是可选的，这是必须的。`;
+        // 使用 prompts.js 中的函数构建时间感知提示词
+        if (typeof buildTimeAwarenessPrompt === 'function') {
+            const timeAwarenessPrompt = buildTimeAwarenessPrompt({
+                year, month, day, weekDay, hours, minutes, seconds,
+                isCustomTime, timeDiffText, timeDiffDetail
+            });
+            parts.push(timeAwarenessPrompt);
         }
-        
-        parts.push(timeAwarenessPrompt);
     }
 
     
@@ -12834,7 +9575,21 @@ async function callAIRolePlay(targetCharacter) {
     
     // 获取最近的聊天历史（使用角色设置的短期记忆条数）
     const memoryLimit = character.shortTermMemory || 10; // 默认10条
-    const chatHistory = await getChatHistory(character.id, memoryLimit);
+    let chatHistory = await getChatHistory(character.id, memoryLimit);
+    
+    // 过滤拉黑期间角色看不到的消息
+    if (typeof getBlockConfig === 'function') {
+        const blockCfg = getBlockConfig(character.id);
+        if (blockCfg.charBlockedUser && !blockCfg.showBlockedMsgsAfterUnblock) {
+            // 角色拉黑了用户，过滤掉用户在拉黑期间发的消息
+            chatHistory = chatHistory.filter(msg => !msg.blockedMsg);
+        }
+    }
+
+    // 应用隐藏消息过滤（script3.js中定义）
+    if (typeof filterHiddenMessages === 'function') {
+        chatHistory = await filterHiddenMessages(chatHistory, character.id);
+    }
     
     // 构建消息数组
     const messages = [
@@ -13172,6 +9927,28 @@ async function callAIRolePlay(targetCharacter) {
             throw new Error('API返回了空响应');
         }
         
+        // 记录API历史（成功）
+        if (typeof addApiHistoryRecord === 'function') {
+            const requestData = {
+                provider: settings.provider,
+                model: settings.model,
+                messages: messages.map(m => ({
+                    role: m.role,
+                    content: m.content,
+                    hasImage: m._hasImage || false
+                })),
+                temperature: settings.temperature,
+                topP: settings.topP,
+                maxTokens: settings.maxTokens
+            };
+            const responseData = {
+                raw: aiResponse,
+                parsed: data
+            };
+            const characterName = character.remark || character.name || '未知角色';
+            await addApiHistoryRecord(requestData, responseData, characterName, 'success');
+        }
+        
         // 解析JSON数组
         try {
             // 尝试提取JSON数组（可能包裹在markdown代码块中）
@@ -13223,6 +10000,32 @@ async function callAIRolePlay(targetCharacter) {
         // 清除AbortController
         if (typeof currentAbortController !== 'undefined') {
             currentAbortController = null;
+        }
+        
+        // 记录API历史（失败）
+        if (typeof addApiHistoryRecord === 'function' && error.name !== 'AbortError') {
+            try {
+                const requestData = {
+                    provider: settings.provider,
+                    model: settings.model,
+                    messages: messages.map(m => ({
+                        role: m.role,
+                        content: m.content,
+                        hasImage: m._hasImage || false
+                    })),
+                    temperature: settings.temperature,
+                    topP: settings.topP,
+                    maxTokens: settings.maxTokens
+                };
+                const responseData = {
+                    error: error.message,
+                    stack: error.stack
+                };
+                const characterName = character.remark || character.name || '未知角色';
+                await addApiHistoryRecord(requestData, responseData, characterName, 'error');
+            } catch (recordError) {
+                console.error('记录API历史失败:', recordError);
+            }
         }
         
         // 检查是否是用户中断
@@ -13427,7 +10230,7 @@ function extendAction(type) {
             openTextImageModal();
             break;
         case 'videoCall':
-            showIosAlert('提示', '视频通话功能开发中');
+            startVideoCall();
             break;
         case 'location':
             openLocationModal();
@@ -15716,6 +12519,13 @@ async function sendMessage() {
         timestamp: new Date().toISOString(),
         sender: 'user'
     };
+
+    // 检查拉黑状态
+    const _charBlocked = typeof isCharBlockedUser === 'function' && isCharBlockedUser(currentChatCharacter.id);
+    if (_charBlocked) {
+        // 角色拉黑了用户 - 消息标记为不可送达，角色看不到
+        messageObj.blockedMsg = true;
+    }
     
     // 检查是否有引用信息
     const quoteBar = document.getElementById('chatQuoteBar');
@@ -15737,11 +12547,21 @@ async function sendMessage() {
     // 保存消息到数据库
     await saveMessageToDB(messageObj);
     
+    // 如果角色不在线，增加未读计数
+    if (typeof shouldBlockAIReply === 'function' && shouldBlockAIReply(currentChatCharacter.id)) {
+        if (typeof incrementUnreadCount === 'function') incrementUnreadCount(currentChatCharacter.id);
+    }
+    
     // 更新聊天列表中的最后一条消息
     await updateChatListLastMessage(currentChatCharacter.id, message, new Date().toISOString());
     
     // 滚动到底部
     scrollChatToBottom();
+    
+    // 如果是群聊，触发群成员回复
+    if (currentChatCharacter.groupType === 'group' && typeof handleGroupChatMessage === 'function') {
+        await handleGroupChatMessage(message);
+    }
 }
 
 // 保存消息到数据库
@@ -16476,19 +13296,21 @@ function showTypingIndicator() {
         avatar = currentChatCharacter.avatar;
     }
     
-    // 创建typing indicator
+    // 创建typing indicator - 复用chat-message-char结构，让气泡形状/颜色/自定义CSS自动生效
     const typingDiv = document.createElement('div');
     typingDiv.id = 'typingIndicator';
-    typingDiv.className = 'typing-indicator';
+    typingDiv.className = 'chat-message chat-message-char typing-indicator';
     
     typingDiv.innerHTML = `
         <div class="chat-message-avatar">
             ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
         </div>
-        <div class="typing-indicator-bubble">
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
+        <div class="chat-message-content">
+            <div class="chat-message-bubble typing-indicator-bubble">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
         </div>
     `;
     
@@ -16618,6 +13440,12 @@ function appendMessageToChat(messageObj) {
         appendSystemMessageToChat(messageObj);
         return;
     }
+
+    // 如果是视频通话消息，用专门的渲染函数
+    if (messageObj.messageType === 'video-call') {
+        appendVideoCallMessageToChat(messageObj);
+        return;
+    }
     
     const container = document.getElementById('chatMessagesContainer');
     
@@ -16630,23 +13458,37 @@ function appendMessageToChat(messageObj) {
     // 获取头像
     let avatar = '';
     let senderName = '';
+    let isGroupMessage = false;
     
-    if (messageObj.type === 'user') {
-        // 用户消息 - 直接从聊天设置界面读取用户头像
-        const userAvatarImg = document.getElementById('userAvatarImage');
-        if (userAvatarImg && userAvatarImg.style.display === 'block' && userAvatarImg.src) {
-            avatar = userAvatarImg.src;
+    // 检查是否是群聊消息
+    if (typeof getGroupMessageSender === 'function') {
+        const groupSender = getGroupMessageSender(messageObj);
+        if (groupSender.isGroupMessage) {
+            avatar = groupSender.avatar;
+            senderName = groupSender.name;
+            isGroupMessage = true;
         }
-        
-        // 读取用户真名
-        const userNameInput = document.getElementById('userNameInput');
-        senderName = (userNameInput && userNameInput.value.trim()) || 'User';
-    } else {
-        // 角色消息
-        if (currentChatCharacter && currentChatCharacter.avatar) {
-            avatar = currentChatCharacter.avatar;
+    }
+    
+    // 如果不是群聊消息，使用原有逻辑
+    if (!isGroupMessage) {
+        if (messageObj.type === 'user') {
+            // 用户消息 - 直接从聊天设置界面读取用户头像
+            const userAvatarImg = document.getElementById('userAvatarImage');
+            if (userAvatarImg && userAvatarImg.style.display === 'block' && userAvatarImg.src) {
+                avatar = userAvatarImg.src;
+            }
+            
+            // 读取用户真名
+            const userNameInput = document.getElementById('userNameInput');
+            senderName = (userNameInput && userNameInput.value.trim()) || 'User';
+        } else {
+            // 角色消息
+            if (currentChatCharacter && currentChatCharacter.avatar) {
+                avatar = currentChatCharacter.avatar;
+            }
+            senderName = currentChatCharacter ? currentChatCharacter.remark || currentChatCharacter.name : 'CHAR';
         }
-        senderName = currentChatCharacter ? currentChatCharacter.remark || currentChatCharacter.name : 'CHAR';
     }
     
     // 格式化时间（时:分:秒）
@@ -16671,16 +13513,23 @@ function appendMessageToChat(messageObj) {
         `;
     }
     
+    // 拉黑状态感叹号
+    let blockIndicator = '';
+    if (messageObj.blockedMsg) {
+        blockIndicator = '<div class="msg-block-indicator" title="消息未送达">⚠</div>';
+    }
+
     messageEl.innerHTML = `
         <div class="chat-message-avatar">
             ${avatar ? `<img src="${avatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
         </div>
         <div class="chat-message-content">
+            ${isGroupMessage && messageObj.type === 'char' ? `<div class="chat-message-name" style="font-size: 12px; color: #999; margin-bottom: 4px;">${escapeHtml(senderName)}</div>` : ''}
             <div class="chat-message-bubble">
                 ${escapeHtml(cleanMessageContent(messageObj.content))}
             </div>
             ${quoteHtml}
-            <div class="chat-message-time">${time}</div>
+            <div class="chat-message-time">${time}${blockIndicator}</div>
         </div>
     `;
     
@@ -16770,3414 +13619,3 @@ function openChatProfileSettings() {
     alert('个人资料设置功能待开发');
 }
 
-// ========== 我的页面功能选项 ==========
-
-// 人设数据存储
-let personas = [];
-let currentEditingPersonaId = null;
-let isPersonaEditMode = false;
-let selectedPersonaIds = new Set();
-
-// 追踪表单是否被修改
-let personaFormChanged = false;
-let personaOriginalData = {};
-
-// 打开人设管理
-function openPersonaSettings() {
-    document.getElementById('personaManagement').classList.add('active');
-    loadPersonas();
-    isPersonaEditMode = false;
-    selectedPersonaIds.clear();
-    renderPersonaList();
-}
-
-// 关闭人设管理
-function closePersonaManagement() {
-    document.getElementById('personaManagement').classList.remove('active');
-    // 退出编辑模式
-    if (isPersonaEditMode) {
-        togglePersonaEditMode();
-    }
-}
-
-// 切换编辑模式
-function togglePersonaEditMode() {
-    isPersonaEditMode = !isPersonaEditMode;
-    selectedPersonaIds.clear();
-    
-    const deleteBtn = document.getElementById('deletePersonaBtn');
-    const bottomBar = document.getElementById('personaBottomBar');
-    
-    if (isPersonaEditMode) {
-        deleteBtn.textContent = '取消';
-        bottomBar.style.display = 'flex';
-    } else {
-        deleteBtn.textContent = '删除';
-        bottomBar.style.display = 'none';
-    }
-    
-    renderPersonaList();
-    updateSelectedCount();
-}
-
-// 切换人设选中状态
-function togglePersonaSelection(personaId, event) {
-    event.stopPropagation();
-    
-    if (selectedPersonaIds.has(personaId)) {
-        selectedPersonaIds.delete(personaId);
-    } else {
-        selectedPersonaIds.add(personaId);
-    }
-    
-    renderPersonaList();
-    updateSelectedCount();
-}
-
-// 全选/取消全选
-function selectAllPersonas() {
-    if (selectedPersonaIds.size === personas.length) {
-        // 全部取消选中
-        selectedPersonaIds.clear();
-    } else {
-        // 全部选中
-        selectedPersonaIds.clear();
-        personas.forEach(p => selectedPersonaIds.add(p.id));
-    }
-    
-    renderPersonaList();
-    updateSelectedCount();
-}
-
-// 更新选中数量显示
-function updateSelectedCount() {
-    const countElement = document.getElementById('selectedPersonaCount');
-    if (countElement) {
-        countElement.textContent = selectedPersonaIds.size;
-    }
-}
-
-// 删除选中的人设
-async function deleteSelectedPersonas() {
-    if (selectedPersonaIds.size === 0) {
-        showIosAlert('提示', '请选择要删除的人设');
-        return;
-    }
-    
-    const confirmed = await iosConfirm(
-        `确定要删除选中的 ${selectedPersonaIds.size} 个人设吗？\n删除后无法恢复。`,
-        '确认删除'
-    );
-    
-    if (confirmed) {
-        personas = personas.filter(p => !selectedPersonaIds.has(p.id));
-        savePersonas();
-        selectedPersonaIds.clear();
-        renderPersonaList();
-        updateSelectedCount();
-        showIosAlert('成功', '已删除选中的人设');
-    }
-}
-
-// 打开添加人设选择对话框
-async function openAddPersona() {
-    // 显示iOS风格选择对话框
-    const choice = await showPersonaCreationChoice();
-    
-    if (choice === 'manual') {
-        // 手动创建
-        openManualCreatePersona();
-    } else if (choice === 'import') {
-        // SillyTavern导入
-        openSillyTavernImport();
-    }
-}
-
-// 显示人设创建方式选择对话框
-function showPersonaCreationChoice() {
-    return new Promise((resolve) => {
-        const overlay = document.createElement('div');
-        overlay.className = 'ios-dialog-overlay show';
-        overlay.style.zIndex = '10002';
-        
-        overlay.innerHTML = `
-            <div class="ios-dialog">
-                <div class="ios-dialog-title">选择创建方式</div>
-                <div class="ios-dialog-message">请选择如何添加人设</div>
-                <div class="ios-dialog-buttons vertical">
-                    <button class="ios-dialog-button" data-action="manual">手动创建</button>
-                    <button class="ios-dialog-button" data-action="import">SillyTavern 导入</button>
-                    <button class="ios-dialog-button" data-action="cancel">取消</button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(overlay);
-        
-        overlay.querySelectorAll('.ios-dialog-button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const action = btn.dataset.action;
-                document.body.removeChild(overlay);
-                resolve(action);
-            });
-        });
-    });
-}
-
-// 手动创建人设
-function openManualCreatePersona() {
-    currentEditingPersonaId = null;
-    document.getElementById('addPersonaTitle').textContent = '添加人设';
-    document.getElementById('personaNameInput').value = '';
-    document.getElementById('personaDescInput').value = '';
-    document.getElementById('personaAvatarUrl').value = '';
-    document.getElementById('personaUrlInputSection').style.display = 'none';
-    
-    // 重置头像预览
-    document.getElementById('personaAvatarImage').style.display = 'none';
-    document.getElementById('personaAvatarPlaceholder').style.display = 'block';
-    
-    // 重置ID卡展示开关
-    document.getElementById('personaAsIdCardToggle').checked = false;
-    
-    // 重置表单修改状态
-    personaFormChanged = false;
-    personaOriginalData = {
-        name: '',
-        description: '',
-        avatar: '',
-        isIdCard: false
-    };
-    
-    // 添加输入监听
-    setupPersonaFormListeners();
-    
-    document.getElementById('addPersonaPage').classList.add('active');
-}
-
-// 关闭添加人设界面
-async function closeAddPersona() {
-    // 检查是否有未保存的修改
-    if (personaFormChanged) {
-        const confirmed = await iosConfirm(
-            '您有未保存的修改，确定要退出吗？',
-            '确认退出'
-        );
-        
-        if (!confirmed) {
-            return; // 用户选择不退出
-        }
-    }
-    
-    document.getElementById('addPersonaPage').classList.remove('active');
-    personaFormChanged = false;
-}
-
-// 设置表单输入监听
-function setupPersonaFormListeners() {
-    const nameInput = document.getElementById('personaNameInput');
-    const descInput = document.getElementById('personaDescInput');
-    
-    // 移除旧的监听器（如果有）
-    nameInput.removeEventListener('input', markPersonaFormChanged);
-    descInput.removeEventListener('input', markPersonaFormChanged);
-    
-    // 添加新的监听器
-    nameInput.addEventListener('input', markPersonaFormChanged);
-    descInput.addEventListener('input', markPersonaFormChanged);
-}
-
-// 标记表单已修改
-function markPersonaFormChanged() {
-    const currentName = document.getElementById('personaNameInput').value.trim();
-    const currentDesc = document.getElementById('personaDescInput').value.trim();
-    const currentAvatar = document.getElementById('personaAvatarImage').style.display !== 'none' 
-        ? document.getElementById('personaAvatarImage').src 
-        : '';
-    const currentIsIdCard = document.getElementById('personaAsIdCardToggle').checked;
-    
-    // 检查是否有任何字段被修改
-    if (currentName !== personaOriginalData.name ||
-        currentDesc !== personaOriginalData.description ||
-        currentAvatar !== personaOriginalData.avatar ||
-        currentIsIdCard !== personaOriginalData.isIdCard) {
-        personaFormChanged = true;
-    } else {
-        personaFormChanged = false;
-    }
-}
-
-// 显示URL输入框
-function showPersonaUrlInput() {
-    const section = document.getElementById('personaUrlInputSection');
-    section.style.display = section.style.display === 'none' ? 'block' : 'none';
-}
-
-// 处理本地头像上传
-async function handlePersonaAvatarUpload(event) {
-    const file = event.target.files[0];
-    if (file) {
-        try {
-            // 自动压缩图片（如果太大）
-            console.log(`正在处理人设头像 (${(file.size / 1024 / 1024).toFixed(2)}MB)...`);
-            
-            const compressedData = await compressImage(file, {
-                maxWidth: 800,
-                maxHeight: 800,
-                quality: 0.85,
-                maxSizeKB: 500
-            });
-            
-            const img = document.getElementById('personaAvatarImage');
-            img.src = compressedData;
-            img.style.display = 'block';
-            document.getElementById('personaAvatarPlaceholder').style.display = 'none';
-            markPersonaFormChanged(); // 标记表单已修改
-            
-            console.log('人设头像处理完成');
-        } catch (error) {
-            console.error('头像处理失败:', error);
-            showIosAlert('错误', '图片处理失败，请重试！');
-        }
-    }
-}
-
-// 从URL加载头像
-function loadPersonaAvatarFromUrl() {
-    const url = document.getElementById('personaAvatarUrl').value.trim();
-    if (!url) {
-        showIosAlert('提示', '请输入图片URL地址');
-        return;
-    }
-    
-    const img = document.getElementById('personaAvatarImage');
-    img.onload = function() {
-        img.style.display = 'block';
-        document.getElementById('personaAvatarPlaceholder').style.display = 'none';
-        markPersonaFormChanged(); // 标记表单已修改
-        showIosAlert('成功', '图片加载成功');
-    };
-    img.onerror = function() {
-        showIosAlert('错误', '图片加载失败，请检查URL是否正确');
-    };
-    img.src = url;
-}
-
-// 保存人设
-async function savePersona() {
-    const name = document.getElementById('personaNameInput').value.trim();
-    const description = document.getElementById('personaDescInput').value.trim();
-    const avatarImg = document.getElementById('personaAvatarImage');
-    const avatar = avatarImg.style.display !== 'none' ? avatarImg.src : '';
-    const isIdCard = document.getElementById('personaAsIdCardToggle').checked;
-    
-    if (!name) {
-        showIosAlert('提示', '请输入人设名称');
-        return;
-    }
-    
-    if (!description) {
-        showIosAlert('提示', '请输入人设描述');
-        return;
-    }
-    
-    // 如果设置为ID卡角色，需要取消其他人设的ID卡状态
-    if (isIdCard) {
-        personas.forEach(p => {
-            if (p.id !== currentEditingPersonaId) {
-                p.isIdCard = false;
-            }
-        });
-    }
-    
-    const persona = {
-        id: currentEditingPersonaId || Date.now().toString(),
-        name: name,
-        description: description,
-        avatar: avatar,
-        isIdCard: isIdCard,
-        createTime: currentEditingPersonaId ? personas.find(p => p.id === currentEditingPersonaId).createTime : new Date().toISOString(),
-        updateTime: new Date().toISOString()
-    };
-    
-    if (currentEditingPersonaId) {
-        // 编辑模式
-        const index = personas.findIndex(p => p.id === currentEditingPersonaId);
-        if (index !== -1) {
-            personas[index] = persona;
-        }
-    } else {
-        // 新增模式
-        personas.push(persona);
-    }
-    
-    savePersonas();
-    renderPersonaList();
-    
-    // 如果设置为ID卡角色，应用到ID卡
-    if (isIdCard) {
-        await applyPersonaToIdCard(persona);
-    }
-    
-    // 保存成功后重置表单修改状态
-    personaFormChanged = false;
-    
-    // 关闭编辑界面（不会触发未保存提示）
-    document.getElementById('addPersonaPage').classList.remove('active');
-    
-    showIosAlert('成功', currentEditingPersonaId ? '人设已更新' : '人设已保存');
-}
-
-// 保存人设到localStorage
-function savePersonas() {
-    try {
-        localStorage.setItem('personas', JSON.stringify(personas));
-    } catch (e) {
-        console.error('保存人设失败:', e);
-        showIosAlert('错误', '保存失败，可能是存储空间不足');
-    }
-}
-
-// 从localStorage加载人设
-function loadPersonas() {
-    try {
-        const data = localStorage.getItem('personas');
-        if (data) {
-            personas = JSON.parse(data);
-        } else {
-            personas = [];
-        }
-    } catch (e) {
-        console.error('加载人设失败:', e);
-        personas = [];
-    }
-}
-
-// 渲染人设列表
-function renderPersonaList() {
-    const listContainer = document.getElementById('personaList');
-    
-    if (personas.length === 0) {
-        listContainer.innerHTML = `
-            <div class="persona-empty">
-                <div style="color: #999; font-size: 14px;">暂无人设</div>
-                <div style="color: #ccc; font-size: 12px; margin-top: 5px;">点击右上角 + 添加人设</div>
-            </div>
-        `;
-        return;
-    }
-    
-    let html = '';
-    personas.forEach(persona => {
-        const avatarHtml = persona.avatar 
-            ? `<img src="${persona.avatar}" alt="${persona.name}">`
-            : '<span style="font-size: 12px; color: #666;">无头像</span>';
-        
-        const isSelected = selectedPersonaIds.has(persona.id);
-        const editModeClass = isPersonaEditMode ? 'edit-mode' : '';
-        const clickHandler = isPersonaEditMode 
-            ? `onclick="togglePersonaSelection('${persona.id}', event)"`
-            : `onclick="viewPersonaDetail('${persona.id}')"`;
-        const idCardBadge = persona.isIdCard ? '<span style="display: inline-block; margin-left: 6px; padding: 2px 8px; background: #007bff; color: white; font-size: 10px; border-radius: 10px; font-weight: 500;">ID卡</span>' : '';
-        
-        html += `
-            <div class="persona-item ${editModeClass}" ${clickHandler}>
-                ${isPersonaEditMode ? `
-                    <div class="persona-checkbox ${isSelected ? 'checked' : ''}" onclick="togglePersonaSelection('${persona.id}', event)"></div>
-                ` : ''}
-                <div class="persona-item-avatar">${avatarHtml}</div>
-                <div class="persona-item-info">
-                    <div class="persona-item-name">${escapeHtml(persona.name)}${idCardBadge}</div>
-                    <div class="persona-item-desc">${escapeHtml(persona.description.substring(0, 30))}${persona.description.length > 30 ? '...' : ''}</div>
-                </div>
-                ${!isPersonaEditMode ? '<div class="persona-item-arrow">›</div>' : ''}
-            </div>
-        `;
-    });
-    
-    listContainer.innerHTML = html;
-}
-
-// 查看/编辑人设详情
-function viewPersonaDetail(personaId) {
-    const persona = personas.find(p => p.id === personaId);
-    if (!persona) return;
-    
-    // 设置为编辑模式
-    currentEditingPersonaId = personaId;
-    document.getElementById('addPersonaTitle').textContent = '编辑人设';
-    
-    // 填充表单数据
-    document.getElementById('personaNameInput').value = persona.name;
-    document.getElementById('personaDescInput').value = persona.description;
-    document.getElementById('personaAvatarUrl').value = '';
-    document.getElementById('personaUrlInputSection').style.display = 'none';
-    
-    // 设置头像
-    const img = document.getElementById('personaAvatarImage');
-    if (persona.avatar) {
-        img.src = persona.avatar;
-        img.style.display = 'block';
-        document.getElementById('personaAvatarPlaceholder').style.display = 'none';
-    } else {
-        img.style.display = 'none';
-        document.getElementById('personaAvatarPlaceholder').style.display = 'block';
-    }
-    
-    // 设置ID卡展示开关
-    document.getElementById('personaAsIdCardToggle').checked = persona.isIdCard || false;
-    
-    // 保存原始数据用于对比
-    personaOriginalData = {
-        name: persona.name,
-        description: persona.description,
-        avatar: persona.avatar || '',
-        isIdCard: persona.isIdCard || false
-    };
-    
-    // 重置表单修改状态
-    personaFormChanged = false;
-    
-    // 添加输入监听
-    setupPersonaFormListeners();
-    
-    // 打开编辑界面
-    document.getElementById('addPersonaPage').classList.add('active');
-}
-
-// HTML转义函数
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// 应用人设到ID卡（聊天APP的"我的"界面的身份卡）
-async function applyPersonaToIdCard(persona) {
-    try {
-        // 应用姓名到身份卡
-        const profileName = document.getElementById('profileName');
-        if (profileName) {
-            profileName.textContent = persona.name;
-            // 保存到localStorage
-            localStorage.setItem('chatProfileName', persona.name);
-        }
-        
-        // 应用头像到身份卡
-        if (persona.avatar) {
-            const profileAvatarImage = document.getElementById('profileAvatarImage');
-            const profileAvatarPlaceholder = document.getElementById('profileAvatarPlaceholder');
-            
-            if (profileAvatarImage && profileAvatarPlaceholder) {
-                profileAvatarImage.src = persona.avatar;
-                profileAvatarImage.style.display = 'block';
-                profileAvatarPlaceholder.style.display = 'none';
-                // 保存到localStorage
-                localStorage.setItem('chatProfileAvatar', persona.avatar);
-            }
-        }
-        
-        console.log('人设已应用到聊天APP身份卡:', persona.name);
-    } catch (error) {
-        console.error('应用人设到ID卡失败:', error);
-    }
-}
-
-// 加载ID卡人设
-async function loadIdCardPersona() {
-    try {
-        // 查找设置为ID卡的人设
-        const idCardPersona = personas.find(p => p.isIdCard === true);
-        if (idCardPersona) {
-            await applyPersonaToIdCard(idCardPersona);
-            console.log('已加载ID卡人设:', idCardPersona.name);
-        }
-    } catch (error) {
-        console.error('加载ID卡人设失败:', error);
-    }
-}
-
-// ========== SillyTavern 导入功能 ==========
-
-let parsedSillyTavernData = null;
-let selectedImportPersonas = new Set();
-
-// 打开 SillyTavern 导入界面
-function openSillyTavernImport() {
-    parsedSillyTavernData = null;
-    selectedImportPersonas.clear();
-    document.getElementById('sillyTavernFileInfo').style.display = 'none';
-    document.getElementById('sillyTavernFileInput').value = '';
-    document.getElementById('sillyTavernImportPage').classList.add('active');
-}
-
-// 关闭 SillyTavern 导入界面
-function closeSillyTavernImport() {
-    document.getElementById('sillyTavernImportPage').classList.remove('active');
-}
-
-// 处理文件上传
-function handleSillyTavernFile(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const data = JSON.parse(e.target.result);
-            parsedSillyTavernData = parseSillyTavernJSON(data);
-            
-            if (parsedSillyTavernData.length === 0) {
-                showIosAlert('错误', '未找到有效的人设数据');
-                return;
-            }
-            
-            // 显示文件信息
-            document.getElementById('sillyTavernFileName').textContent = file.name;
-            document.getElementById('sillyTavernPersonaCount').textContent = parsedSillyTavernData.length;
-            document.getElementById('sillyTavernFileInfo').style.display = 'block';
-            
-        } catch (error) {
-            console.error('解析文件失败:', error);
-            showIosAlert('错误', '文件格式不正确，请选择有效的 SillyTavern personas.json 文件');
-        }
-    };
-    reader.readAsText(file);
-}
-
-// 解析 SillyTavern JSON 格式
-function parseSillyTavernJSON(data) {
-    const personas = [];
-    
-    if (!data.personas || !data.persona_descriptions) {
-        return personas;
-    }
-    
-    // 遍历所有人设
-    for (const [avatarFile, name] of Object.entries(data.personas)) {
-        const description = data.persona_descriptions[avatarFile];
-        
-        if (description && description.description) {
-            personas.push({
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-                name: name,
-                description: description.description.trim(),
-                avatar: '', // SillyTavern 不包含Base64头像，默认为空
-                avatarFile: avatarFile, // 保存原始文件名供参考
-                isIdCard: false
-            });
-        }
-    }
-    
-    return personas;
-}
-
-// 显示人设选择对话框
-function showPersonaSelectionDialog() {
-    if (!parsedSillyTavernData || parsedSillyTavernData.length === 0) {
-        showIosAlert('提示', '没有可导入的人设');
-        return;
-    }
-    
-    selectedImportPersonas.clear();
-    renderImportPersonaList();
-    document.getElementById('personaSelectionDialog').style.display = 'block';
-    document.getElementById('personaSelectionDialog').classList.add('active');
-}
-
-// 关闭人设选择对话框
-function closePersonaSelection() {
-    document.getElementById('personaSelectionDialog').classList.remove('active');
-    setTimeout(() => {
-        document.getElementById('personaSelectionDialog').style.display = 'none';
-    }, 300);
-}
-
-// 渲染导入人设列表
-function renderImportPersonaList() {
-    const listContainer = document.getElementById('importPersonaList');
-    
-    if (!parsedSillyTavernData || parsedSillyTavernData.length === 0) {
-        listContainer.innerHTML = '<div style="text-align: center; color: #999; padding: 40px;">没有可导入的人设</div>';
-        return;
-    }
-    
-    let html = '';
-    parsedSillyTavernData.forEach(persona => {
-        const isSelected = selectedImportPersonas.has(persona.id);
-        const selectedClass = isSelected ? 'selected' : '';
-        
-        html += `
-            <div class="import-persona-item ${selectedClass}" onclick="toggleImportPersonaSelection('${persona.id}')">
-                <div class="import-checkbox"></div>
-                <div class="import-persona-info">
-                    <div class="import-persona-name">${escapeHtml(persona.name)}</div>
-                    <div class="import-persona-desc">${escapeHtml(persona.description.substring(0, 100))}${persona.description.length > 100 ? '...' : ''}</div>
-                </div>
-            </div>
-        `;
-    });
-    
-    listContainer.innerHTML = html;
-    updateImportCount();
-}
-
-// 切换人设选择状态
-function toggleImportPersonaSelection(personaId) {
-    if (selectedImportPersonas.has(personaId)) {
-        selectedImportPersonas.delete(personaId);
-    } else {
-        selectedImportPersonas.add(personaId);
-    }
-    renderImportPersonaList();
-}
-
-// 全选
-function selectAllImportPersonas() {
-    if (selectedImportPersonas.size === parsedSillyTavernData.length) {
-        // 取消全选
-        selectedImportPersonas.clear();
-    } else {
-        // 全选
-        selectedImportPersonas.clear();
-        parsedSillyTavernData.forEach(p => selectedImportPersonas.add(p.id));
-    }
-    renderImportPersonaList();
-}
-
-// 更新选中数量
-function updateImportCount() {
-    const countElement = document.getElementById('selectedImportCount');
-    if (countElement) {
-        countElement.textContent = selectedImportPersonas.size;
-    }
-}
-
-// 导入选中的人设
-async function importSelectedPersonas() {
-    if (selectedImportPersonas.size === 0) {
-        showIosAlert('提示', '请选择要导入的人设');
-        return;
-    }
-    
-    const selectedPersonas = parsedSillyTavernData.filter(p => selectedImportPersonas.has(p.id));
-    
-    // 添加到人设库
-    personas.push(...selectedPersonas);
-    savePersonas();
-    renderPersonaList();
-    
-    // 关闭对话框
-    closePersonaSelection();
-    closeSillyTavernImport();
-    
-    // 显示成功提示
-    showIosAlert('成功', `已成功导入 ${selectedPersonas.length} 个人设！`);
-}
-
-// 打开美化设置
-function openBeautifySettings() {
-    showIosAlert('提示', '美化功能开发中，敬请期待！');
-}
-
-// 打开通用设置
-function openGeneralSettings() {
-    showIosAlert('提示', '设置功能开发中，敬请期待！');
-}
-
-// 加载聊天头像
-async function loadChatAvatar() {
-    // 不再加载第一个小组件的头像，保持默认灰色占位符
-    console.log('聊天头像使用默认占位符');
-}
-
-// ========== 自定义确认对话框 ==========
-
-// 显示自定义确认对话框
-// showCustomConfirm 现在使用iOS风格弹窗
-function showCustomConfirm(title, message) {
-    return iosConfirm(message, title);
-}
-
-// ========== 世界书功能 ==========
-
-// 世界书列表
-let worldBooks = [];
-
-// 世界书分组列表
-let worldBookGroups = ['默认'];
-
-// 追踪表单是否被修改
-let worldBookFormChanged = false;
-let worldBookOriginalData = {};
-
-// 初始化世界书
-async function initWorldBooks() {
-    try {
-        const savedWorldBooks = await storageDB.getItem('worldBooks');
-        if (savedWorldBooks) {
-            worldBooks = JSON.parse(savedWorldBooks);
-            // 为旧数据添加默认分组
-            worldBooks.forEach(book => {
-                if (!book.group) {
-                    book.group = '默认';
-                }
-            });
-            console.log('世界书已加载:', worldBooks.length, '个条目');
-        } else {
-            worldBooks = [];
-        }
-
-        // 加载分组数据
-        const savedGroups = await storageDB.getItem('worldBookGroups');
-        if (savedGroups) {
-            worldBookGroups = JSON.parse(savedGroups);
-            // 确保有默认分组
-            if (!worldBookGroups.includes('默认')) {
-                worldBookGroups.unshift('默认');
-            }
-        } else {
-            worldBookGroups = ['默认'];
-        }
-    } catch (error) {
-        console.error('加载世界书失败，使用空列表:', error);
-        worldBooks = [];
-        worldBookGroups = ['默认'];
-        // 清除损坏的数据
-        await storageDB.removeItem('worldBooks');
-        await storageDB.removeItem('worldBookGroups');
-    }
-}
-
-// 打开世界书页面
-function openWorldBook() {
-    const worldBookPage = document.getElementById('worldBookPage');
-    if (worldBookPage) {
-        worldBookPage.style.display = 'flex';
-        displayWorldBooks();
-    }
-}
-
-// 关闭世界书页面
-function closeWorldBook() {
-    const worldBookPage = document.getElementById('worldBookPage');
-    if (worldBookPage) {
-        worldBookPage.style.display = 'none';
-    }
-}
-
-// 添加世界书条目
-function addWorldBookItem() {
-    showWorldBookCreateOptions();
-}
-
-// 显示创建世界书选项（手动创建 或 导入文档）
-function showWorldBookCreateOptions() {
-    const overlay = document.createElement('div');
-    overlay.className = 'ios-dialog-overlay';
-    
-    const dialog = document.createElement('div');
-    dialog.className = 'ios-dialog';
-    dialog.style.width = '300px';
-    
-    const titleEl = document.createElement('div');
-    titleEl.className = 'ios-dialog-title';
-    titleEl.textContent = '创建世界书';
-    
-    const buttonsEl = document.createElement('div');
-    buttonsEl.className = 'ios-dialog-buttons vertical';
-    
-    // 手动创建按钮
-    const manualBtn = document.createElement('button');
-    manualBtn.className = 'ios-dialog-button';
-    manualBtn.textContent = '手动创建';
-    manualBtn.onclick = () => {
-        closeDialog();
-        openWorldBookEdit();
-    };
-    
-    // 导入文档按钮
-    const importBtn = document.createElement('button');
-    importBtn.className = 'ios-dialog-button';
-    importBtn.textContent = '导入文档';
-    importBtn.onclick = () => {
-        closeDialog();
-        openWorldBookImport();
-    };
-    
-    // 取消按钮
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'ios-dialog-button';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeDialog();
-    
-    buttonsEl.appendChild(manualBtn);
-    buttonsEl.appendChild(importBtn);
-    buttonsEl.appendChild(cancelBtn);
-    
-    dialog.appendChild(titleEl);
-    dialog.appendChild(buttonsEl);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-    
-    setTimeout(() => overlay.classList.add('show'), 10);
-    
-    function closeDialog() {
-        overlay.classList.remove('show');
-        setTimeout(() => {
-            if (overlay.parentNode) {
-                document.body.removeChild(overlay);
-            }
-        }, 300);
-    }
-}
-
-// 打开世界书导入界面
-function openWorldBookImport() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.txt,.docx,.zip';
-    input.multiple = true;
-    
-    input.onchange = async (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-        
-        try {
-            showToast('正在解析文件...');
-            const parsedEntries = await parseImportedFiles(files);
-            
-            if (parsedEntries.length === 0) {
-                await iosAlert('没有解析到有效内容', '提示');
-                return;
-            }
-            
-            // 显示确认界面
-            showImportConfirmDialog(parsedEntries);
-        } catch (error) {
-            console.error('文件解析失败:', error);
-            await iosAlert('文件解析失败: ' + error.message, '错误');
-        }
-    };
-    
-    input.click();
-}
-
-// 解析导入的文件
-async function parseImportedFiles(files) {
-    const entries = [];
-    
-    for (const file of files) {
-        try {
-            const fileName = file.name;
-            const fileExt = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
-            
-            if (fileExt === '.txt') {
-                const content = await readTextFile(file);
-                if (content.trim()) {
-                    entries.push({
-                        id: Date.now() + Math.random(),
-                        fileName: fileName,
-                        content: content.trim(),
-                        comment: fileName.replace('.txt', ''),
-                        keys: [],
-                        enabled: true,
-                        selected: true
-                    });
-                }
-            } else if (fileExt === '.docx') {
-                const content = await readDocxFile(file);
-                if (content.trim()) {
-                    entries.push({
-                        id: Date.now() + Math.random(),
-                        fileName: fileName,
-                        content: content.trim(),
-                        comment: fileName.replace('.docx', ''),
-                        keys: [],
-                        enabled: true,
-                        selected: true
-                    });
-                }
-            } else if (fileExt === '.zip') {
-                const zipEntries = await readZipFile(file);
-                entries.push(...zipEntries);
-            }
-        } catch (error) {
-            console.error(`解析文件 ${file.name} 失败:`, error);
-        }
-    }
-    
-    return entries;
-}
-
-// 读取TXT文件
-function readTextFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsText(file, 'UTF-8');
-    });
-}
-
-// 读取DOCX文件
-async function readDocxFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const arrayBuffer = e.target.result;
-                const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-                resolve(result.value);
-            } catch (error) {
-                reject(error);
-            }
-        };
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-// 读取ZIP文件
-async function readZipFile(file) {
-    const entries = [];
-    
-    try {
-        const zip = await JSZip.loadAsync(file);
-        
-        for (const [fileName, zipEntry] of Object.entries(zip.files)) {
-            if (zipEntry.dir) continue;
-            
-            const fileExt = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
-            
-            if (fileExt === '.txt') {
-                const content = await zipEntry.async('text');
-                if (content.trim()) {
-                    entries.push({
-                        id: Date.now() + Math.random(),
-                        fileName: fileName,
-                        content: content.trim(),
-                        comment: fileName.replace('.txt', ''),
-                        keys: [],
-                        enabled: true,
-                        selected: true
-                    });
-                }
-            } else if (fileExt === '.docx') {
-                const arrayBuffer = await zipEntry.async('arraybuffer');
-                try {
-                    const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-                    if (result.value.trim()) {
-                        entries.push({
-                            id: Date.now() + Math.random(),
-                            fileName: fileName,
-                            content: result.value.trim(),
-                            comment: fileName.replace('.docx', ''),
-                            keys: [],
-                            enabled: true,
-                            selected: true
-                        });
-                    }
-                } catch (error) {
-                    console.error(`解析ZIP中的DOCX文件 ${fileName} 失败:`, error);
-                }
-            }
-        }
-    } catch (error) {
-        console.error('解析ZIP文件失败:', error);
-        throw error;
-    }
-    
-    return entries;
-}
-
-// 显示导入确认对话框
-function showImportConfirmDialog(entries) {
-    const overlay = document.createElement('div');
-    overlay.className = 'ios-dialog-overlay';
-    overlay.style.zIndex = '10001';
-    
-    const dialog = document.createElement('div');
-    dialog.className = 'ios-dialog';
-    dialog.style.width = '90%';
-    dialog.style.maxWidth = '500px';
-    dialog.style.maxHeight = '80vh';
-    dialog.style.display = 'flex';
-    dialog.style.flexDirection = 'column';
-    
-    const titleEl = document.createElement('div');
-    titleEl.className = 'ios-dialog-title';
-    titleEl.textContent = `确认导入 (${entries.length}个文件)`;
-    
-    const messageEl = document.createElement('div');
-    messageEl.className = 'ios-dialog-message';
-    messageEl.textContent = '请选择要导入的条目：';
-    messageEl.style.marginBottom = '12px';
-    
-    // 全选/取消全选按钮
-    const selectAllDiv = document.createElement('div');
-    selectAllDiv.style.cssText = 'padding: 8px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e5e5;';
-    
-    const selectAllBtn = document.createElement('button');
-    selectAllBtn.textContent = '全选';
-    selectAllBtn.style.cssText = 'padding: 6px 12px; font-size: 13px; color: #007aff; background: transparent; border: 1px solid #007aff; border-radius: 6px; cursor: pointer;';
-    selectAllBtn.onclick = () => {
-        entries.forEach(e => e.selected = true);
-        renderEntryList();
-    };
-    
-    const deselectAllBtn = document.createElement('button');
-    deselectAllBtn.textContent = '取消全选';
-    deselectAllBtn.style.cssText = 'padding: 6px 12px; font-size: 13px; color: #666; background: transparent; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;';
-    deselectAllBtn.onclick = () => {
-        entries.forEach(e => e.selected = false);
-        renderEntryList();
-    };
-    
-    selectAllDiv.appendChild(selectAllBtn);
-    selectAllDiv.appendChild(deselectAllBtn);
-    
-    // 条目列表容器
-    const listContainer = document.createElement('div');
-    listContainer.style.cssText = 'flex: 1; overflow-y: auto; padding: 12px 16px; max-height: 400px;';
-    
-    function renderEntryList() {
-        listContainer.innerHTML = entries.map((entry, index) => {
-            const preview = entry.content.substring(0, 100) + (entry.content.length > 100 ? '...' : '');
-            return `
-                <div style="background: ${entry.selected ? '#f0f8ff' : '#f8f8f8'}; border: 2px solid ${entry.selected ? '#007aff' : '#e5e5e5'}; border-radius: 10px; padding: 12px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s;" onclick="toggleEntrySelection(${index})">
-                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                        <input type="checkbox" ${entry.selected ? 'checked' : ''} style="width: 18px; height: 18px; margin-right: 10px; cursor: pointer;" onclick="event.stopPropagation(); toggleEntrySelection(${index})">
-                        <div style="flex: 1;">
-                            <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px;">${escapeHtml(entry.fileName)}</div>
-                            <div style="font-size: 12px; color: #666;">${entry.content.length} 字符</div>
-                        </div>
-                    </div>
-                    <div style="font-size: 12px; color: #999; line-height: 1.4; background: white; padding: 8px; border-radius: 6px;">${escapeHtml(preview)}</div>
-                </div>
-            `;
-        }).join('');
-    }
-    
-    window.toggleEntrySelection = (index) => {
-        entries[index].selected = !entries[index].selected;
-        renderEntryList();
-    };
-    
-    renderEntryList();
-    
-    const buttonsEl = document.createElement('div');
-    buttonsEl.className = 'ios-dialog-buttons';
-    buttonsEl.style.borderTop = '1px solid #e5e5e5';
-    
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'ios-dialog-button';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeDialog();
-    
-    const confirmBtn = document.createElement('button');
-    confirmBtn.className = 'ios-dialog-button primary';
-    confirmBtn.textContent = '确认导入';
-    confirmBtn.onclick = () => {
-        const selectedEntries = entries.filter(e => e.selected);
-        if (selectedEntries.length === 0) {
-            showToast('请至少选择一个条目');
-            return;
-        }
-        closeDialog();
-        openWorldBookEditWithImportedEntries(selectedEntries);
-    };
-    
-    buttonsEl.appendChild(cancelBtn);
-    buttonsEl.appendChild(confirmBtn);
-    
-    dialog.appendChild(titleEl);
-    dialog.appendChild(messageEl);
-    dialog.appendChild(selectAllDiv);
-    dialog.appendChild(listContainer);
-    dialog.appendChild(buttonsEl);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-    
-    setTimeout(() => overlay.classList.add('show'), 10);
-    
-    function closeDialog() {
-        overlay.classList.remove('show');
-        setTimeout(() => {
-            if (overlay.parentNode) {
-                document.body.removeChild(overlay);
-            }
-            delete window.toggleEntrySelection;
-        }, 300);
-    }
-}
-
-// 打开世界书编辑界面并填充导入的条目
-function openWorldBookEditWithImportedEntries(importedEntries) {
-    const modal = document.getElementById('worldBookEditModal');
-    if (modal) {
-        modal.style.display = 'flex';
-        
-        // 更新分组下拉框选项
-        updateGroupSelect();
-        
-        // 重置修改标记
-        worldBookFormChanged = false;
-        
-        // 清空表单
-        document.getElementById('worldBookName').value = '';
-        document.getElementById('worldBookGlobal').checked = false;
-        document.getElementById('worldBookPosition').value = 'middle';
-        document.getElementById('worldBookGroup').value = '默认';
-        delete document.getElementById('worldBookEditModal').dataset.editId;
-        
-        // 填充导入的条目
-        window._tempWorldBookEntries = importedEntries.map(entry => ({
-            id: entry.id,
-            keys: entry.keys || [],
-            content: entry.content,
-            comment: entry.comment,
-            enabled: entry.enabled !== false
-        }));
-        
-        renderWorldBookEntriesEditable();
-        
-        // 保存原始数据(空)
-        worldBookOriginalData = {
-            name: '',
-            content: '',
-            entries: null,
-            isGlobal: false,
-            position: 'middle',
-            group: '默认'
-        };
-        
-        // 添加输入监听
-        setupWorldBookFormListeners();
-        
-        showToast(`已导入 ${importedEntries.length} 个条目`);
-    }
-}
-
-// 打开世界书编辑弹窗
-function openWorldBookEdit(bookId = null) {
-    const modal = document.getElementById('worldBookEditModal');
-    if (modal) {
-        modal.style.display = 'flex';
-        
-        // 更新分组下拉框选项
-        updateGroupSelect();
-        
-        // 重置修改标记
-        worldBookFormChanged = false;
-        
-        // 初始化临时条目数组
-        window._tempWorldBookEntries = [];
-        
-        if (bookId !== null) {
-            // 编辑模式 - 加载现有世界书数据
-            const book = worldBooks.find(b => b.id === bookId);
-            if (book) {
-                document.getElementById('worldBookName').value = book.name;
-                document.getElementById('worldBookGlobal').checked = book.isGlobal;
-                document.getElementById('worldBookPosition').value = book.position;
-                document.getElementById('worldBookGroup').value = book.group || '默认';
-                document.getElementById('worldBookEditModal').dataset.editId = bookId;
-                
-                // 统一用条目模式
-                if (book.entries && book.entries.length > 0) {
-                    window._tempWorldBookEntries = JSON.parse(JSON.stringify(book.entries));
-                } else if (book.content) {
-                    // 兼容旧数据：把content转成一个条目
-                    window._tempWorldBookEntries = [{
-                        id: Date.now(),
-                        keys: [],
-                        content: book.content,
-                        comment: book.name || '默认条目',
-                        enabled: true
-                    }];
-                }
-                
-                renderWorldBookEntriesEditable();
-                
-                // 保存原始数据
-                worldBookOriginalData = {
-                    name: book.name,
-                    content: book.content,
-                    entries: book.entries,
-                    isGlobal: book.isGlobal,
-                    position: book.position,
-                    group: book.group || '默认'
-                };
-            }
-        } else {
-            // 新建模式 - 清空表单
-            document.getElementById('worldBookName').value = '';
-            document.getElementById('worldBookContentInput').value = '';
-            document.getElementById('worldBookGlobal').checked = false;
-            document.getElementById('worldBookPosition').value = 'middle';
-            document.getElementById('worldBookGroup').value = '默认';
-            delete document.getElementById('worldBookEditModal').dataset.editId;
-            
-            window._tempWorldBookEntries = [];
-            renderWorldBookEntriesEditable();
-            
-            // 保存原始数据(空)
-            worldBookOriginalData = {
-                name: '',
-                content: '',
-                entries: null,
-                isGlobal: false,
-                position: 'middle',
-                group: '默认'
-            };
-        }
-        
-        // 添加输入监听
-        setupWorldBookFormListeners();
-    }
-}
-
-// 渲染世界书条目列表
-// 渲染可编辑的世界书条目列表
-function renderWorldBookEntriesEditable() {
-    const container = document.getElementById('worldBookEntriesContainer');
-    if (!container) return;
-    
-    const entries = window._tempWorldBookEntries || [];
-    
-    if (entries.length === 0) {
-        container.innerHTML = `
-            <div style="text-align: center; color: #999; padding: 30px 0; font-size: 13px;">
-                暂无条目，点击上方"添加条目"开始创建
-            </div>
-        `;
-        return;
-    }
-    
-    let html = `
-        <div style="font-size: 12px; color: #666; margin-bottom: 12px;">
-            共 ${entries.length} 个条目，可单独启用或关闭
-        </div>
-    `;
-    
-    entries.forEach((entry, index) => {
-        const isEnabled = entry.enabled !== false;
-        const borderColor = isEnabled ? '#d4edda' : '#e5e5e5';
-        const statusColor = isEnabled ? '#28a745' : '#999';
-        const statusText = isEnabled ? '已启用' : '已禁用';
-        
-        html += `
-            <div class="wb-entry-card" style="background: #f8f9fa; border: 2px solid ${borderColor}; border-radius: 12px; padding: 14px; margin-bottom: 12px; transition: border-color 0.2s;">
-                <!-- 标题行 -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <input type="text" class="form-input" value="${escapeHtml(entry.comment || '')}" 
-                           placeholder="条目标题" 
-                           onchange="updateEntryField(${index}, 'comment', this.value)"
-                           style="flex: 1; padding: 8px 12px; font-size: 14px; font-weight: 600; margin-right: 8px;">
-                    <label style="display: flex; align-items: center; cursor: pointer; user-select: none; flex-shrink: 0;">
-                        <input type="checkbox" 
-                               onchange="toggleTempEntry(${index})" 
-                               ${isEnabled ? 'checked' : ''}
-                               style="width: 18px; height: 18px; margin-right: 6px; cursor: pointer;">
-                        <span style="font-size: 12px; color: ${statusColor}; font-weight: 500; white-space: nowrap;">${statusText}</span>
-                    </label>
-                </div>
-                <!-- 关键词 -->
-                <div style="margin-bottom: 8px;">
-                    <input type="text" class="form-input" value="${escapeHtml((entry.keys || []).join(', '))}" 
-                           placeholder="关键词（逗号分隔，可选）" 
-                           onchange="updateEntryKeys(${index}, this.value)"
-                           style="padding: 8px 12px; font-size: 13px;">
-                </div>
-                <!-- 内容 -->
-                <div style="margin-bottom: 8px;">
-                    <textarea class="form-input" placeholder="条目内容" rows="3" 
-                              onchange="updateEntryField(${index}, 'content', this.value)"
-                              style="resize: vertical; min-height: 60px; font-size: 13px; line-height: 1.5;">${escapeHtml(entry.content || '')}</textarea>
-                </div>
-                <!-- 删除按钮 -->
-                <div style="text-align: right;">
-                    <button onclick="deleteWorldBookEntry(${index})" 
-                            style="padding: 6px 14px; font-size: 12px; color: #dc3545; background: rgba(220,53,69,0.08); border: 1px solid rgba(220,53,69,0.2); border-radius: 6px; cursor: pointer;">
-                        删除条目
-                    </button>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// 渲染只读世界书条目列表（用于查看模式）
-function renderWorldBookEntries(entries) {
-    window._tempWorldBookEntries = JSON.parse(JSON.stringify(entries));
-    renderWorldBookEntriesEditable();
-}
-
-// 隐藏世界书条目列表（不再需要，保留空函数兼容）
-function hideWorldBookEntries() {}
-
-// 切换临时条目的启用状态
-function toggleTempEntry(entryIndex) {
-    if (window._tempWorldBookEntries && window._tempWorldBookEntries[entryIndex]) {
-        window._tempWorldBookEntries[entryIndex].enabled = !window._tempWorldBookEntries[entryIndex].enabled;
-        markWorldBookFormChanged();
-        renderWorldBookEntriesEditable();
-    }
-}
-
-// 切换世界书条目的启用状态（兼容旧调用）
-function toggleWorldBookEntry(entryIndex) {
-    toggleTempEntry(entryIndex);
-}
-
-// 添加新条目
-function addWorldBookEntry() {
-    if (!window._tempWorldBookEntries) {
-        window._tempWorldBookEntries = [];
-    }
-    window._tempWorldBookEntries.push({
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        keys: [],
-        content: '',
-        comment: '',
-        enabled: true
-    });
-    markWorldBookFormChanged();
-    renderWorldBookEntriesEditable();
-    
-    // 滚动到底部让用户看到新条目
-    setTimeout(() => {
-        const container = document.getElementById('worldBookEntriesContainer');
-        if (container) {
-            const lastCard = container.querySelector('.wb-entry-card:last-child');
-            if (lastCard) lastCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    }, 100);
-}
-
-// 删除条目
-async function deleteWorldBookEntry(entryIndex) {
-    const confirmed = await iosConfirm('确定要删除这个条目吗？', '删除条目');
-    if (!confirmed) return;
-    
-    if (window._tempWorldBookEntries) {
-        window._tempWorldBookEntries.splice(entryIndex, 1);
-        markWorldBookFormChanged();
-        renderWorldBookEntriesEditable();
-    }
-}
-
-// 更新条目字段
-function updateEntryField(entryIndex, field, value) {
-    if (window._tempWorldBookEntries && window._tempWorldBookEntries[entryIndex]) {
-        window._tempWorldBookEntries[entryIndex][field] = value;
-        markWorldBookFormChanged();
-    }
-}
-
-// 更新条目关键词
-function updateEntryKeys(entryIndex, value) {
-    if (window._tempWorldBookEntries && window._tempWorldBookEntries[entryIndex]) {
-        window._tempWorldBookEntries[entryIndex].keys = value.split(',').map(k => k.trim()).filter(k => k);
-        markWorldBookFormChanged();
-    }
-}
-
-// 设置表单输入监听
-function setupWorldBookFormListeners() {
-    const nameInput = document.getElementById('worldBookName');
-    const contentInput = document.getElementById('worldBookContentInput');
-    const globalCheckbox = document.getElementById('worldBookGlobal');
-    const positionSelect = document.getElementById('worldBookPosition');
-    const groupSelect = document.getElementById('worldBookGroup');
-    
-    // 移除旧的监听器
-    nameInput.removeEventListener('input', markWorldBookFormChanged);
-    contentInput.removeEventListener('input', markWorldBookFormChanged);
-    globalCheckbox.removeEventListener('change', markWorldBookFormChanged);
-    positionSelect.removeEventListener('change', markWorldBookFormChanged);
-    groupSelect.removeEventListener('change', markWorldBookFormChanged);
-    
-    // 添加新的监听器
-    nameInput.addEventListener('input', markWorldBookFormChanged);
-    contentInput.addEventListener('input', markWorldBookFormChanged);
-    globalCheckbox.addEventListener('change', markWorldBookFormChanged);
-    positionSelect.addEventListener('change', markWorldBookFormChanged);
-    groupSelect.addEventListener('change', markWorldBookFormChanged);
-}
-
-// 标记表单已修改
-function markWorldBookFormChanged() {
-    worldBookFormChanged = true;
-}
-
-// 关闭世界书编辑弹窗
-async function closeWorldBookEdit() {
-    // 检查是否有未保存的更改
-    if (worldBookFormChanged) {
-        const userConfirmed = await showCustomConfirm(
-            '提示',
-            '你还没有保存哦，是否确定要离开？\n\n点击"确定"放弃修改并返回\n点击"取消"继续编辑'
-        );
-        
-        if (!userConfirmed) {
-            // 用户选择取消，继续编辑
-            return;
-        }
-    }
-    
-    // 关闭弹窗
-    const modal = document.getElementById('worldBookEditModal');
-    if (modal) {
-        modal.style.display = 'none';
-        // 重置修改标记
-        worldBookFormChanged = false;
-        worldBookOriginalData = {};
-    }
-}
-
-// 保存世界书
-async function saveWorldBook() {
-    const name = document.getElementById('worldBookName').value.trim();
-    const isGlobal = document.getElementById('worldBookGlobal').checked;
-    const position = document.getElementById('worldBookPosition').value;
-    const group = document.getElementById('worldBookGroup').value;
-    
-    // 验证
-    if (!name) {
-        alert('请输入世界书名字！');
-        return;
-    }
-    
-    const entries = window._tempWorldBookEntries || [];
-    
-    // 过滤掉完全空的条目
-    const validEntries = entries.filter(e => (e.content && e.content.trim()) || (e.comment && e.comment.trim()));
-    
-    if (validEntries.length === 0) {
-        alert('请至少添加一个有内容的条目！');
-        return;
-    }
-    
-    const modal = document.getElementById('worldBookEditModal');
-    const editId = modal.dataset.editId;
-    
-    if (editId) {
-        // 编辑现有世界书
-        const index = worldBooks.findIndex(b => b.id === parseInt(editId));
-        if (index !== -1) {
-            const book = worldBooks[index];
-            worldBooks[index] = {
-                ...book,
-                name,
-                content: '', // 清空旧的content字段
-                entries: validEntries,
-                isGlobal,
-                position,
-                group,
-                updatedAt: Date.now()
-            };
-        }
-    } else {
-        // 创建新世界书
-        const newBook = {
-            id: Date.now(),
-            name,
-            content: '',
-            entries: validEntries,
-            isGlobal,
-            position,
-            group,
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-        };
-        worldBooks.push(newBook);
-    }
-    
-    try {
-        // 保存到数据库
-        await storageDB.setItem('worldBooks', JSON.stringify(worldBooks));
-        
-        // 重置修改标记
-        worldBookFormChanged = false;
-        window._tempWorldBookEntries = [];
-        
-        // 显示成功提示
-        alert('世界书保存成功！');
-        
-        // 关闭弹窗并刷新列表
-        closeWorldBookEdit();
-        displayWorldBooks();
-        
-        console.log('世界书已保存，当前共有', worldBooks.length, '个条目');
-    } catch (error) {
-        console.error('保存世界书失败:', error);
-        alert('保存失败，请重试！');
-    }
-}
-
-// 显示世界书列表
-function displayWorldBooks() {
-    const container = document.getElementById('worldBookContent');
-    console.log('displayWorldBooks 被调用, 容器:', container, '世界书数量:', worldBooks.length);
-    
-    if (!container) {
-        console.error('找不到世界书容器元素!');
-        return;
-    }
-    
-    if (worldBooks.length === 0) {
-        container.innerHTML = `
-            <div class="world-book-empty">
-                <div class="world-book-empty-text">暂无内容</div>
-            </div>
-        `;
-        return;
-    }
-    
-    // 获取当前选中的分组筛选
-    const filterSelect = document.getElementById('worldBookGroupFilter');
-    const selectedGroup = filterSelect ? filterSelect.value : 'all';
-    
-    let html = '<div style="padding: 15px;">';
-    let hasContent = false;
-    
-    // 按分组显示世界书
-    worldBookGroups.forEach(group => {
-        // 如果选择了特定分组，只显示该分组
-        if (selectedGroup !== 'all' && selectedGroup !== group) {
-            return;
-        }
-        
-        const booksInGroup = worldBooks.filter(book => (book.group || '默认') === group);
-        
-        if (booksInGroup.length > 0) {
-            hasContent = true;
-            
-            // 分组标题
-            html += `
-                <div style="font-size: 14px; font-weight: 600; color: #666; padding: 10px 5px; margin-top: 10px; border-bottom: 2px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between;">
-                    <span>${group}</span>
-                    <span style="font-size: 12px; color: #999; font-weight: normal;">${booksInGroup.length} 个</span>
-                </div>
-            `;
-            
-            // 分组内的世界书
-            booksInGroup.forEach(book => {
-                const globalBadge = book.isGlobal ? '<span style="background: #28a745; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px;">全局</span>' : '';
-                const positionText = book.position === 'before' ? '前' : book.position === 'middle' ? '中' : '后';
-                
-                // 判断是条目模式还是文本模式
-                let contentPreview = '';
-                if (book.entries && book.entries.length > 0) {
-                    // 条目模式：显示条目数量和启用状态
-                    const enabledCount = book.entries.filter(e => e.enabled !== false).length;
-                    contentPreview = `包含 ${book.entries.length} 个条目，已启用 ${enabledCount} 个`;
-                } else if (book.content) {
-                    // 文本模式：显示内容预览
-                    contentPreview = book.content;
-                } else {
-                    contentPreview = '暂无内容';
-                }
-                
-                html += `
-                    <div style="background: white; border: 1px solid #e5e5e5; border-radius: 12px; padding: 15px; margin-bottom: 12px; margin-top: 8px; cursor: pointer; transition: all 0.2s;" 
-                         onclick="openWorldBookEdit(${book.id})"
-                         onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.1)'"
-                         onmouseout="this.style.boxShadow='none'">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <div style="font-size: 16px; font-weight: 600; color: #333;">
-                                ${book.name}${globalBadge}
-                            </div>
-                            <div style="font-size: 12px; color: #999;">注入: ${positionText}</div>
-                        </div>
-                        <div style="font-size: 14px; color: #666; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-                            ${contentPreview}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-    });
-    
-    html += '</div>';
-    
-    // 如果筛选后没有内容，显示空状态
-    if (!hasContent) {
-        container.innerHTML = `
-            <div class="world-book-empty">
-                <div class="world-book-empty-text">该分组暂无内容</div>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = html;
-    console.log('世界书列表已更新, HTML长度:', html.length);
-}
-
-// 打开删除世界书弹窗
-function openWorldBookDeleteModal() {
-    const modal = document.getElementById('worldBookDeleteModal');
-    if (modal) {
-        modal.style.display = 'flex';
-        displayWorldBookDeleteList();
-    }
-}
-
-// 关闭删除世界书弹窗
-function closeWorldBookDeleteModal() {
-    const modal = document.getElementById('worldBookDeleteModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-// 显示删除列表
-function displayWorldBookDeleteList() {
-    const container = document.getElementById('worldBookDeleteList');
-    if (!container) return;
-    
-    if (worldBooks.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; padding: 30px;">暂无世界书</div>';
-        return;
-    }
-    
-    let html = '';
-    worldBooks.forEach(book => {
-        const globalBadge = book.isGlobal ? '<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 6px;">全局</span>' : '';
-        
-        // 判断是条目模式还是文本模式
-        let contentPreview = '';
-        if (book.entries && book.entries.length > 0) {
-            const enabledCount = book.entries.filter(e => e.enabled !== false).length;
-            contentPreview = `包含 ${book.entries.length} 个条目，已启用 ${enabledCount} 个`;
-        } else if (book.content) {
-            contentPreview = book.content;
-        } else {
-            contentPreview = '暂无内容';
-        }
-        
-        html += `
-            <div style="display: flex; align-items: center; padding: 12px; background: white; border-radius: 8px; margin-bottom: 8px; border: 2px solid #e5e5e5; transition: all 0.2s;"
-                 onmouseover="this.style.borderColor='#007bff'"
-                 onmouseout="this.style.borderColor='#e5e5e5'">
-                <input type="checkbox" class="world-book-checkbox" data-book-id="${book.id}" 
-                       style="width: 18px; height: 18px; margin-right: 12px; cursor: pointer;">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px;">
-                        ${book.name}${globalBadge}
-                    </div>
-                    <div style="font-size: 12px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                        ${contentPreview}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// 全选/取消全选
-function toggleSelectAllWorldBooks() {
-    const checkboxes = document.querySelectorAll('.world-book-checkbox');
-    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    
-    checkboxes.forEach(cb => {
-        cb.checked = !allChecked;
-    });
-}
-
-// 确认删除世界书
-async function confirmDeleteWorldBooks() {
-    const checkboxes = document.querySelectorAll('.world-book-checkbox:checked');
-    
-    if (checkboxes.length === 0) {
-        alert('请至少选择一个要删除的世界书！');
-        return;
-    }
-    
-    const confirmed = await showCustomConfirm(
-        '确认删除',
-        `确定要删除选中的 ${checkboxes.length} 个世界书吗？\n此操作无法撤销！`
-    );
-    
-    if (!confirmed) return;
-    
-    // 获取要删除的ID列表
-    const idsToDelete = Array.from(checkboxes).map(cb => parseInt(cb.dataset.bookId));
-    
-    // 删除选中的世界书
-    worldBooks = worldBooks.filter(book => !idsToDelete.includes(book.id));
-    
-    try {
-        // 保存到数据库
-        await storageDB.setItem('worldBooks', JSON.stringify(worldBooks));
-        
-        // 显示成功提示
-        alert(`成功删除 ${idsToDelete.length} 个世界书！`);
-        
-        // 关闭弹窗并刷新列表
-        closeWorldBookDeleteModal();
-        displayWorldBooks();
-        
-        console.log('世界书已删除，当前共有', worldBooks.length, '个条目');
-    } catch (error) {
-        console.error('删除世界书失败:', error);
-        alert('删除失败，请重试！');
-    }
-}
-
-// 删除单个世界书
-function deleteWorldBook(bookId) {
-    if (confirm('确定要删除这个世界书吗？')) {
-        worldBooks = worldBooks.filter(b => b.id !== bookId);
-        storageDB.setItem('worldBooks', JSON.stringify(worldBooks));
-        displayWorldBooks();
-    }
-}
-
-// 获取世界书的有效内容（只包含启用的条目）
-function getWorldBookContent(book) {
-    if (!book) return '';
-    
-    // 如果有条目，只返回启用的条目
-    if (book.entries && book.entries.length > 0) {
-        const enabledEntries = book.entries.filter(entry => entry.enabled !== false);
-        
-        if (enabledEntries.length === 0) {
-            return ''; // 所有条目都被禁用
-        }
-        
-        // 合并启用的条目
-        let combinedContent = '';
-        enabledEntries.forEach((entry, index) => {
-            if (entry.keys && entry.keys.length > 0) {
-                combinedContent += `[关键词: ${entry.keys.join(', ')}]\n`;
-            }
-            if (entry.comment) {
-                combinedContent += `# ${entry.comment}\n`;
-            }
-            combinedContent += `${entry.content}\n`;
-            if (index < enabledEntries.length - 1) {
-                combinedContent += '\n---\n\n';
-            }
-        });
-        
-        return combinedContent;
-    }
-    
-    // 没有条目，返回原始内容
-    return book.content || '';
-}
-
-// 获取所有全局世界书
-function getGlobalWorldBooks() {
-    return worldBooks.filter(book => book.isGlobal);
-}
-
-// 根据位置获取世界书
-function getWorldBooksByPosition(position) {
-    return worldBooks.filter(book => book.position === position);
-}
-
-// ========== 世界书分组管理 ==========
-
-// 更新分组下拉框选项
-function updateGroupSelect() {
-    const groupSelect = document.getElementById('worldBookGroup');
-    if (groupSelect) {
-        groupSelect.innerHTML = '';
-        worldBookGroups.forEach(group => {
-            const option = document.createElement('option');
-            option.value = group;
-            option.textContent = group;
-            groupSelect.appendChild(option);
-        });
-    }
-}
-
-// 打开分组管理弹窗
-function openWorldBookGroupModal() {
-    const modal = document.getElementById('worldBookGroupModal');
-    if (modal) {
-        modal.style.display = 'flex';
-        updateWorldBookGroupFilter();
-        updateTargetGroupSelect();
-        displayWorldBookMoveList();
-        displayGroupGlobalList();
-        displayGroupsList();
-    }
-}
-
-// 关闭分组管理弹窗
-function closeWorldBookGroupModal() {
-    const modal = document.getElementById('worldBookGroupModal');
-    if (modal) {
-        modal.style.display = 'none';
-        // 清空输入框
-        document.getElementById('newGroupName').value = '';
-    }
-}
-
-// 创建新分组
-async function createNewGroup() {
-    const groupName = document.getElementById('newGroupName').value.trim();
-    
-    if (!groupName) {
-        alert('请输入分组名称！');
-        return;
-    }
-    
-    if (worldBookGroups.includes(groupName)) {
-        alert('该分组已存在！');
-        return;
-    }
-    
-    if (groupName === '默认') {
-        alert('不能创建名为"默认"的分组！');
-        return;
-    }
-    
-    // 添加新分组
-    worldBookGroups.push(groupName);
-    
-    try {
-        // 保存到数据库
-        await storageDB.setItem('worldBookGroups', JSON.stringify(worldBookGroups));
-        
-        // 清空输入框
-        document.getElementById('newGroupName').value = '';
-        
-        // 刷新界面
-        updateTargetGroupSelect();
-        updateWorldBookGroupFilter();
-        displayGroupGlobalList();
-        displayGroupsList();
-        
-        alert('分组创建成功！');
-    } catch (error) {
-        console.error('创建分组失败:', error);
-        alert('创建失败，请重试！');
-        // 回滚
-        worldBookGroups = worldBookGroups.filter(g => g !== groupName);
-    }
-}
-
-// 更新目标分组下拉框
-function updateTargetGroupSelect() {
-    const targetSelect = document.getElementById('targetGroupSelect');
-    if (targetSelect) {
-        targetSelect.innerHTML = '';
-        worldBookGroups.forEach(group => {
-            const option = document.createElement('option');
-            option.value = group;
-            option.textContent = group;
-            targetSelect.appendChild(option);
-        });
-    }
-}
-
-// 显示世界书移动列表
-function displayWorldBookMoveList() {
-    const container = document.getElementById('worldBookMoveList');
-    if (!container) return;
-    
-    if (worldBooks.length === 0) {
-        container.innerHTML = '<div style="text-align: center; color: #999; padding: 30px;">暂无世界书</div>';
-        return;
-    }
-    
-    let html = '';
-    worldBooks.forEach(book => {
-        const globalBadge = book.isGlobal ? '<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 6px;">全局</span>' : '';
-        const groupBadge = `<span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 6px;">${book.group || '默认'}</span>`;
-        
-        html += `
-            <div style="display: flex; align-items: center; padding: 12px; background: white; border-radius: 8px; margin-bottom: 8px; border: 2px solid #e5e5e5; transition: all 0.2s;"
-                 onmouseover="this.style.borderColor='#007bff'"
-                 onmouseout="this.style.borderColor='#e5e5e5'">
-                <input type="checkbox" class="world-book-move-checkbox" data-book-id="${book.id}" 
-                       style="width: 18px; height: 18px; margin-right: 12px; cursor: pointer;">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px;">
-                        ${book.name}${globalBadge}${groupBadge}
-                    </div>
-                    <div style="font-size: 12px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                        ${book.content}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// 全选/取消全选（用于移动）
-function toggleSelectAllForMove() {
-    const checkboxes = document.querySelectorAll('.world-book-move-checkbox');
-    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    
-    checkboxes.forEach(cb => {
-        cb.checked = !allChecked;
-    });
-}
-
-// 确认移动到分组
-async function confirmMoveToGroup() {
-    const checkboxes = document.querySelectorAll('.world-book-move-checkbox:checked');
-    const targetGroup = document.getElementById('targetGroupSelect').value;
-    
-    if (checkboxes.length === 0) {
-        alert('请至少选择一个要移动的世界书！');
-        return;
-    }
-    
-    const confirmed = await showCustomConfirm(
-        '确认移动',
-        `确定要将选中的 ${checkboxes.length} 个世界书移动到"${targetGroup}"分组吗？`
-    );
-    
-    if (!confirmed) return;
-    
-    // 获取要移动的ID列表
-    const idsToMove = Array.from(checkboxes).map(cb => parseInt(cb.dataset.bookId));
-    
-    // 更新分组
-    worldBooks.forEach(book => {
-        if (idsToMove.includes(book.id)) {
-            book.group = targetGroup;
-        }
-    });
-    
-    try {
-        // 保存到数据库
-        await storageDB.setItem('worldBooks', JSON.stringify(worldBooks));
-        
-        // 显示成功提示
-        alert(`成功移动 ${idsToMove.length} 个世界书到"${targetGroup}"分组！`);
-        
-        // 刷新列表
-        displayWorldBookMoveList();
-        displayWorldBooks();
-        
-    } catch (error) {
-        console.error('移动世界书失败:', error);
-        alert('移动失败，请重试！');
-    }
-}
-
-// 显示分组列表
-function displayGroupsList() {
-    const container = document.getElementById('groupsList');
-    if (!container) return;
-    
-    let html = '';
-    worldBookGroups.forEach(group => {
-        const count = worldBooks.filter(book => (book.group || '默认') === group).length;
-        const isDefault = group === '默认';
-        
-        html += `
-            <div style="padding: 12px; background: white; border-radius: 8px; margin-bottom: 8px; border: 2px solid #e5e5e5;">
-                <div style="font-size: 14px; font-weight: 600; color: #333;">
-                    ${group}
-                    ${isDefault ? '<span style="color: #999; font-size: 12px; font-weight: normal; margin-left: 8px;">(系统分组)</span>' : ''}
-                </div>
-                <div style="font-size: 12px; color: #999; margin-top: 4px;">
-                    ${count} 个世界书
-                </div>
-                ${!isDefault ? `
-                    <button class="btn-primary" onclick="deleteGroup('${group}')" style="background: #dc3545; padding: 8px 12px; font-size: 14px; margin-top: 10px; width: 100%;">
-                        删除
-                    </button>
-                ` : ''}
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// 删除分组
-async function deleteGroup(groupName) {
-    if (groupName === '默认') {
-        alert('不能删除默认分组！');
-        return;
-    }
-    
-    const booksInGroup = worldBooks.filter(book => book.group === groupName);
-    
-    let confirmMessage = `确定要删除"${groupName}"分组吗？`;
-    if (booksInGroup.length > 0) {
-        confirmMessage += `\n\n该分组中有 ${booksInGroup.length} 个世界书，删除后将移动到"默认"分组。`;
-    }
-    
-    const confirmed = await showCustomConfirm('确认删除', confirmMessage);
-    
-    if (!confirmed) return;
-    
-    // 将该分组的世界书移动到默认分组
-    worldBooks.forEach(book => {
-        if (book.group === groupName) {
-            book.group = '默认';
-        }
-    });
-    
-    // 删除分组
-    worldBookGroups = worldBookGroups.filter(g => g !== groupName);
-    
-    try {
-        // 保存到数据库
-        await storageDB.setItem('worldBookGroups', JSON.stringify(worldBookGroups));
-        await storageDB.setItem('worldBooks', JSON.stringify(worldBooks));
-        
-        // 刷新界面
-        updateTargetGroupSelect();
-        updateWorldBookGroupFilter();
-        displayGroupGlobalList();
-        displayGroupsList();
-        displayWorldBookMoveList();
-        displayWorldBooks();
-        
-        alert('分组删除成功！');
-    } catch (error) {
-        console.error('删除分组失败:', error);
-        alert('删除失败，请重试！');
-    }
-}
-
-// 更新世界书分组筛选器
-function updateWorldBookGroupFilter() {
-    const filterSelect = document.getElementById('worldBookGroupFilter');
-    if (filterSelect) {
-        const currentValue = filterSelect.value || 'all';
-        filterSelect.innerHTML = '<option value="all">全部分组</option>';
-        worldBookGroups.forEach(group => {
-            const option = document.createElement('option');
-            option.value = group;
-            option.textContent = group;
-            filterSelect.appendChild(option);
-        });
-        // 恢复之前的选择
-        if (filterSelect.querySelector(`option[value="${currentValue}"]`)) {
-            filterSelect.value = currentValue;
-        }
-    }
-}
-
-// 根据分组筛选世界书
-function filterWorldBooksByGroup() {
-    displayWorldBooks();
-}
-
-// 显示分组全局设置列表
-function displayGroupGlobalList() {
-    const container = document.getElementById('groupGlobalList');
-    if (!container) return;
-    
-    let html = '';
-    worldBookGroups.forEach(group => {
-        const booksInGroup = worldBooks.filter(book => (book.group || '默认') === group);
-        const globalCount = booksInGroup.filter(book => book.isGlobal).length;
-        const allGlobal = booksInGroup.length > 0 && globalCount === booksInGroup.length;
-        
-        html += `
-            <div style="padding: 12px; background: white; border-radius: 8px; margin-bottom: 8px; border: 2px solid #e5e5e5;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div style="font-size: 14px; font-weight: 600; color: #333;">
-                            ${group}
-                        </div>
-                        <div style="font-size: 12px; color: #999; margin-top: 4px;">
-                            ${booksInGroup.length} 个世界书，其中 ${globalCount} 个已是全局
-                        </div>
-                    </div>
-                    <label class="ios-switch">
-                        <input type="checkbox" ${allGlobal ? 'checked' : ''} onchange="toggleGroupGlobal('${group}', this.checked)">
-                        <span class="ios-slider"></span>
-                    </label>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// 切换分组全局状态
-async function toggleGroupGlobal(groupName, isGlobal) {
-    const booksInGroup = worldBooks.filter(book => (book.group || '默认') === groupName);
-    
-    if (booksInGroup.length === 0) {
-        alert('该分组没有世界书！');
-        displayGroupGlobalList(); // 刷新列表，恢复开关状态
-        return;
-    }
-    
-    const actionText = isGlobal ? '设置为全局' : '取消全局';
-    const confirmed = await showCustomConfirm(
-        '确认操作',
-        `确定要将"${groupName}"分组下的 ${booksInGroup.length} 个世界书${actionText}吗？`
-    );
-    
-    if (!confirmed) {
-        displayGroupGlobalList(); // 刷新列表，恢复开关状态
-        return;
-    }
-    
-    // 更新分组内所有世界书的全局状态
-    worldBooks.forEach(book => {
-        if ((book.group || '默认') === groupName) {
-            book.isGlobal = isGlobal;
-        }
-    });
-    
-    try {
-        // 保存到数据库
-        await storageDB.setItem('worldBooks', JSON.stringify(worldBooks));
-        
-        // 刷新界面
-        displayGroupGlobalList();
-        displayWorldBookMoveList();
-        displayWorldBooks();
-        
-        alert(`成功将"${groupName}"分组${actionText}！`);
-    } catch (error) {
-        console.error('更新分组全局状态失败:', error);
-        alert('操作失败，请重试！');
-        displayGroupGlobalList(); // 刷新列表，恢复开关状态
-    }
-}
-
-// ========== 音乐歌词功能 ==========
-
-// 歌词数据结构
-let currentLyrics = []; // 当前歌曲的歌词数组 [{time: 秒数, text: 歌词文本}]
-let currentLyricIndex = -1; // 当前显示的歌词索引
-
-// 解析LRC格式歌词
-function parseLyric(lyricText) {
-    if (!lyricText || typeof lyricText !== 'string') {
-        return [];
-    }
-    
-    const lyrics = [];
-    const lines = lyricText.split('\n');
-    
-    // LRC时间标签格式：[mm:ss.xx] 或 [mm:ss]
-    const timeRegex = /\[(\d{2}):(\d{2})\.?(\d{2,3})?\]/g;
-    
-    for (const line of lines) {
-        const matches = [...line.matchAll(timeRegex)];
-        if (matches.length === 0) continue;
-        
-        // 提取歌词文本（去除所有时间标签）
-        const text = line.replace(timeRegex, '').trim();
-        if (!text) continue;
-        
-        // 一行可能有多个时间标签（重复歌词）
-        for (const match of matches) {
-            const minutes = parseInt(match[1]);
-            const seconds = parseInt(match[2]);
-            const milliseconds = match[3] ? parseInt(match[3].padEnd(3, '0')) : 0;
-            
-            const timeInSeconds = minutes * 60 + seconds + milliseconds / 1000;
-            
-            lyrics.push({
-                time: timeInSeconds,
-                text: text
-            });
-        }
-    }
-    
-    // 按时间排序
-    lyrics.sort((a, b) => a.time - b.time);
-    
-    return lyrics;
-}
-
-// 更新歌词显示
-function updateLyric() {
-    const lyricElement = document.getElementById('musicLyric');
-    if (!lyricElement) return;
-    
-    // 如果没有歌曲在播放或没有歌词数据，清空显示
-    if (!isPlaying || currentLyrics.length === 0) {
-        if (lyricElement.textContent !== '') {
-            lyricElement.textContent = '';
-        }
-        return;
-    }
-    
-    const currentTime = audioPlayer.currentTime;
-    
-    // 查找当前时间应该显示的歌词
-    let newIndex = -1;
-    for (let i = currentLyrics.length - 1; i >= 0; i--) {
-        if (currentTime >= currentLyrics[i].time) {
-            newIndex = i;
-            break;
-        }
-    }
-    
-    // 如果歌词索引发生变化，更新显示
-    if (newIndex !== currentLyricIndex) {
-        currentLyricIndex = newIndex;
-        if (newIndex >= 0) {
-            lyricElement.textContent = currentLyrics[newIndex].text;
-        } else {
-            lyricElement.textContent = '';
-        }
-    }
-}
-
-// 加载歌词到当前播放
-function loadLyric(lyricText) {
-    currentLyrics = parseLyric(lyricText);
-    currentLyricIndex = -1;
-    
-    const lyricElement = document.getElementById('musicLyric');
-    if (lyricElement) {
-        lyricElement.textContent = '';
-    }
-    
-    console.log('歌词已加载，共', currentLyrics.length, '行');
-}
-
-// 清空歌词
-function clearLyric() {
-    currentLyrics = [];
-    currentLyricIndex = -1;
-    
-    const lyricElement = document.getElementById('musicLyric');
-    if (lyricElement) {
-        lyricElement.textContent = '';
-    }
-}
-
-// 从Meting API获取歌词
-async function getLyricFromMeting(baseUrl, server, id) {
-    try {
-        const url = `${baseUrl}?server=${server}&type=lyric&id=${id}`;
-        console.log('🎵 获取歌词:', url);
-        
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        
-        const data = await response.json();
-        
-        // Meting API返回格式：{lyric: "lrc内容"}
-        if (data && data.lyric) {
-            return data.lyric;
-        }
-        
-        return null;
-    } catch (error) {
-        console.error('获取Meting歌词失败:', error);
-        return null;
-    }
-}
-
-// 从Vkeys API获取歌词
-async function getLyricFromVkeys(server, id) {
-    try {
-        const url = `https://api.vkeys.cn/v2/music/${server}/lyric?id=${id}`;
-        console.log('🎵 获取歌词:', url);
-        
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        
-        const data = await response.json();
-        
-        // Vkeys API返回格式需要根据实际情况调整
-        if (data && data.code === 200 && data.data) {
-            if (data.data.lyric) {
-                return data.data.lyric;
-            } else if (data.data.lrc) {
-                return data.data.lrc;
-            }
-        }
-        
-        return null;
-    } catch (error) {
-        console.error('获取Vkeys歌词失败:', error);
-        return null;
-    }
-}
-
-// 从NanYi API获取歌词
-async function getLyricFromNanYi(platform, id) {
-    try {
-        const url = `https://api.nanyinet.com/api/music/${platform}/lyric?id=${id}`;
-        console.log('🎵 获取歌词:', url);
-        
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        
-        const data = await response.json();
-        
-        // NanYi API返回格式需要根据实际情况调整
-        if (data && data.data) {
-            if (data.data.lyric) {
-                return data.data.lyric;
-            } else if (data.data.lrc) {
-                return data.data.lrc;
-            }
-        }
-        
-        return null;
-    } catch (error) {
-        console.error('获取NanYi歌词失败:', error);
-        return null;
-    }
-}
-
-// ========== 音乐链接检查功能 ==========
-
-let invalidMusicList = []; // 失效音乐列表
-
-// 检查音乐链接
-async function checkMusicLinks() {
-    if (musicLibrary.length === 0) {
-        alert('音乐库为空！');
-        return;
-    }
-
-    // 打开弹窗
-    const modal = document.getElementById('invalidMusicModal');
-    modal.style.display = 'flex';
-
-    // 显示检查进度
-    document.getElementById('checkingProgress').style.display = 'block';
-    document.getElementById('invalidMusicResult').style.display = 'none';
-    document.getElementById('noInvalidMusic').style.display = 'none';
-
-    invalidMusicList = [];
-    let checkedCount = 0;
-
-    // 检查每首音乐
-    for (const music of musicLibrary) {
-        checkedCount++;
-        document.getElementById('checkingStatus').textContent = `正在检查 ${checkedCount}/${musicLibrary.length}`;
-
-        const isValid = await checkSingleMusicLink(music.playUrl);
-        if (!isValid) {
-            invalidMusicList.push(music);
-        }
-    }
-
-    // 隐藏进度
-    document.getElementById('checkingProgress').style.display = 'none';
-
-    // 显示结果
-    if (invalidMusicList.length > 0) {
-        displayInvalidMusicList();
-        document.getElementById('invalidMusicResult').style.display = 'block';
-    } else {
-        document.getElementById('noInvalidMusic').style.display = 'block';
-    }
-}
-
-// 检查单个音乐链接
-async function checkSingleMusicLink(url) {
-    try {
-        // 使用HEAD请求检查链接
-        const response = await fetch(url, {
-            method: 'HEAD',
-            mode: 'no-cors' // 避免CORS问题
-        });
-        
-        // no-cors模式下无法获取状态码，所以我们尝试加载音频
-        return new Promise((resolve) => {
-            const audio = new Audio();
-            audio.preload = 'metadata';
-            
-            const timeout = setTimeout(() => {
-                audio.src = '';
-                resolve(false);
-            }, 5000); // 5秒超时
-            
-            audio.onloadedmetadata = () => {
-                clearTimeout(timeout);
-                audio.src = '';
-                resolve(true);
-            };
-            
-            audio.onerror = () => {
-                clearTimeout(timeout);
-                audio.src = '';
-                resolve(false);
-            };
-            
-            audio.src = url;
-        });
-    } catch (error) {
-        console.error('检查链接失败:', error);
-        return false;
-    }
-}
-
-// 显示失效音乐列表
-function displayInvalidMusicList() {
-    const container = document.getElementById('invalidMusicList');
-    
-    let html = '';
-    invalidMusicList.forEach(music => {
-        html += `
-            <div style="display: flex; align-items: center; padding: 12px; background: white; border-radius: 8px; margin-bottom: 8px; border: 2px solid #dc3545;">
-                <input type="checkbox" class="invalid-music-checkbox" data-music-id="${music.id}" 
-                       style="width: 18px; height: 18px; margin-right: 12px; cursor: pointer;">
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 4px;">
-                        ${music.name}
-                        <span style="background: #dc3545; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 6px;">失效</span>
-                    </div>
-                    <div style="font-size: 12px; color: #666;">
-                        ${music.artist} · ${music.platform || '未知平台'}
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = html;
-}
-
-// 全选/取消全选失效音乐
-function toggleSelectAllInvalid() {
-    const checkboxes = document.querySelectorAll('.invalid-music-checkbox');
-    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    
-    checkboxes.forEach(cb => {
-        cb.checked = !allChecked;
-    });
-}
-
-// 重新搜索选中的音乐
-async function researchSelectedMusic() {
-    const checkboxes = document.querySelectorAll('.invalid-music-checkbox:checked');
-    
-    if (checkboxes.length === 0) {
-        alert('请至少选择一个要重新搜索的音乐！');
-        return;
-    }
-
-    const confirmed = await showCustomConfirm(
-        '确认重新搜索',
-        `确定要重新搜索选中的 ${checkboxes.length} 首音乐吗？\n\n将依次搜索并自动更新音乐库中的链接。`
-    );
-
-    if (!confirmed) return;
-
-    // 获取选中的音乐ID
-    const selectedIds = Array.from(checkboxes).map(cb => cb.dataset.musicId);
-    const musicsToResearch = invalidMusicList.filter(m => selectedIds.includes(m.id));
-
-    // 关闭弹窗
-    closeInvalidMusicModal();
-
-    // 显示进度提示
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < musicsToResearch.length; i++) {
-        const music = musicsToResearch[i];
-        const progress = `(${i + 1}/${musicsToResearch.length})`;
-        
-        try {
-            // 搜索音乐
-            const keyword = `${music.name} ${music.artist}`;
-            const apiSource = document.getElementById('musicApiSelect')?.value || 'meting1';
-            
-            let results = [];
-            if (apiSource === 'meting1') {
-                results = await searchWithMetingAPINew(keyword);
-            } else if (apiSource === 'meting2') {
-                results = await searchWithMetingAPINew2(keyword);
-            } else if (apiSource === 'meting3') {
-                results = await searchWithVkeysAPI(keyword);
-            } else if (apiSource === 'aa1') {
-                results = await searchWithAA1API(keyword);
-            } else if (apiSource === 'nanyi') {
-                results = await searchWithNanYiAPI(keyword);
-            }
-
-            if (results.length > 0) {
-                // 使用第一个搜索结果更新
-                const newMusic = results[0];
-                const index = musicLibrary.findIndex(m => m.id === music.id);
-                
-                if (index !== -1) {
-                    // 保留原来的ID和歌词
-                    musicLibrary[index] = {
-                        ...newMusic,
-                        id: music.id,
-                        lyric: music.lyric || newMusic.lyric
-                    };
-                    successCount++;
-                    console.log(`✅ ${progress} 成功更新: ${music.name}`);
-                }
-            } else {
-                failCount++;
-                console.log(`❌ ${progress} 搜索失败: ${music.name}`);
-            }
-        } catch (error) {
-            failCount++;
-            console.error(`❌ ${progress} 搜索出错:`, music.name, error);
-        }
-    }
-
-    // 保存更新后的音乐库
-    try {
-        await storageDB.setItem('musicLibrary', musicLibrary);
-        displayMusicLibrary();
-        
-        let message = `重新搜索完成！\n\n`;
-        message += `✅ 成功: ${successCount} 首\n`;
-        if (failCount > 0) {
-            message += `❌ 失败: ${failCount} 首`;
-        }
-        alert(message);
-    } catch (error) {
-        console.error('保存音乐库失败:', error);
-        alert('保存失败，请重试！');
-    }
-}
-
-// 关闭失效音乐弹窗
-function closeInvalidMusicModal() {
-    const modal = document.getElementById('invalidMusicModal');
-    modal.style.display = 'none';
-    invalidMusicList = [];
-}
-
-
-// ========== 第二页照片展示功能 ==========
-
-// 点击照片展示区域，弹出选择菜单
-function openShowcasePhotoMenu() {
-    showPhotoSourceMenu('设置照片', async (type, value) => {
-        if (type === 'url') {
-            localStorage.setItem('showcasePhotoURL', value);
-            try { await deleteImageFromDB('showcasePhoto'); } catch(e) {}
-            displayShowcasePhoto(value);
-        } else {
-            await saveImageToDB('showcasePhoto', value, 'showcase');
-            localStorage.removeItem('showcasePhotoURL');
-            displayShowcasePhoto(value);
-        }
-        showToast('照片已设置');
-    }, async () => {
-        localStorage.removeItem('showcasePhotoURL');
-        try { await deleteImageFromDB('showcasePhoto'); } catch(e) {}
-        const img = document.getElementById('photoShowcaseImg');
-        if (img) { img.style.display = 'none'; img.removeAttribute('src'); }
-        showToast('照片已重置');
-    });
-}
-
-// 显示照片到展示区域
-function displayShowcasePhoto(imageData) {
-    const img = document.getElementById('photoShowcaseImg');
-    if (img) {
-        img.src = imageData;
-        img.style.display = 'block';
-    }
-}
-
-// 页面加载时恢复保存的照片
-async function loadShowcasePhoto() {
-    try {
-        // 顶部展示区
-        const url = localStorage.getItem('showcasePhotoURL');
-        if (url) {
-            displayShowcasePhoto(url);
-        } else {
-            const imageData = await getImageFromDB('showcasePhoto');
-            if (imageData) displayShowcasePhoto(imageData);
-        }
-        // 左情侣头像
-        const coupleLeftUrl = localStorage.getItem('coupleAvatarLeftURL');
-        if (coupleLeftUrl) {
-            displayCoupleAvatar('left', coupleLeftUrl);
-        } else {
-            const ld = await getImageFromDB('coupleAvatarLeft');
-            if (ld) displayCoupleAvatar('left', ld);
-        }
-        const coupleRightUrl = localStorage.getItem('coupleAvatarRightURL');
-        if (coupleRightUrl) {
-            displayCoupleAvatar('right', coupleRightUrl);
-        } else {
-            const rd = await getImageFromDB('coupleAvatarRight');
-            if (rd) displayCoupleAvatar('right', rd);
-        }
-        // 右票券
-        const ticketUrl = localStorage.getItem('ticketPhotoURL');
-        if (ticketUrl) {
-            displayTicketPhoto(ticketUrl);
-        } else {
-            const ticketData = await getImageFromDB('ticketPhoto');
-            if (ticketData) displayTicketPhoto(ticketData);
-        }
-        // 票券文字
-        const tText = localStorage.getItem('ticketText');
-        if (tText !== null) document.getElementById('ticketText').textContent = tText;
-        const tFooter = localStorage.getItem('ticketFooter');
-        if (tFooter !== null) document.getElementById('ticketFooter').textContent = tFooter;
-    } catch (err) {
-        console.log('加载展示照片失败:', err);
-    }
-}
-
-// ========== 左情侣头像组件 ==========
-function openCoupleAvatarMenu(side) {
-    const label = side === 'left' ? '左头像' : '右头像';
-    showPhotoSourceMenu(label, async (type, value) => {
-        const urlKey = side === 'left' ? 'coupleAvatarLeftURL' : 'coupleAvatarRightURL';
-        const dbKey = side === 'left' ? 'coupleAvatarLeft' : 'coupleAvatarRight';
-        if (type === 'url') {
-            localStorage.setItem(urlKey, value);
-            try { await deleteImageFromDB(dbKey); } catch(e) {}
-            displayCoupleAvatar(side, value);
-        } else {
-            await saveImageToDB(dbKey, value, 'coupleAvatar');
-            localStorage.removeItem(urlKey);
-            displayCoupleAvatar(side, value);
-        }
-        showToast(label + '已设置');
-    }, async () => {
-        const urlKey = side === 'left' ? 'coupleAvatarLeftURL' : 'coupleAvatarRightURL';
-        const dbKey = side === 'left' ? 'coupleAvatarLeft' : 'coupleAvatarRight';
-        const imgId = side === 'left' ? 'coupleAvatarLeft' : 'coupleAvatarRight';
-        localStorage.removeItem(urlKey);
-        try { await deleteImageFromDB(dbKey); } catch(e) {}
-        const img = document.getElementById(imgId);
-        if (img) { img.style.display = 'none'; img.removeAttribute('src'); }
-        showToast(label + '已重置');
-    });
-}
-
-function displayCoupleAvatar(side, src) {
-    const id = side === 'left' ? 'coupleAvatarLeft' : 'coupleAvatarRight';
-    const img = document.getElementById(id);
-    if (img) { img.src = src; img.style.display = 'block'; }
-}
-
-// ========== 右票券组件 ==========
-function openTicketPhotoMenu() {
-    const overlay = document.createElement('div');
-    overlay.className = 'ios-dialog-overlay';
-    const dialog = document.createElement('div');
-    dialog.className = 'ios-dialog';
-    dialog.style.width = '300px';
-
-    const titleEl = document.createElement('div');
-    titleEl.className = 'ios-dialog-title';
-    titleEl.textContent = '票券设置';
-
-    const msgEl = document.createElement('div');
-    msgEl.className = 'ios-dialog-message';
-    msgEl.textContent = '选择要修改的内容';
-
-    const buttonsEl = document.createElement('div');
-    buttonsEl.className = 'ios-dialog-buttons vertical';
-
-    const photoBtn = document.createElement('button');
-    photoBtn.className = 'ios-dialog-button primary';
-    photoBtn.textContent = '更换图片';
-    photoBtn.onclick = () => { closeM(); openTicketImagePicker(); };
-
-    const textBtn = document.createElement('button');
-    textBtn.className = 'ios-dialog-button primary';
-    textBtn.textContent = '编辑文字';
-    textBtn.onclick = () => { closeM(); editTicketText(); };
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'ios-dialog-button';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeM();
-
-    buttonsEl.appendChild(photoBtn);
-    buttonsEl.appendChild(textBtn);
-    buttonsEl.appendChild(cancelBtn);
-    dialog.appendChild(titleEl);
-    dialog.appendChild(msgEl);
-    dialog.appendChild(buttonsEl);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-    setTimeout(() => overlay.classList.add('show'), 10);
-
-    function closeM() {
-        overlay.classList.remove('show');
-        setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 300);
-    }
-}
-
-function openTicketImagePicker() {
-    showPhotoSourceMenu('票券图片', async (type, value) => {
-        if (type === 'url') {
-            localStorage.setItem('ticketPhotoURL', value);
-            try { await deleteImageFromDB('ticketPhoto'); } catch(e) {}
-            displayTicketPhoto(value);
-        } else {
-            await saveImageToDB('ticketPhoto', value, 'ticket');
-            localStorage.removeItem('ticketPhotoURL');
-            displayTicketPhoto(value);
-        }
-        showToast('票券图片已设置');
-    }, async () => {
-        localStorage.removeItem('ticketPhotoURL');
-        try { await deleteImageFromDB('ticketPhoto'); } catch(e) {}
-        const img = document.getElementById('ticketPhotoImg');
-        if (img) { img.style.display = 'none'; img.removeAttribute('src'); }
-        showToast('票券图片已重置');
-    });
-}
-
-function displayTicketPhoto(src) {
-    const img = document.getElementById('ticketPhotoImg');
-    if (img) { img.src = src; img.style.display = 'block'; }
-}
-
-function editTicketText() {
-    const overlay = document.createElement('div');
-    overlay.className = 'ios-dialog-overlay';
-
-    const dialog = document.createElement('div');
-    dialog.className = 'ios-dialog';
-
-    const titleEl = document.createElement('div');
-    titleEl.className = 'ios-dialog-title';
-    titleEl.textContent = '票券文字编辑';
-
-    const inputWrap = document.createElement('div');
-    inputWrap.style.cssText = 'padding: 8px 16px 16px; display:flex; flex-direction:column; gap:12px;';
-
-    // 上方文字
-    const label1 = document.createElement('div');
-    label1.style.cssText = 'font-size:12px; color:#999; margin-bottom:-6px;';
-    label1.textContent = '上方文字';
-    const input1 = document.createElement('input');
-    input1.type = 'text';
-    input1.value = document.getElementById('ticketText').textContent || '';
-    input1.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;';
-    input1.onfocus = () => { input1.style.borderColor = '#007aff'; };
-    input1.onblur = () => { input1.style.borderColor = '#e0e0e0'; };
-
-    // 下方文字
-    const label2 = document.createElement('div');
-    label2.style.cssText = 'font-size:12px; color:#999; margin-bottom:-6px;';
-    label2.textContent = '下方文字';
-    const input2 = document.createElement('input');
-    input2.type = 'text';
-    input2.value = document.getElementById('ticketFooter').textContent || '';
-    input2.style.cssText = 'width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;outline:none;box-sizing:border-box;';
-    input2.onfocus = () => { input2.style.borderColor = '#007aff'; };
-    input2.onblur = () => { input2.style.borderColor = '#e0e0e0'; };
-
-    inputWrap.appendChild(label1);
-    inputWrap.appendChild(input1);
-    inputWrap.appendChild(label2);
-    inputWrap.appendChild(input2);
-
-    const buttonsEl = document.createElement('div');
-    buttonsEl.className = 'ios-dialog-buttons';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'ios-dialog-button';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeDialog(false);
-
-    const okBtn = document.createElement('button');
-    okBtn.className = 'ios-dialog-button primary';
-    okBtn.textContent = '确定';
-    okBtn.onclick = () => closeDialog(true);
-
-    buttonsEl.appendChild(cancelBtn);
-    buttonsEl.appendChild(okBtn);
-    dialog.appendChild(titleEl);
-    dialog.appendChild(inputWrap);
-    dialog.appendChild(buttonsEl);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-
-    setTimeout(() => {
-        overlay.classList.add('show');
-        input1.focus();
-    }, 10);
-
-    function closeDialog(save) {
-        overlay.classList.remove('show');
-        setTimeout(() => {
-            document.body.removeChild(overlay);
-            if (save) {
-                const v1 = input1.value.trim();
-                const v2 = input2.value.trim();
-                if (v1) {
-                    document.getElementById('ticketText').textContent = v1;
-                    localStorage.setItem('ticketText', v1);
-                }
-                if (v2) {
-                    document.getElementById('ticketFooter').textContent = v2;
-                    localStorage.setItem('ticketFooter', v2);
-                }
-            }
-        }, 300);
-    }
-}
-
-// ========== 通用照片来源选择菜单 ==========
-function showPhotoSourceMenu(title, callback, onReset) {
-    const overlay = document.createElement('div');
-    overlay.className = 'ios-dialog-overlay';
-    const dialog = document.createElement('div');
-    dialog.className = 'ios-dialog';
-
-    const titleEl = document.createElement('div');
-    titleEl.className = 'ios-dialog-title';
-    titleEl.textContent = title;
-
-    const msgEl = document.createElement('div');
-    msgEl.className = 'ios-dialog-message';
-    msgEl.textContent = '选择照片来源';
-
-    const buttonsEl = document.createElement('div');
-    buttonsEl.className = 'ios-dialog-buttons vertical';
-
-    const urlBtn = document.createElement('button');
-    urlBtn.className = 'ios-dialog-button primary';
-    urlBtn.textContent = '输入图片URL';
-    urlBtn.onclick = () => {
-        closeM();
-        iosPrompt('输入图片URL', '', (url) => {
-            if (url && url.trim()) callback('url', url.trim());
-        });
-    };
-
-    const localBtn = document.createElement('button');
-    localBtn.className = 'ios-dialog-button primary';
-    localBtn.textContent = '从本地上传';
-    localBtn.onclick = () => {
-        closeM();
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            try {
-                const data = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.8, maxSizeKB: 400 });
-                callback('local', data);
-            } catch(err) { showToast('图片处理失败'); }
-        };
-        input.click();
-    };
-
-    if (onReset) {
-        const resetBtn = document.createElement('button');
-        resetBtn.className = 'ios-dialog-button';
-        resetBtn.style.color = '#ff3b30';
-        resetBtn.textContent = '重置为默认';
-        resetBtn.onclick = async () => {
-            closeM();
-            const confirmed = await iosConfirm('确定要重置为默认吗？', '重置');
-            if (confirmed) onReset();
-        };
-        buttonsEl.appendChild(urlBtn);
-        buttonsEl.appendChild(localBtn);
-        buttonsEl.appendChild(resetBtn);
-    } else {
-        buttonsEl.appendChild(urlBtn);
-        buttonsEl.appendChild(localBtn);
-    }
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'ios-dialog-button';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeM();
-
-    buttonsEl.appendChild(cancelBtn);
-    dialog.appendChild(titleEl);
-    dialog.appendChild(msgEl);
-    dialog.appendChild(buttonsEl);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-    setTimeout(() => overlay.classList.add('show'), 10);
-
-    function closeM() {
-        overlay.classList.remove('show');
-        setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 300);
-    }
-}
-
-
-
-// ========== 文档导入功能 ==========
-
-// 存储解析出的角色数据
-let parsedDocCharacters = [];
-
-// 打开文档导入界面
-function openDocumentImport() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = '.txt,.docx,.zip';
-    
-    input.onchange = async (e) => {
-        const files = Array.from(e.target.files);
-        if (files.length === 0) return;
-        
-        showToast('正在解析文件...');
-        
-        try {
-            parsedDocCharacters = [];
-            
-            for (const file of files) {
-                await parseDocumentFile(file);
-            }
-            
-            if (parsedDocCharacters.length === 0) {
-                showIosAlert('提示', '未能从文件中解析出任何角色数据');
-                return;
-            }
-            
-            // 显示预览和选择界面
-            showDocCharacterPreview();
-            
-        } catch (error) {
-            console.error('文件解析失败:', error);
-            showIosAlert('错误', '文件解析失败：' + error.message);
-        }
-    };
-    
-    input.click();
-}
-
-// 解析文档文件
-async function parseDocumentFile(file) {
-    const fileName = file.name.toLowerCase();
-    
-    if (fileName.endsWith('.txt')) {
-        await parseTxtFile(file);
-    } else if (fileName.endsWith('.docx')) {
-        await parseDocxFile(file);
-    } else if (fileName.endsWith('.zip')) {
-        await parseZipFile(file);
-    }
-}
-
-// 解析 TXT 文件
-async function parseTxtFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onload = (e) => {
-            try {
-                const content = e.target.result;
-                const character = {
-                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                    name: file.name.replace('.txt', ''),
-                    description: content.trim(),
-                    source: file.name,
-                    selected: true
-                };
-                
-                parsedDocCharacters.push(character);
-                resolve();
-            } catch (error) {
-                reject(error);
-            }
-        };
-        
-        reader.onerror = () => reject(new Error('读取文件失败'));
-        reader.readAsText(file, 'UTF-8');
-    });
-}
-
-// 解析 DOCX 文件
-async function parseDocxFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onload = async (e) => {
-            try {
-                const arrayBuffer = e.target.result;
-                
-                // 检查 mammoth 是否可用
-                if (typeof mammoth === 'undefined') {
-                    throw new Error('DOCX 解析库未加载，请刷新页面重试');
-                }
-                
-                // 使用 mammoth.js 解析 DOCX
-                const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-                const content = result.value;
-                
-                if (!content || content.trim().length === 0) {
-                    console.warn('DOCX 文件为空:', file.name);
-                    resolve();
-                    return;
-                }
-                
-                const character = {
-                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                    name: file.name.replace('.docx', ''),
-                    description: content.trim(),
-                    source: file.name,
-                    selected: true
-                };
-                
-                parsedDocCharacters.push(character);
-                resolve();
-            } catch (error) {
-                console.error('解析 DOCX 失败:', file.name, error);
-                // 不中断整个流程，只记录错误
-                showToast(`解析 ${file.name} 失败`);
-                resolve();
-            }
-        };
-        
-        reader.onerror = () => {
-            console.error('读取文件失败:', file.name);
-            showToast(`读取 ${file.name} 失败`);
-            resolve(); // 不中断整个流程
-        };
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-// 解析 ZIP 文件
-async function parseZipFile(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onload = async (e) => {
-            try {
-                const arrayBuffer = e.target.result;
-                
-                // 检查 JSZip 是否可用
-                if (typeof JSZip === 'undefined') {
-                    // 动态加载 JSZip
-                    await loadJSZip();
-                }
-                
-                const zip = await JSZip.loadAsync(arrayBuffer);
-                
-                // 遍历压缩包中的文件
-                const promises = [];
-                zip.forEach((relativePath, zipEntry) => {
-                    const fileName = relativePath.toLowerCase();
-                    
-                    // 只处理 TXT 和 DOCX 文件，忽略文件夹
-                    if (!zipEntry.dir && (fileName.endsWith('.txt') || fileName.endsWith('.docx'))) {
-                        promises.push(parseZipEntry(zipEntry, relativePath));
-                    }
-                });
-                
-                if (promises.length === 0) {
-                    showToast(`${file.name} 中没有找到 TXT 或 DOCX 文件`);
-                }
-                
-                await Promise.all(promises);
-                resolve();
-                
-            } catch (error) {
-                console.error('解析 ZIP 失败:', file.name, error);
-                showToast(`解析 ${file.name} 失败`);
-                resolve(); // 不中断整个流程
-            }
-        };
-        
-        reader.onerror = () => {
-            console.error('读取文件失败:', file.name);
-            showToast(`读取 ${file.name} 失败`);
-            resolve(); // 不中断整个流程
-        };
-        reader.readAsArrayBuffer(file);
-    });
-}
-
-// 解析 ZIP 中的单个文件
-async function parseZipEntry(zipEntry, fileName) {
-    try {
-        if (fileName.toLowerCase().endsWith('.txt')) {
-            const content = await zipEntry.async('text');
-            
-            if (content && content.trim().length > 0) {
-                const character = {
-                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                    name: fileName.replace('.txt', '').split('/').pop(),
-                    description: content.trim(),
-                    source: fileName,
-                    selected: true
-                };
-                
-                parsedDocCharacters.push(character);
-            }
-        } else if (fileName.toLowerCase().endsWith('.docx')) {
-            const arrayBuffer = await zipEntry.async('arraybuffer');
-            
-            // 使用 mammoth.js 解析 DOCX
-            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-            const content = result.value;
-            
-            if (content && content.trim().length > 0) {
-                const character = {
-                    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                    name: fileName.replace('.docx', '').split('/').pop(),
-                    description: content.trim(),
-                    source: fileName,
-                    selected: true
-                };
-                
-                parsedDocCharacters.push(character);
-            }
-        }
-    } catch (error) {
-        console.error('解析 ZIP 条目失败:', fileName, error);
-    }
-}
-
-// 动态加载 JSZip 库
-function loadJSZip() {
-    return new Promise((resolve, reject) => {
-        if (window.JSZip) {
-            resolve();
-            return;
-        }
-        
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('加载 JSZip 库失败'));
-        document.head.appendChild(script);
-    });
-}
-
-// 显示角色预览和选择界面
-function showDocCharacterPreview() {
-    const overlay = document.createElement('div');
-    overlay.className = 'ios-dialog-overlay';
-    overlay.id = 'docCharacterPreviewOverlay';
-    
-    const dialog = document.createElement('div');
-    dialog.className = 'ios-dialog';
-    dialog.style.maxWidth = '90%';
-    dialog.style.maxHeight = '80vh';
-    dialog.style.overflow = 'hidden';
-    dialog.style.display = 'flex';
-    dialog.style.flexDirection = 'column';
-    
-    const titleEl = document.createElement('div');
-    titleEl.className = 'ios-dialog-title';
-    titleEl.textContent = `已解析 ${parsedDocCharacters.length} 个角色`;
-    
-    const messageEl = document.createElement('div');
-    messageEl.className = 'ios-dialog-message';
-    messageEl.textContent = '请选择要导入的角色';
-    messageEl.style.marginBottom = '15px';
-    
-    // 角色列表容器
-    const listContainer = document.createElement('div');
-    listContainer.style.cssText = 'flex: 1; overflow-y: auto; padding: 0 16px; max-height: 50vh;';
-    
-    // 渲染角色列表
-    parsedDocCharacters.forEach((char, index) => {
-        const charItem = document.createElement('div');
-        charItem.className = 'doc-char-preview-item';
-        charItem.onclick = () => toggleCharacterSelection(index, charItem);
-        
-        const header = document.createElement('div');
-        header.style.cssText = 'display: flex; align-items: center; gap: 10px; margin-bottom: 8px;';
-        
-        const checkbox = document.createElement('div');
-        checkbox.className = 'doc-char-checkbox' + (char.selected ? ' checked' : '');
-        checkbox.innerHTML = char.selected ? '<span style="color: white; font-size: 14px;">✓</span>' : '';
-        
-        const name = document.createElement('div');
-        name.className = 'doc-char-name';
-        name.textContent = char.name;
-        
-        const source = document.createElement('div');
-        source.className = 'doc-char-source';
-        source.textContent = char.source;
-        
-        header.appendChild(checkbox);
-        header.appendChild(name);
-        header.appendChild(source);
-        
-        const preview = document.createElement('div');
-        preview.className = 'doc-char-preview-text';
-        preview.textContent = char.description.substring(0, 150) + (char.description.length > 150 ? '...' : '');
-        
-        charItem.appendChild(header);
-        charItem.appendChild(preview);
-        listContainer.appendChild(charItem);
-    });
-    
-    const buttonsEl = document.createElement('div');
-    buttonsEl.className = 'ios-dialog-buttons';
-    buttonsEl.style.marginTop = '15px';
-    
-    const selectAllBtn = document.createElement('button');
-    selectAllBtn.className = 'ios-dialog-button';
-    selectAllBtn.textContent = '全选';
-    selectAllBtn.onclick = () => toggleSelectAll(listContainer);
-    
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'ios-dialog-button';
-    cancelBtn.textContent = '取消';
-    cancelBtn.onclick = () => closeDocCharacterPreview();
-    
-    const confirmBtn = document.createElement('button');
-    confirmBtn.className = 'ios-dialog-button primary';
-    confirmBtn.textContent = '确认导入';
-    confirmBtn.onclick = () => confirmDocCharacterImport();
-    
-    buttonsEl.appendChild(selectAllBtn);
-    buttonsEl.appendChild(cancelBtn);
-    buttonsEl.appendChild(confirmBtn);
-    
-    dialog.appendChild(titleEl);
-    dialog.appendChild(messageEl);
-    dialog.appendChild(listContainer);
-    dialog.appendChild(buttonsEl);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-    
-    setTimeout(() => {
-        overlay.classList.add('show');
-    }, 10);
-}
-
-// 切换角色选择状态
-function toggleCharacterSelection(index, element) {
-    parsedDocCharacters[index].selected = !parsedDocCharacters[index].selected;
-    
-    const checkbox = element.querySelector('.doc-char-checkbox');
-    if (parsedDocCharacters[index].selected) {
-        checkbox.classList.add('checked');
-        checkbox.innerHTML = '<span style="color: white; font-size: 14px;">✓</span>';
-    } else {
-        checkbox.classList.remove('checked');
-        checkbox.innerHTML = '';
-    }
-}
-
-// 全选/取消全选
-function toggleSelectAll(container) {
-    const allSelected = parsedDocCharacters.every(char => char.selected);
-    const newState = !allSelected;
-    
-    parsedDocCharacters.forEach(char => {
-        char.selected = newState;
-    });
-    
-    // 更新UI
-    const checkboxes = container.querySelectorAll('.doc-char-checkbox');
-    checkboxes.forEach(checkbox => {
-        if (newState) {
-            checkbox.classList.add('checked');
-            checkbox.innerHTML = '<span style="color: white; font-size: 14px;">✓</span>';
-        } else {
-            checkbox.classList.remove('checked');
-            checkbox.innerHTML = '';
-        }
-    });
-    
-    // 更新按钮文字
-    const selectAllBtn = document.querySelector('#docCharacterPreviewOverlay .ios-dialog-button');
-    if (selectAllBtn) {
-        selectAllBtn.textContent = newState ? '取消全选' : '全选';
-    }
-}
-
-// 关闭预览界面
-function closeDocCharacterPreview() {
-    const overlay = document.getElementById('docCharacterPreviewOverlay');
-    if (overlay) {
-        overlay.classList.remove('show');
-        setTimeout(() => {
-            document.body.removeChild(overlay);
-        }, 300);
-    }
-}
-
-// 确认导入选中的角色
-async function confirmDocCharacterImport() {
-    const selectedChars = parsedDocCharacters.filter(char => char.selected);
-    
-    if (selectedChars.length === 0) {
-        showIosAlert('提示', '请至少选择一个角色');
-        return;
-    }
-    
-    closeDocCharacterPreview();
-    
-    // 如果只选择了一个角色，直接打开编辑界面
-    if (selectedChars.length === 1) {
-        openAddChatCharacterWithData(selectedChars[0]);
-    } else {
-        // 多个角色，逐个导入
-        showToast('正在导入角色...');
-        
-        for (const char of selectedChars) {
-            await importDocCharacter(char);
-        }
-        
-        showToast(`成功导入 ${selectedChars.length} 个角色`);
-        
-        // 刷新角色列表
-        if (typeof renderChatCharacterList === 'function') {
-            renderChatCharacterList();
-        }
-    }
-}
-
-// 打开新增角色界面并填充数据
-function openAddChatCharacterWithData(charData) {
-    // 打开新增界面
-    openAddChatCharacter();
-    
-    // 填充数据
-    setTimeout(() => {
-        document.getElementById('chatCharacterNameInput').value = charData.name;
-        document.getElementById('chatCharacterDescInput').value = charData.description;
-        
-        // 可以添加备注说明来源
-        document.getElementById('chatCharacterRemarkInput').value = `从 ${charData.source} 导入`;
-    }, 100);
-}
-
-// 导入单个文档角色
-async function importDocCharacter(charData) {
-    try {
-        const character = {
-            id: 'char_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            name: charData.name,
-            remark: `从 ${charData.source} 导入`,
-            description: charData.description,
-            avatar: '', // 默认无头像
-            createTime: Date.now(),
-            lastMessageTime: 0,
-            category: '默认'
-        };
-        
-        // 保存到数据库
-        await saveChatCharacterToDB(character);
-        
-        // 更新内存中的角色列表
-        if (typeof chatCharacters !== 'undefined') {
-            chatCharacters.push(character);
-        }
-        
-    } catch (error) {
-        console.error('导入角色失败:', charData.name, error);
-        throw error;
-    }
-}
