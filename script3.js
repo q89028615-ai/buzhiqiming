@@ -3860,7 +3860,7 @@ const BUBBLE_SHAPES = [
  */
 function getCurrentBubbleShape() {
     const shapeId = localStorage.getItem('bubbleShapeId');
-    return shapeId ? parseInt(shapeId) : 1; // 默认方案1
+    return shapeId ? parseInt(shapeId) : 2; // 默认方案2（全圆角胶囊）
 }
 
 /**
@@ -4412,19 +4412,54 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function getBubbleDecorationConfig() {
     const config = localStorage.getItem('bubbleDecorationConfig');
-    return config ? JSON.parse(config) : {
-        enabled: false,
-        imageUrl: '',
-        imageType: 'url',
-        position: {
-            preset: 'top-right',
-            offsetX: 0,
-            offsetY: 0
+    if (config) {
+        const parsed = JSON.parse(config);
+        // 兼容旧版本：如果是旧格式，转换为新格式
+        if (!parsed.user && !parsed.char) {
+            return {
+                user: {
+                    enabled: parsed.enabled || false,
+                    imageUrl: parsed.imageUrl || '',
+                    imageType: parsed.imageType || 'url',
+                    position: parsed.position || { preset: 'top-right', offsetX: 0, offsetY: 0 },
+                    size: parsed.size || 40,
+                    opacity: parsed.opacity || 100,
+                    rotation: parsed.rotation || 0
+                },
+                char: {
+                    enabled: parsed.enabled || false,
+                    imageUrl: parsed.imageUrl || '',
+                    imageType: parsed.imageType || 'url',
+                    position: parsed.position || { preset: 'top-left', offsetX: 0, offsetY: 0 },
+                    size: parsed.size || 40,
+                    opacity: parsed.opacity || 100,
+                    rotation: parsed.rotation || 0
+                }
+            };
+        }
+        return parsed;
+    }
+    
+    // 默认配置
+    return {
+        user: {
+            enabled: false,
+            imageUrl: '',
+            imageType: 'url',
+            position: { preset: 'top-right', offsetX: 0, offsetY: 0 },
+            size: 40,
+            opacity: 100,
+            rotation: 0
         },
-        size: 40,
-        opacity: 100,
-        rotation: 0,
-        applyTo: 'both'
+        char: {
+            enabled: false,
+            imageUrl: '',
+            imageType: 'url',
+            position: { preset: 'top-left', offsetX: 0, offsetY: 0 },
+            size: 40,
+            opacity: 100,
+            rotation: 0
+        }
     };
 }
 
@@ -4451,51 +4486,17 @@ function saveBubbleDecorationPresets(presets) {
 }
 
 /**
+ * 当前编辑的气泡类型（user 或 char）
+ */
+let currentEditingBubbleType = 'user';
+
+/**
  * 初始化气泡装饰设置界面
  */
 function initBubbleDecorationSettings() {
-    const config = getBubbleDecorationConfig();
-    
-    // 启用开关
-    document.getElementById('bubbleDecorationToggle').checked = config.enabled;
-    
-    // 图片预览
-    if (config.imageUrl) {
-        document.getElementById('bubbleDecorationImagePreview').src = config.imageUrl;
-        document.getElementById('bubbleDecorationImagePreview').style.display = 'block';
-        document.getElementById('bubbleDecorationImagePlaceholder').style.display = 'none';
-    }
-    
-    // 位置
-    document.querySelectorAll('.bubble-decoration-position-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.position === config.position.preset) {
-            btn.classList.add('active');
-        }
-    });
-    
-    // 偏移
-    document.getElementById('bubbleDecorationOffsetX').value = config.position.offsetX;
-    document.getElementById('bubbleDecorationOffsetY').value = config.position.offsetY;
-    document.getElementById('bubbleDecorationOffsetXValue').textContent = config.position.offsetX;
-    document.getElementById('bubbleDecorationOffsetYValue').textContent = config.position.offsetY;
-    
-    // 大小
-    document.getElementById('bubbleDecorationSize').value = config.size;
-    document.getElementById('bubbleDecorationSizeValue').textContent = config.size;
-    
-    // 透明度
-    document.getElementById('bubbleDecorationOpacity').value = config.opacity;
-    document.getElementById('bubbleDecorationOpacityValue').textContent = config.opacity;
-    
-    // 旋转
-    document.getElementById('bubbleDecorationRotation').value = config.rotation;
-    document.getElementById('bubbleDecorationRotationValue').textContent = config.rotation;
-    
-    // 应用范围
-    document.querySelectorAll('input[name="bubbleDecorationApplyTo"]').forEach(radio => {
-        radio.checked = radio.value === config.applyTo;
-    });
+    // 默认显示用户气泡设置
+    currentEditingBubbleType = 'user';
+    loadBubbleDecorationSettingsForType('user');
     
     // 加载预设列表
     loadBubbleDecorationPresetsList();
@@ -4505,18 +4506,86 @@ function initBubbleDecorationSettings() {
 }
 
 /**
+ * 切换气泡装饰编辑类型
+ */
+function switchBubbleDecorationType(type, event) {
+    currentEditingBubbleType = type;
+    
+    // 更新标签样式
+    document.querySelectorAll('.bubble-decoration-type-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
+    
+    // 加载对应类型的设置
+    loadBubbleDecorationSettingsForType(type);
+}
+
+/**
+ * 加载指定类型的气泡装饰设置
+ */
+function loadBubbleDecorationSettingsForType(type) {
+    const config = getBubbleDecorationConfig();
+    const typeConfig = config[type];
+    
+    // 启用开关
+    document.getElementById('bubbleDecorationToggle').checked = typeConfig.enabled;
+    
+    // 图片预览
+    if (typeConfig.imageUrl) {
+        document.getElementById('bubbleDecorationImagePreview').src = typeConfig.imageUrl;
+        document.getElementById('bubbleDecorationImagePreview').style.display = 'block';
+        document.getElementById('bubbleDecorationImagePlaceholder').style.display = 'none';
+    } else {
+        document.getElementById('bubbleDecorationImagePreview').style.display = 'none';
+        document.getElementById('bubbleDecorationImagePreview').src = '';
+        document.getElementById('bubbleDecorationImagePlaceholder').style.display = 'flex';
+    }
+    
+    // 位置
+    document.querySelectorAll('.bubble-decoration-position-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.position === typeConfig.position.preset) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // 偏移
+    document.getElementById('bubbleDecorationOffsetX').value = typeConfig.position.offsetX;
+    document.getElementById('bubbleDecorationOffsetY').value = typeConfig.position.offsetY;
+    document.getElementById('bubbleDecorationOffsetXValue').textContent = typeConfig.position.offsetX;
+    document.getElementById('bubbleDecorationOffsetYValue').textContent = typeConfig.position.offsetY;
+    
+    // 大小
+    document.getElementById('bubbleDecorationSize').value = typeConfig.size;
+    document.getElementById('bubbleDecorationSizeValue').textContent = typeConfig.size;
+    
+    // 透明度
+    document.getElementById('bubbleDecorationOpacity').value = typeConfig.opacity;
+    document.getElementById('bubbleDecorationOpacityValue').textContent = typeConfig.opacity;
+    
+    // 旋转
+    document.getElementById('bubbleDecorationRotation').value = typeConfig.rotation;
+    document.getElementById('bubbleDecorationRotationValue').textContent = typeConfig.rotation;
+}
+
+/**
  * 切换气泡装饰开关
  */
 function toggleBubbleDecoration() {
     const config = getBubbleDecorationConfig();
-    config.enabled = document.getElementById('bubbleDecorationToggle').checked;
+    const enabled = document.getElementById('bubbleDecorationToggle').checked;
+    config[currentEditingBubbleType].enabled = enabled;
     saveBubbleDecorationConfig(config);
     applyBubbleDecoration();
     
-    if (config.enabled) {
-        showToast('气泡装饰已开启');
+    const typeName = currentEditingBubbleType === 'user' ? '用户' : '角色';
+    if (enabled) {
+        showToast(`${typeName}气泡装饰已开启`);
     } else {
-        showToast('气泡装饰已关闭');
+        showToast(`${typeName}气泡装饰已关闭`);
     }
 }
 
@@ -4544,8 +4613,8 @@ function uploadBubbleDecorationImage() {
                 
                 // 保存到配置
                 const config = getBubbleDecorationConfig();
-                config.imageUrl = imageUrl;
-                config.imageType = 'local';
+                config[currentEditingBubbleType].imageUrl = imageUrl;
+                config[currentEditingBubbleType].imageType = 'local';
                 saveBubbleDecorationConfig(config);
                 
                 showToast('图片已上传');
@@ -4592,8 +4661,8 @@ function loadBubbleDecorationFromUrl() {
     preview.onload = () => {
         // 保存到配置
         const config = getBubbleDecorationConfig();
-        config.imageUrl = url;
-        config.imageType = 'url';
+        config[currentEditingBubbleType].imageUrl = url;
+        config[currentEditingBubbleType].imageType = 'url';
         saveBubbleDecorationConfig(config);
         showToast('图片已加载');
     };
@@ -4604,8 +4673,8 @@ function loadBubbleDecorationFromUrl() {
  */
 function resetBubbleDecorationImage() {
     const config = getBubbleDecorationConfig();
-    config.imageUrl = '';
-    config.imageType = 'url';
+    config[currentEditingBubbleType].imageUrl = '';
+    config[currentEditingBubbleType].imageType = 'url';
     saveBubbleDecorationConfig(config);
     
     document.getElementById('bubbleDecorationImagePreview').style.display = 'none';
@@ -4627,7 +4696,7 @@ function selectBubbleDecorationPosition(position) {
     event.target.classList.add('active');
     
     const config = getBubbleDecorationConfig();
-    config.position.preset = position;
+    config[currentEditingBubbleType].position.preset = position;
     saveBubbleDecorationConfig(config);
     
     applyBubbleDecoration();
@@ -4644,8 +4713,8 @@ function updateBubbleDecorationOffset() {
     document.getElementById('bubbleDecorationOffsetYValue').textContent = offsetY;
     
     const config = getBubbleDecorationConfig();
-    config.position.offsetX = offsetX;
-    config.position.offsetY = offsetY;
+    config[currentEditingBubbleType].position.offsetX = offsetX;
+    config[currentEditingBubbleType].position.offsetY = offsetY;
     saveBubbleDecorationConfig(config);
     
     applyBubbleDecoration();
@@ -4659,7 +4728,7 @@ function updateBubbleDecorationSize() {
     document.getElementById('bubbleDecorationSizeValue').textContent = size;
     
     const config = getBubbleDecorationConfig();
-    config.size = size;
+    config[currentEditingBubbleType].size = size;
     saveBubbleDecorationConfig(config);
     
     applyBubbleDecoration();
@@ -4673,7 +4742,7 @@ function updateBubbleDecorationOpacity() {
     document.getElementById('bubbleDecorationOpacityValue').textContent = opacity;
     
     const config = getBubbleDecorationConfig();
-    config.opacity = opacity;
+    config[currentEditingBubbleType].opacity = opacity;
     saveBubbleDecorationConfig(config);
     
     applyBubbleDecoration();
@@ -4687,24 +4756,13 @@ function updateBubbleDecorationRotation() {
     document.getElementById('bubbleDecorationRotationValue').textContent = rotation;
     
     const config = getBubbleDecorationConfig();
-    config.rotation = rotation;
+    config[currentEditingBubbleType].rotation = rotation;
     saveBubbleDecorationConfig(config);
     
     applyBubbleDecoration();
 }
 
-/**
- * 更新气泡装饰应用范围
- */
-function updateBubbleDecorationApplyTo() {
-    const applyTo = document.querySelector('input[name="bubbleDecorationApplyTo"]:checked').value;
-    
-    const config = getBubbleDecorationConfig();
-    config.applyTo = applyTo;
-    saveBubbleDecorationConfig(config);
-    
-    applyBubbleDecoration();
-}
+// 移除应用范围功能（已被类型切换替代）
 
 /**
  * 保存气泡装饰设置
@@ -4712,17 +4770,18 @@ function updateBubbleDecorationApplyTo() {
 function saveBubbleDecorationSettings() {
     const config = getBubbleDecorationConfig();
     
-    if (!config.imageUrl) {
+    if (!config[currentEditingBubbleType].imageUrl) {
         showToast('请先上传装饰图片');
         return;
     }
     
-    config.enabled = true;
+    config[currentEditingBubbleType].enabled = true;
     document.getElementById('bubbleDecorationToggle').checked = true;
     saveBubbleDecorationConfig(config);
     
     applyBubbleDecoration();
-    showToast('装饰设置已保存');
+    const typeName = currentEditingBubbleType === 'user' ? '用户' : '角色';
+    showToast(`${typeName}装饰设置已保存`);
 }
 
 /**
@@ -4735,10 +4794,6 @@ function applyBubbleDecoration() {
     const oldStyle = document.getElementById('bubbleDecorationStyle');
     if (oldStyle) {
         oldStyle.remove();
-    }
-    
-    if (!config.enabled || !config.imageUrl) {
-        return;
     }
     
     // 计算位置
@@ -4754,41 +4809,82 @@ function applyBubbleDecoration() {
         'bottom-right': { bottom: '5%', right: '5%', transform: '' }
     };
     
-    const pos = positionMap[config.position.preset] || positionMap['top-right'];
-    
     // 构建CSS
     let css = '';
-    const selector = config.applyTo === 'both' ? '.chat-message-bubble::before' :
-                     config.applyTo === 'user' ? '.chat-message-user .chat-message-bubble::before' :
-                     '.chat-message-char .chat-message-bubble::before';
     
-    css += `${selector} {
-        background-image: url('${config.imageUrl}');
-        width: ${config.size}px;
-        height: ${config.size}px;
-        opacity: ${config.opacity / 100};
-    `;
-    
-    if (pos.top) css += `top: calc(${pos.top} + ${config.position.offsetY}%);`;
-    if (pos.bottom) css += `bottom: calc(${pos.bottom} - ${config.position.offsetY}%);`;
-    if (pos.left) css += `left: calc(${pos.left} + ${config.position.offsetX}%);`;
-    if (pos.right) css += `right: calc(${pos.right} - ${config.position.offsetX}%);`;
-    
-    let transform = pos.transform;
-    if (config.rotation !== 0) {
-        transform = transform ? `${transform} rotate(${config.rotation}deg)` : `rotate(${config.rotation}deg)`;
+    // 应用用户气泡装饰
+    if (config.user.enabled && config.user.imageUrl) {
+        const userPos = positionMap[config.user.position.preset] || positionMap['top-right'];
+        css += `.chat-message-user .chat-message-bubble::before {
+            content: '';
+            position: absolute;
+            background-image: url('${config.user.imageUrl}');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            width: ${config.user.size}px;
+            height: ${config.user.size}px;
+            opacity: ${config.user.opacity / 100};
+            pointer-events: none;
+            z-index: 1;
+        `;
+        
+        if (userPos.top) css += `top: calc(${userPos.top} + ${config.user.position.offsetY}%);`;
+        if (userPos.bottom) css += `bottom: calc(${userPos.bottom} - ${config.user.position.offsetY}%);`;
+        if (userPos.left) css += `left: calc(${userPos.left} + ${config.user.position.offsetX}%);`;
+        if (userPos.right) css += `right: calc(${userPos.right} - ${config.user.position.offsetX}%);`;
+        
+        let userTransform = userPos.transform;
+        if (config.user.rotation !== 0) {
+            userTransform = userTransform ? `${userTransform} rotate(${config.user.rotation}deg)` : `rotate(${config.user.rotation}deg)`;
+        }
+        if (userTransform) {
+            css += `transform: ${userTransform};`;
+        }
+        
+        css += '}\n';
     }
-    if (transform) {
-        css += `transform: ${transform};`;
-    }
     
-    css += '}';
+    // 应用角色气泡装饰
+    if (config.char.enabled && config.char.imageUrl) {
+        const charPos = positionMap[config.char.position.preset] || positionMap['top-left'];
+        css += `.chat-message-char .chat-message-bubble::before {
+            content: '';
+            position: absolute;
+            background-image: url('${config.char.imageUrl}');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            width: ${config.char.size}px;
+            height: ${config.char.size}px;
+            opacity: ${config.char.opacity / 100};
+            pointer-events: none;
+            z-index: 1;
+        `;
+        
+        if (charPos.top) css += `top: calc(${charPos.top} + ${config.char.position.offsetY}%);`;
+        if (charPos.bottom) css += `bottom: calc(${charPos.bottom} - ${config.char.position.offsetY}%);`;
+        if (charPos.left) css += `left: calc(${charPos.left} + ${config.char.position.offsetX}%);`;
+        if (charPos.right) css += `right: calc(${charPos.right} - ${config.char.position.offsetX}%);`;
+        
+        let charTransform = charPos.transform;
+        if (config.char.rotation !== 0) {
+            charTransform = charTransform ? `${charTransform} rotate(${config.char.rotation}deg)` : `rotate(${config.char.rotation}deg)`;
+        }
+        if (charTransform) {
+            css += `transform: ${charTransform};`;
+        }
+        
+        css += '}\n';
+    }
     
     // 注入样式
-    const style = document.createElement('style');
-    style.id = 'bubbleDecorationStyle';
-    style.textContent = css;
-    document.head.appendChild(style);
+    if (css) {
+        const style = document.createElement('style');
+        style.id = 'bubbleDecorationStyle';
+        style.textContent = css;
+        document.head.appendChild(style);
+    }
 }
 
 /**
@@ -4802,7 +4898,8 @@ function saveBubbleDecorationPreset() {
     }
     
     const config = getBubbleDecorationConfig();
-    if (!config.imageUrl) {
+    // 检查当前编辑类型是否有图片
+    if (!config[currentEditingBubbleType].imageUrl) {
         showToast('请先配置装饰图片');
         return;
     }
@@ -4858,7 +4955,9 @@ function loadBubbleDecorationPreset() {
     
     // 应用预设配置
     saveBubbleDecorationConfig(preset.config);
-    initBubbleDecorationSettings();
+    
+    // 重新加载当前编辑类型的设置
+    loadBubbleDecorationSettingsForType(currentEditingBubbleType);
     applyBubbleDecoration();
     
     showToast('预设已加载');
@@ -5013,6 +5112,18 @@ function getDefaultBubbleCss() {
     color: #333;
     border-radius: 18px;
     padding: 10px 14px;
+}
+
+/* 用户语音气泡样式 */
+.chat-message-user .chat-voice-bubble {
+    background-color: #007bff;
+    border-radius: 18px;
+}
+
+/* AI语音气泡样式 */
+.chat-message-char .chat-voice-bubble {
+    background-color: #f0f0f0;
+    border-radius: 18px;
 }`;
 }
 
@@ -6195,7 +6306,7 @@ async function addIncomingCallMessageToChat(statusText) {
             <div class="chat-message-content">
                 <div class="chat-message-bubble video-call-simple">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M20 15.5c-1.25 0-2.45-.2-3.57-.57-.35-.11-.74-.03-1.02.24l-2.2 2.2c-2.83-1.44-5.15-3.75-6.59-6.59l2.2-2.21c.28-.26.36-.65.25-1C8.7 6.45 8.5 5.25 8.5 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.5c0-.55-.45-1-1-1z"/>
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
                     </svg>
                     <span>视频来电 ${statusText}</span>
                 </div>
@@ -6211,12 +6322,54 @@ async function addIncomingCallMessageToChat(statusText) {
 // 挂断来电后的通话（复用hangupVideoCall的逻辑，但标记为incoming）
 // 注意：接听后的挂断直接复用video-call.js里的hangupVideoCall
 
+// 专门用于渲染来电消息的函数（用于刷新后加载）
+function appendIncomingCallMessageToChat(messageObj) {
+    const container = document.getElementById('chatMessagesContainer');
+    if (!container) return;
+    
+    const messageEl = document.createElement('div');
+    messageEl.className = 'chat-message chat-message-char';
+    messageEl.dataset.msgId = messageObj.id;
+    messageEl.dataset.msgType = 'char';
+    
+    // 获取角色头像
+    let charAvatar = '';
+    if (currentChatCharacter && currentChatCharacter.avatar) {
+        charAvatar = currentChatCharacter.avatar;
+    }
+    
+    // 格式化时间
+    const time = new Date(messageObj.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    
+    // 提取状态文本（从 "视频来电 已拒绝" 中提取 "已拒绝"）
+    const statusText = messageObj.content.replace('视频来电 ', '');
+    
+    messageEl.innerHTML = `
+        <div class="chat-message-avatar">
+            ${charAvatar ? `<img src="${charAvatar}" alt="avatar" class="chat-avatar-img">` : '<div class="chat-avatar-placeholder">头像</div>'}
+        </div>
+        <div class="chat-message-content">
+            <div class="chat-message-bubble video-call-simple">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                </svg>
+                <span>视频来电 ${statusText}</span>
+            </div>
+            <div class="chat-message-time">${time}</div>
+        </div>
+    `;
+    
+    container.appendChild(messageEl);
+    container.scrollTop = container.scrollHeight;
+}
+
 // 全局暴露
 window.showIncomingCallUI = showIncomingCallUI;
 window.acceptIncomingCall = acceptIncomingCall;
 window.rejectIncomingCall = rejectIncomingCall;
 window.minimizeIncomingCall = minimizeIncomingCall;
 window.addIncomingCallMessageToChat = addIncomingCallMessageToChat;
+window.appendIncomingCallMessageToChat = appendIncomingCallMessageToChat;
 
 
 // ============================================================
@@ -9388,6 +9541,8 @@ async function finishCreateGroup() {
         membersWhoKnowUser: tempGroupData?.membersWhoKnowUser || [],
         owner: ownerId,
         admins: [],
+        memberStatus: {},
+        memberRelations: {},
         createTime: new Date().toISOString(),
         lastMessageTime: new Date().toISOString(),
         lastMessage: '',
@@ -9409,15 +9564,30 @@ async function finishCreateGroup() {
             timeAwareness: true,
             
             // 群聊特有设置
+            minMessagesPerMember: 1,
+            maxMessagesPerMember: 5,
             bgActivityEnabled: false,
             bgActivityMode: 'scheduled',
             bgActivityInterval: 60,
-            memberActivity: {}
+            memberActivity: {},
+            levelSystem: {
+                enabled: true,
+                upgradeThreshold: [0, 10, 30, 60, 100, 150, 220, 300, 400, 500]
+            }
         }
     };
     
-    // 初始化成员活跃度（默认0.5）
+    // 初始化成员状态和活跃度
     selectedGroupMembers.forEach(memberId => {
+        groupCharacter.memberStatus[memberId] = {
+            isMuted: false,
+            muteUntil: null,
+            joinTime: new Date().toISOString(),
+            title: '',
+            level: 1,
+            messageCount: 0,
+            lastActiveTime: null
+        };
         groupCharacter.settings.memberActivity[memberId] = 0.5;
     });
     
@@ -9467,52 +9637,135 @@ async function handleGroupChatMessage(userMessage) {
     // 获取所有成员信息
     const allMembers = members.map(memberId => chatCharacters.find(c => c.id === memberId)).filter(Boolean);
     
+    if (allMembers.length === 0) {
+        console.error('群聊错误：找不到任何成员');
+        await iosAlert('找不到群成员，请检查群聊配置', '错误');
+        return;
+    }
+    
+    // 预加载表情包列表（用于验证和提示词）
+    let availableStickers = [];
+    let availableStickerObjects = [];
+    try {
+        const allStickers = await loadStickersFromDB();
+        availableStickers = allStickers.map(s => s.name);
+        availableStickerObjects = allStickers.map(s => ({ name: s.name, id: s.id }));
+        console.log('已加载表情包列表，共', availableStickers.length, '个');
+    } catch (error) {
+        console.warn('加载表情包列表失败:', error);
+    }
+    
     // 获取时间信息
     const timeInfo = typeof getCurrentTimeInfo === 'function' ? getCurrentTimeInfo() : null;
     
-    // 依次让每个成员回复
-    for (const memberId of members) {
-        const member = chatCharacters.find(c => c.id === memberId);
-        if (!member) continue;
+    try {
+        // 检查函数是否存在
+        if (typeof buildGroupChatPrompt !== 'function') {
+            console.error('buildGroupChatPrompt 函数未定义！请确保 prompts.js 已正确加载');
+            await iosAlert('系统错误：群聊提示词函数未加载', '错误');
+            return;
+        }
         
-        try {
-            // 构建该成员的提示词
-            const prompt = buildGroupChatPrompt(groupData, member, chatHistory, allMembers, timeInfo);
-            
-            // 替换长期记忆占位符
-            let finalPrompt = prompt;
-            if (groupData.membersWhoKnowUser && groupData.membersWhoKnowUser.includes(memberId)) {
+        // 构建群聊提示词（一次性为所有成员）
+        const prompt = buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, availableStickerObjects);
+        
+        // 替换长期记忆占位符
+        let finalPrompt = prompt;
+        const membersWhoKnowUser = groupData.membersWhoKnowUser || [];
+        
+        // 收集所有认识用户的成员的记忆
+        let memoriesText = '';
+        for (const memberId of membersWhoKnowUser) {
+            const member = allMembers.find(m => m.id === memberId);
+            if (member) {
                 const memories = await getLongTermMemories(memberId);
                 const memoryText = memories.map(m => m.content).join('\n');
-                finalPrompt = finalPrompt.replace('{longTermMemories}', memoryText || '（暂无记忆）');
-            } else {
-                finalPrompt = finalPrompt.replace('{longTermMemories}', '');
+                if (memoryText) {
+                    memoriesText += `\n${member.remark || member.name}的记忆：\n${memoryText}\n`;
+                }
             }
+        }
+        finalPrompt = finalPrompt.replace('{longTermMemories}', memoriesText || '（暂无记忆）');
+        
+        // 显示输入中状态（通用）
+        showTypingIndicator({ remark: '群成员', name: '群成员', avatar: '' });
+        
+        // 调用AI（一次性获取所有成员的回复）
+        const response = await callAIForGroupChat(finalPrompt, groupData);
+        
+        // 隐藏输入中状态
+        hideTypingIndicator();
+        
+        if (!response) {
+            console.warn('群聊AI回复失败');
+            return;
+        }
+        
+        // 解析回复（JSON对象格式：{"成员名": ["消息1", "消息2"], ...}）
+        let memberReplies = {};
+        try {
+            // 尝试提取JSON对象（可能包裹在markdown代码块中）
+            let jsonStr = response.trim();
             
-            // 显示输入中状态
-            showTypingIndicator(member);
+            // 移除可能的markdown代码块标记
+            jsonStr = jsonStr.replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
             
-            // 调用AI
-            const response = await callAIForGroupMember(finalPrompt, groupData, member);
+            // 解析JSON
+            memberReplies = JSON.parse(jsonStr);
             
-            // 隐藏输入中状态
-            hideTypingIndicator();
+            if (typeof memberReplies !== 'object' || Array.isArray(memberReplies)) {
+                throw new Error('返回的不是有效的对象格式');
+            }
+        } catch (e) {
+            console.warn('解析群聊回复失败，尝试清洗格式:', e);
+            console.log('原始响应:', response);
             
-            if (!response) {
-                console.warn(`成员 ${member.remark} 回复失败`);
+            // 尝试使用cleanAIResponse清洗
+            if (typeof cleanAIResponse === 'function') {
+                const cleaned = cleanAIResponse(response);
+                // 如果清洗后是数组，给第一个成员
+                if (Array.isArray(cleaned) && allMembers.length > 0) {
+                    memberReplies = {
+                        [allMembers[0].remark || allMembers[0].name]: cleaned
+                    };
+                } else {
+                    console.error('无法解析群聊回复');
+                    return;
+                }
+            } else {
+                console.error('无法解析群聊回复');
+                return;
+            }
+        }
+        
+        // 按成员处理回复（所有回复已经生成好了，只需要依次显示）
+        for (const [memberName, messages] of Object.entries(memberReplies)) {
+            // 查找对应的成员
+            const member = allMembers.find(m => 
+                (m.remark || m.name) === memberName || 
+                m.name === memberName ||
+                m.remark === memberName
+            );
+            
+            if (!member) {
+                console.warn(`找不到成员: ${memberName}`);
                 continue;
             }
             
-            // 解析回复（JSON数组格式）
-            let messages = [];
-            try {
-                messages = JSON.parse(response);
-                if (!Array.isArray(messages)) {
-                    messages = [response];
+            // 检查成员是否被禁言
+            if (isMemberMuted(groupData, member.id)) {
+                console.log(`🔇 成员 ${memberName} (${member.id}) 被禁言，跳过其消息`);
+                const status = groupData.memberStatus?.[member.id];
+                if (status) {
+                    console.log('   - 禁言状态:', status.isMuted);
+                    console.log('   - 禁言到期时间:', status.muteUntil);
                 }
-            } catch (e) {
-                console.warn('解析回复失败，使用原始文本:', e);
-                messages = [response];
+                continue;
+            }
+            
+            if (!Array.isArray(messages) || messages.length === 0) {
+                console.warn(`成员 ${memberName} 的消息格式错误`);
+                continue;
             }
             
             // 保存并显示每条消息
@@ -9520,15 +9773,51 @@ async function handleGroupChatMessage(userMessage) {
                 const charMsg = {
                     id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
                     characterId: groupData.id,
-                    groupMemberId: memberId, // 标记是哪个成员发的
+                    groupMemberId: member.id, // 标记是哪个成员发的
                     content: msgContent,
                     type: 'char',
                     sender: member.remark || member.name,
                     timestamp: new Date().toISOString()
                 };
                 
-                // 处理特殊消息类型（引用、@等）
-                await processGroupSpecialMessage(charMsg, groupData);
+                // ========== 🔧 修复：先处理权限指令 ==========
+                console.log(`🔍 检查权限指令: ${member.remark || member.name} - ${msgContent}`);
+                const permissionResult = await parseAndExecutePermissionCommands(
+                    charMsg.content, 
+                    member.id,  // 发送者ID（角色ID）
+                    groupData
+                );
+                
+                // 更新消息内容（移除权限指令标记）
+                charMsg.content = permissionResult.cleanContent;
+                console.log(`   - 清理后内容: ${charMsg.content}`);
+                console.log(`   - 执行的操作数: ${permissionResult.executedActions.length}`);
+                console.log(`   - 系统消息数: ${permissionResult.systemMessages.length}`);
+                
+                // 添加系统消息（权限操作的提示）
+                for (const sysMsg of permissionResult.systemMessages) {
+                    const systemMessageObj = {
+                        id: Date.now().toString() + '_sys_' + Math.random().toString(36).substr(2, 6),
+                        characterId: groupData.id,
+                        content: sysMsg,
+                        type: 'system',
+                        timestamp: new Date().toISOString(),
+                        sender: 'system',
+                        messageType: 'systemNotice'
+                    };
+                    await saveMessageToDB(systemMessageObj);
+                    appendMessageToChat(systemMessageObj);
+                    console.log(`   ✅ 添加系统消息: ${sysMsg}`);
+                }
+                
+                // 处理特殊消息类型（引用、@、表情包验证等）
+                const isValid = await processGroupSpecialMessage(charMsg, groupData, availableStickers);
+                
+                // 如果消息被过滤掉了（比如只有无效表情包，没有其他内容），跳过
+                if (!isValid) {
+                    console.log(`过滤掉无效消息: ${msgContent}`);
+                    continue;
+                }
                 
                 // 保存到数据库
                 await saveMessageToDB(charMsg);
@@ -9539,14 +9828,18 @@ async function handleGroupChatMessage(userMessage) {
                 // 滚动到底部
                 scrollChatToBottom();
                 
-                // 模拟真实发送延迟
-                await sleep(Math.random() * 1500 + 500);
+                // 模拟真实发送延迟（消息之间的间隔）
+                await sleep(Math.random() * 800 + 300);
             }
             
-        } catch (error) {
-            console.error(`成员 ${member.remark} 回复出错:`, error);
-            hideTypingIndicator();
+            // 成员之间的间隔（稍微长一点，模拟不同人发消息的节奏）
+            await sleep(Math.random() * 1000 + 500);
         }
+        
+    } catch (error) {
+        console.error('群聊处理出错:', error);
+        hideTypingIndicator();
+        await iosAlert('群聊消息处理失败: ' + error.message, '错误');
     }
     
     // 更新聊天列表
@@ -9554,111 +9847,89 @@ async function handleGroupChatMessage(userMessage) {
 }
 
 /**
- * 调用AI获取群成员回复
+ * 调用AI获取群聊回复（一次性获取所有成员）
  */
-async function callAIForGroupMember(prompt, groupData, member) {
-    // 使用群聊的API设置
-    const settings = groupData.settings || {};
-    const apiProvider = settings.apiProvider || localStorage.getItem('apiProvider') || 'hakimi';
-    const apiKey = settings.apiKey || localStorage.getItem('apiKey') || '';
-    const model = settings.model || localStorage.getItem('model') || '';
-    const temperature = settings.temperature || 0.9;
-    const maxTokens = settings.maxTokens || 2000;
-    
-    // 获取API URL
-    let apiUrl = '';
-    if (apiProvider === 'hakimi') {
-        apiUrl = 'https://generativelanguage.googleapis.com/v1beta';
-    } else if (apiProvider === 'claude') {
-        apiUrl = 'https://api.anthropic.com/v1';
-    } else if (apiProvider === 'ds') {
-        apiUrl = 'https://api.deepseek.com/v1';
-    } else if (apiProvider === 'custom') {
-        apiUrl = settings.customApiUrl || '';
-    }
-    
-    if (!apiKey || !model) {
-        console.error('API配置不完整');
-        return null;
+async function callAIForGroupChat(prompt, groupData) {
+    // 使用主聊天的API设置（和callAIRolePlay保持一致）
+    const settings = await storageDB.getItem('apiSettings');
+    if (!settings || !settings.apiUrl || !settings.apiKey || !settings.model) {
+        console.error('请先在设置中配置API');
+        throw new Error('请先在设置中配置API');
     }
     
     try {
         let response;
         
-        if (apiProvider === 'hakimi') {
+        if (settings.provider === 'hakimi') {
             // Gemini API
-            response = await fetch(`${apiUrl}/models/${model}:generateContent?key=${apiKey}`, {
+            response = await fetch(`${settings.apiUrl}/models/${settings.model}:generateContent?key=${settings.apiKey}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ role: 'user', parts: [{ text: prompt }] }],
                     generationConfig: {
-                        temperature: temperature,
-                        maxOutputTokens: maxTokens
+                        temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
+                        topP: settings.topP !== undefined ? settings.topP : 0.95,
+                        maxOutputTokens: settings.maxTokens || 2048
                     }
                 })
             });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API请求失败: ${response.status} ${errorText}`);
+            }
             
             const data = await response.json();
             if (data.candidates && data.candidates[0] && data.candidates[0].content) {
                 return data.candidates[0].content.parts[0].text;
             }
-        } else if (apiProvider === 'claude') {
+        } else if (settings.provider === 'claude') {
             // Claude API
-            response = await fetch(`${apiUrl}/messages`, {
+            response = await fetch(`${settings.apiUrl}/messages`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
+                    'x-api-key': settings.apiKey,
                     'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                    model: model,
-                    max_tokens: maxTokens,
-                    temperature: temperature,
+                    model: settings.model,
+                    max_tokens: settings.maxTokens || 2048,
+                    temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
                     messages: [{ role: 'user', content: prompt }]
                 })
             });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API请求失败: ${response.status} ${errorText}`);
+            }
             
             const data = await response.json();
             if (data.content && data.content[0]) {
                 return data.content[0].text;
             }
-        } else if (apiProvider === 'ds') {
-            // DeepSeek API
-            response = await fetch(`${apiUrl}/chat/completions`, {
+        } else {
+            // OpenAI-compatible API (包括 DeepSeek 和 Custom)
+            response = await fetch(`${settings.apiUrl}/chat/completions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Authorization': `Bearer ${settings.apiKey}`
                 },
                 body: JSON.stringify({
-                    model: model,
+                    model: settings.model,
                     messages: [{ role: 'user', content: prompt }],
-                    temperature: temperature,
-                    max_tokens: maxTokens
+                    temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
+                    max_tokens: settings.maxTokens || 2048
                 })
             });
             
-            const data = await response.json();
-            if (data.choices && data.choices[0]) {
-                return data.choices[0].message.content;
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`API请求失败: ${response.status} ${errorText}`);
             }
-        } else if (apiProvider === 'custom') {
-            // 自定义API（OpenAI格式）
-            response = await fetch(`${apiUrl}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [{ role: 'user', content: prompt }],
-                    temperature: temperature,
-                    max_tokens: maxTokens
-                })
-            });
             
             const data = await response.json();
             if (data.choices && data.choices[0]) {
@@ -9666,18 +9937,102 @@ async function callAIForGroupMember(prompt, groupData, member) {
             }
         }
         
-        return null;
+        throw new Error('API返回了空响应');
     } catch (error) {
-        console.error('AI调用失败:', error);
-        return null;
+        console.error('群聊AI调用失败:', error);
+        throw error;
     }
 }
 
 /**
- * 处理群聊特殊消息（引用、@等）
+ * 处理群聊特殊消息（引用、@、图片、语音等）
+ * @param {Object} message - 消息对象
+ * @param {Object} groupData - 群聊数据
+ * @param {Array} availableStickers - 可用的表情包名称列表
+ * @returns {boolean} - 返回true表示消息有效，false表示消息应该被过滤
  */
-async function processGroupSpecialMessage(message, groupData) {
-    const content = message.content;
+async function processGroupSpecialMessage(message, groupData, availableStickers = []) {
+    let content = message.content;
+    let hasValidContent = false; // 标记是否有有效内容
+    
+    // 检测并处理图片 [image:描述]
+    const imageMatch = content.match(/\[image:([^\]]+)\]/);
+    if (imageMatch) {
+        message.messageType = 'textImage';
+        message.textImageDesc = imageMatch[1];
+        hasValidContent = true;
+        // 移除图片标记，保留其他文字
+        content = content.replace(/\[image:[^\]]+\]/, '').trim();
+    }
+    
+    // 检测并处理语音 [voice:内容]
+    const voiceMatch = content.match(/\[voice:([^\]]+)\]/);
+    if (voiceMatch) {
+        message.messageType = 'voice';
+        message.voiceText = voiceMatch[1];
+        message.voiceDuration = Math.ceil(voiceMatch[1].length / 3); // 估算时长
+        hasValidContent = true;
+        // 移除语音标记
+        content = content.replace(/\[voice:[^\]]+\]/, '').trim();
+    }
+    
+    // 检测并处理定位 [location:地址] 或 [location:地址:坐标:距离]
+    const locationMatch = content.match(/\[location:([^\]]+)\]/);
+    if (locationMatch) {
+        const parts = locationMatch[1].split(':');
+        message.messageType = 'location';
+        message.locationAddress = parts[0] || '';
+        message.locationCoord = parts[1] || '';
+        message.locationDistance = parts[2] || '';
+        message.locationUnit = parts[3] || 'km';
+        hasValidContent = true;
+        // 移除定位标记
+        content = content.replace(/\[location:[^\]]+\]/, '').trim();
+    }
+    
+    // 检测并处理表情包 [sticker:名称] - 带验证
+    const stickerMatch = content.match(/\[sticker:([^\]]+)\]/);
+    if (stickerMatch) {
+        const stickerName = stickerMatch[1];
+        
+        // 验证表情包是否存在
+        const stickerExists = availableStickers.some(name => 
+            name === stickerName || 
+            name.toLowerCase() === stickerName.toLowerCase() ||
+            name.includes(stickerName) ||
+            stickerName.includes(name)
+        );
+        
+        if (stickerExists) {
+            // 加载表情包数据
+            const userStickers = typeof loadStickersFromDB === 'function' ? await loadStickersFromDB() : [];
+            const charStickers = typeof loadCharStickersFromDB === 'function' ? await loadCharStickersFromDB() : [];
+            const allStickers = [...userStickers, ...charStickers];
+            const foundSticker = allStickers.find(s => 
+                s.name === stickerName || 
+                s.name.toLowerCase() === stickerName.toLowerCase() ||
+                s.name.includes(stickerName) ||
+                stickerName.includes(s.name)
+            );
+            
+            if (foundSticker && foundSticker.data) {
+                // 表情包存在且有数据，正常处理
+                message.messageType = 'sticker';
+                message.stickerName = foundSticker.name;
+                message.stickerData = foundSticker.data;
+                hasValidContent = true;
+                console.log(`✓ 表情包验证通过: ${foundSticker.name}`);
+            } else {
+                console.warn(`✗ 表情包数据不存在: ${stickerName}`);
+            }
+        } else {
+            // 表情包不存在，移除标签
+            console.warn(`✗ 表情包不存在，已过滤: ${stickerName}`);
+        }
+        
+        // 无论是否存在，都移除表情包标记
+        content = content.replace(/\[sticker:[^\]]+\]/, '').trim();
+    }
     
     // 检测引用 [quote:消息ID]
     const quoteMatch = content.match(/\[quote:([^\]]+)\]/);
@@ -9690,8 +10045,9 @@ async function processGroupSpecialMessage(message, groupData) {
             message.quotedSender = quotedMsg.sender || '未知';
             message.quotedContent = quotedMsg.content || '';
         }
+        hasValidContent = true;
         // 移除引用标记
-        message.content = content.replace(/\[quote:[^\]]+\]/, '').trim();
+        content = content.replace(/\[quote:[^\]]+\]/, '').trim();
     }
     
     // 检测@成员
@@ -9700,8 +10056,30 @@ async function processGroupSpecialMessage(message, groupData) {
         message.atMembers = atMatches.map(at => at.substring(1));
     }
     
-    // 处理其他特殊消息类型（语音、图片等）
-    // 这里可以复用单聊的处理逻辑
+    // 检查是否有文字内容
+    if (content && content.length > 0) {
+        hasValidContent = true;
+        message.content = content;
+    } else if (hasValidContent) {
+        // 有特殊消息类型但没有文字，设置默认显示文本
+        if (message.messageType === 'textImage') {
+            message.content = '[图片]';
+        } else if (message.messageType === 'voice') {
+            message.content = '[语音]';
+        } else if (message.messageType === 'location') {
+            message.content = '[位置]';
+        } else if (message.messageType === 'sticker') {
+            // 表情包消息不需要设置content，会通过stickerData渲染
+            message.content = '';
+        } else {
+            message.content = content || '';
+        }
+    } else {
+        // 既没有有效的特殊消息，也没有文字内容，过滤掉这条消息
+        return false;
+    }
+    
+    return true; // 消息有效
 }
 
 /**
@@ -9768,11 +10146,11 @@ function getGroupMessageSender(messageObj) {
     
     // 如果是用户消息
     if (messageObj.type === 'user') {
-        const userAvatarImg = document.getElementById('userAvatarImage');
-        const userNameInput = document.getElementById('userNameInput');
+        // 从当前群聊的用户数据中读取用户名和头像
+        const userData = getUserDataForCharacter(currentChatCharacter.id);
         return {
-            avatar: (userAvatarImg && userAvatarImg.style.display === 'block') ? userAvatarImg.src : '',
-            name: (userNameInput && userNameInput.value.trim()) || '用户',
+            avatar: userData.avatar || '',
+            name: userData.name || '用户',
             isGroupMessage: true
         };
     }
@@ -9784,6 +10162,18 @@ function getGroupMessageSender(messageObj) {
             return {
                 avatar: member.avatar || '',
                 name: member.remark || member.name || '未知成员',
+                isGroupMessage: true
+            };
+        } else {
+            // 找不到成员，输出错误信息
+            console.error(`getGroupMessageSender: 找不到成员 ID=${messageObj.groupMemberId}`);
+            console.log('消息对象:', messageObj);
+            console.log('当前 chatCharacters:', chatCharacters.map(c => ({ id: c.id, name: c.name })));
+            
+            // 返回默认值，但标记为群聊消息
+            return {
+                avatar: '',
+                name: messageObj.sender || '未知成员',
                 isGroupMessage: true
             };
         }
@@ -9802,12 +10192,84 @@ function addGroupChatSettingsUI() {
         return; // 不是群聊，不添加
     }
     
-    // 查找设置界面的合适位置（在基本信息之后）
-    const settingsCard = document.querySelector('#chatSettings .settings-card');
-    if (!settingsCard) return;
+    console.log('添加群聊设置UI，群聊数据:', currentChatCharacter);
+    console.log('群聊成员ID列表:', currentChatCharacter.members);
+    console.log('当前chatCharacters数组:', chatCharacters);
+    
+    // 查找角色标签页的设置卡片
+    const charTab = document.getElementById('charTab');
+    if (!charTab) {
+        console.error('找不到角色标签页');
+        return;
+    }
+    
+    const settingsCard = charTab.querySelector('.settings-card');
+    if (!settingsCard) {
+        console.error('找不到设置卡片容器');
+        return;
+    }
+    
+    // 获取成员列表
+    const memberIds = currentChatCharacter.members || [];
+    const members = memberIds.map(id => {
+        const member = chatCharacters.find(c => c.id === id);
+        if (!member) {
+            console.warn(`找不到成员 ID=${id}`);
+        }
+        return member;
+    }).filter(Boolean);
+    
+    console.log('找到的成员对象:', members);
+    
+    // 创建成员列表HTML
+    let membersHTML = '';
+    if (members.length > 0) {
+        membersHTML = members.map(member => `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #f8f8f8; border-radius: 12px; margin-bottom: 10px;">
+                <div style="width: 45px; height: 45px; border-radius: 50%; background: #e0e0e0; overflow: hidden; flex-shrink: 0;">
+                    ${member.avatar ? `<img src="${member.avatar}" style="width: 100%; height: 100%; object-fit: cover;">` : '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999;">头像</div>'}
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 15px; font-weight: 500; color: #333; margin-bottom: 4px;">${escapeHtml(member.remark || member.name || '未知')}</div>
+                    <div style="font-size: 12px; color: #999;">ID: ${member.id.substring(0, 8)}...</div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        membersHTML = '<div style="text-align: center; color: #999; padding: 20px;">找不到群成员</div>';
+    }
     
     // 创建群聊专属设置区域
     const groupSettingsHTML = `
+        <div class="section-title" style="margin-top: 30px;">
+            <span class="section-title-text">群聊成员 (${members.length}人)</span>
+        </div>
+        
+        <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+            ${membersHTML}
+        </div>
+        
+        <!-- 成员消息数量设置 -->
+        <div class="section-title" style="margin-top: 30px;">
+            <span class="section-title-text">成员发言设置</span>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">每轮最少消息数</label>
+            <input type="number" class="form-input" id="groupMinMessages" value="${currentChatCharacter.settings?.minMessagesPerMember || 1}" min="0" onchange="updateGroupMessageRange()">
+            <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                每个成员每轮至少发几条消息
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label">每轮最多消息数</label>
+            <input type="number" class="form-input" id="groupMaxMessages" value="${currentChatCharacter.settings?.maxMessagesPerMember || 5}" min="0" onchange="updateGroupMessageRange()">
+            <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                每个成员每轮最多发几条消息
+            </div>
+        </div>
+        
         <div class="section-title" style="margin-top: 30px;">
             <span class="section-title-text">群聊设置</span>
         </div>
@@ -9815,7 +10277,7 @@ function addGroupChatSettingsUI() {
         <!-- 成员管理 -->
         <div class="form-group">
             <button class="btn-primary" onclick="openGroupMemberManagement()" style="width: 100%;">
-                成员管理 (${currentChatCharacter.members?.length || 0}人)
+                成员管理
             </button>
         </div>
         
@@ -9861,6 +10323,8 @@ function addGroupChatSettingsUI() {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = groupSettingsHTML;
     settingsCard.appendChild(tempDiv);
+    
+    console.log('群聊设置UI已添加');
 }
 
 /**
@@ -9884,25 +10348,2440 @@ function toggleGroupBgActivity(enabled) {
 }
 
 /**
- * 打开成员管理界面
+ * 更新群聊消息数量范围设置
  */
+function updateGroupMessageRange() {
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') return;
+    
+    const minInput = document.getElementById('groupMinMessages');
+    const maxInput = document.getElementById('groupMaxMessages');
+    
+    if (!minInput || !maxInput) return;
+    
+    let minMessages = parseInt(minInput.value) || 1;
+    let maxMessages = parseInt(maxInput.value) || 5;
+    
+    // 确保最小值不超过最大值
+    if (minMessages > maxMessages) {
+        minMessages = maxMessages;
+        minInput.value = minMessages;
+    }
+    
+    // 确保范围合理
+    minMessages = Math.max(1, Math.min(10, minMessages));
+    maxMessages = Math.max(1, Math.min(20, maxMessages));
+    
+    minInput.value = minMessages;
+    maxInput.value = maxMessages;
+    
+    // 保存设置
+    if (!currentChatCharacter.settings) {
+        currentChatCharacter.settings = {};
+    }
+    currentChatCharacter.settings.minMessagesPerMember = minMessages;
+    currentChatCharacter.settings.maxMessagesPerMember = maxMessages;
+    
+    console.log('群聊消息数量范围已更新:', minMessages, '-', maxMessages);
+}
+
+
+// ========== 移动端控制台功能 ==========
+
+// 控制台日志存储
+let _consoleLogs = [];
+let _consoleFilter = 'all';
+let _consoleMaxLogs = 500; // 最多保存500条日志
+
+// 原生控制台方法备份
+const _originalConsole = {
+    log: console.log,
+    warn: console.warn,
+    error: console.error
+};
+
+/**
+ * 初始化移动端控制台
+ */
+function initMobileConsole() {
+    // 劫持 console 方法
+    console.log = function(...args) {
+        _originalConsole.log.apply(console, args);
+        addConsoleLog('log', args);
+    };
+    
+    console.warn = function(...args) {
+        _originalConsole.warn.apply(console, args);
+        addConsoleLog('warn', args);
+    };
+    
+    console.error = function(...args) {
+        _originalConsole.error.apply(console, args);
+        addConsoleLog('error', args);
+    };
+    
+    // 捕获未处理的错误
+    window.addEventListener('error', (event) => {
+        addConsoleLog('error', [`${event.message} at ${event.filename}:${event.lineno}:${event.colno}`]);
+    });
+    
+    // 捕获未处理的 Promise 拒绝
+    window.addEventListener('unhandledrejection', (event) => {
+        addConsoleLog('error', [`Unhandled Promise Rejection: ${event.reason}`]);
+    });
+    
+    console.log('移动端控制台已初始化');
+}
+
+/**
+ * 添加日志到控制台
+ */
+function addConsoleLog(type, args) {
+    const timestamp = new Date();
+    const message = args.map(arg => {
+        if (typeof arg === 'object') {
+            try {
+                return JSON.stringify(arg, null, 2);
+            } catch (e) {
+                return String(arg);
+            }
+        }
+        return String(arg);
+    }).join(' ');
+    
+    const log = {
+        id: Date.now() + Math.random(),
+        type: type,
+        message: message,
+        timestamp: timestamp,
+        time: formatConsoleTime(timestamp)
+    };
+    
+    _consoleLogs.push(log);
+    
+    // 限制日志数量
+    if (_consoleLogs.length > _consoleMaxLogs) {
+        _consoleLogs.shift();
+    }
+    
+    // 如果控制台面板已打开，实时更新
+    const panel = document.getElementById('mobileConsolePanel');
+    if (panel && panel.classList.contains('active')) {
+        updateConsoleDisplay();
+    }
+}
+
+/**
+ * 格式化时间
+ */
+function formatConsoleTime(date) {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const ms = String(date.getMilliseconds()).padStart(3, '0');
+    return `${hours}:${minutes}:${seconds}.${ms}`;
+}
+
+/**
+ * 打开移动端控制台
+ */
+function openMobileConsole() {
+    const panel = document.getElementById('mobileConsolePanel');
+    if (!panel) return;
+    
+    panel.classList.add('active');
+    updateConsoleDisplay();
+    
+    // 滚动到底部
+    setTimeout(() => {
+        const container = document.getElementById('consoleLogsContainer');
+        if (container) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }, 100);
+}
+
+/**
+ * 关闭移动端控制台
+ */
+function closeMobileConsole() {
+    const panel = document.getElementById('mobileConsolePanel');
+    if (panel) panel.classList.remove('active');
+}
+
+/**
+ * 更新控制台显示
+ */
+function updateConsoleDisplay() {
+    const container = document.getElementById('consoleLogsContainer');
+    if (!container) return;
+    
+    // 统计各类型日志数量
+    const counts = {
+        all: _consoleLogs.length,
+        log: _consoleLogs.filter(l => l.type === 'log').length,
+        warn: _consoleLogs.filter(l => l.type === 'warn').length,
+        error: _consoleLogs.filter(l => l.type === 'error').length
+    };
+    
+    // 更新计数显示
+    document.getElementById('consoleCountAll').textContent = counts.all;
+    document.getElementById('consoleCountLog').textContent = counts.log;
+    document.getElementById('consoleCountWarn').textContent = counts.warn;
+    document.getElementById('consoleCountError').textContent = counts.error;
+    
+    // 如果没有日志，显示空状态
+    if (_consoleLogs.length === 0) {
+        container.innerHTML = `
+            <div class="console-empty-state">
+                <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
+                <div style="font-size: 14px; color: #999; margin-bottom: 6px;">暂无日志</div>
+                <div style="font-size: 12px; color: #bbb;">控制台输出将显示在这里</div>
+            </div>
+        `;
+        return;
+    }
+    
+    // 渲染日志列表
+    const filteredLogs = _consoleFilter === 'all' 
+        ? _consoleLogs 
+        : _consoleLogs.filter(l => l.type === _consoleFilter);
+    
+    if (filteredLogs.length === 0) {
+        container.innerHTML = `
+            <div class="console-empty-state">
+                <div style="font-size: 48px; margin-bottom: 12px;">🔍</div>
+                <div style="font-size: 14px; color: #999; margin-bottom: 6px;">没有找到日志</div>
+                <div style="font-size: 12px; color: #bbb;">尝试切换其他筛选条件</div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = filteredLogs.map(log => {
+        const icon = log.type === 'log' ? 'ℹ️' : log.type === 'warn' ? '⚠️' : '❌';
+        return `
+            <div class="console-log-item" data-type="${log.type}" data-log-id="${log.id}">
+                <div class="console-log-icon">${icon}</div>
+                <div class="console-log-content">
+                    <div class="console-log-time">${log.time}</div>
+                    <div class="console-log-message collapsed" onclick="toggleConsoleLogExpand(this)">${escapeHtml(log.message)}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // 添加长按复制功能
+    addConsoleLogLongPress();
+}
+
+/**
+ * 切换日志展开/折叠
+ */
+function toggleConsoleLogExpand(element) {
+    if (element.classList.contains('collapsed')) {
+        element.classList.remove('collapsed');
+        element.classList.add('expanded');
+    } else {
+        element.classList.remove('expanded');
+        element.classList.add('collapsed');
+    }
+}
+
+/**
+ * 筛选控制台日志
+ */
+function filterConsoleLogs(filter) {
+    _consoleFilter = filter;
+    
+    // 更新按钮状态
+    document.querySelectorAll('.console-filter-btn').forEach(btn => {
+        if (btn.dataset.filter === filter) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+    
+    updateConsoleDisplay();
+}
+
+/**
+ * 清空控制台日志
+ */
+async function clearConsoleLogs() {
+    if (_consoleLogs.length === 0) {
+        showToast('控制台已经是空的');
+        return;
+    }
+    
+    const confirmed = await iosConfirm(`确定要清空所有 ${_consoleLogs.length} 条日志吗？`, '清空控制台');
+    if (!confirmed) return;
+    
+    _consoleLogs = [];
+    updateConsoleDisplay();
+    showToast('控制台已清空');
+}
+
+/**
+ * 导出控制台日志
+ */
+function exportConsoleLogs() {
+    if (_consoleLogs.length === 0) {
+        showToast('没有日志可导出');
+        return;
+    }
+    
+    try {
+        // 生成导出内容
+        const content = _consoleLogs.map(log => {
+            return `[${log.time}] [${log.type.toUpperCase()}] ${log.message}`;
+        }).join('\n');
+        
+        // 创建下载
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `console-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('日志已导出');
+    } catch (error) {
+        console.error('导出失败:', error);
+        showToast('导出失败');
+    }
+}
+
+/**
+ * 添加长按复制功能
+ */
+function addConsoleLogLongPress() {
+    const logItems = document.querySelectorAll('.console-log-item');
+    
+    logItems.forEach(item => {
+        let pressTimer = null;
+        let startPos = null;
+        
+        const startPress = (e) => {
+            const touch = e.touches ? e.touches[0] : e;
+            startPos = { x: touch.clientX, y: touch.clientY };
+            
+            pressTimer = setTimeout(() => {
+                // 长按触发
+                const logId = item.dataset.logId;
+                const log = _consoleLogs.find(l => l.id == logId);
+                if (log) {
+                    copyConsoleLog(log);
+                }
+            }, 500);
+        };
+        
+        const cancelPress = (e) => {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        };
+        
+        const checkMove = (e) => {
+            if (!startPos) return;
+            
+            const touch = e.touches ? e.touches[0] : e;
+            const dx = Math.abs(touch.clientX - startPos.x);
+            const dy = Math.abs(touch.clientY - startPos.y);
+            
+            // 如果移动超过10px，取消长按
+            if (dx > 10 || dy > 10) {
+                cancelPress();
+            }
+        };
+        
+        item.addEventListener('touchstart', startPress);
+        item.addEventListener('touchmove', checkMove);
+        item.addEventListener('touchend', cancelPress);
+        item.addEventListener('touchcancel', cancelPress);
+        
+        // 桌面端支持
+        item.addEventListener('mousedown', startPress);
+        item.addEventListener('mousemove', checkMove);
+        item.addEventListener('mouseup', cancelPress);
+        item.addEventListener('mouseleave', cancelPress);
+    });
+}
+
+/**
+ * 复制单条日志
+ */
+async function copyConsoleLog(log) {
+    try {
+        const text = `[${log.time}] [${log.type.toUpperCase()}] ${log.message}`;
+        
+        // 尝试使用 Clipboard API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            showConsoleCopyHint('已复制到剪贴板');
+        } else {
+            // 降级方案
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showConsoleCopyHint('已复制到剪贴板');
+        }
+    } catch (error) {
+        console.error('复制失败:', error);
+        showConsoleCopyHint('复制失败');
+    }
+}
+
+/**
+ * 显示复制提示
+ */
+function showConsoleCopyHint(message) {
+    let hint = document.querySelector('.console-copy-hint');
+    
+    if (!hint) {
+        hint = document.createElement('div');
+        hint.className = 'console-copy-hint';
+        document.body.appendChild(hint);
+    }
+    
+    hint.textContent = message;
+    hint.classList.add('show');
+    
+    setTimeout(() => {
+        hint.classList.remove('show');
+    }, 2000);
+}
+
+// ========== 页面加载时初始化 ==========
+
+document.addEventListener('DOMContentLoaded', () => {
+    initMobileConsole();
+});
+
+// ========== @成员功能 ==========
+
+let _atMemberPanel = null;
+let _atMemberPanelActive = false;
+let _atStartPosition = -1;
+let _atSearchText = '';
+let _atSelectedIndex = 0;
+
+/**
+ * 初始化@成员功能
+ */
+function initAtMemberFeature() {
+    const chatInput = document.getElementById('chatInputField');
+    if (!chatInput) return;
+    
+    // 监听输入事件
+    chatInput.addEventListener('input', handleAtMemberInput);
+    
+    // 监听键盘事件（上下键选择，回车确认，ESC取消）
+    chatInput.addEventListener('keydown', handleAtMemberKeydown);
+    
+    // 点击其他地方关闭面板
+    document.addEventListener('click', (e) => {
+        if (_atMemberPanelActive && !e.target.closest('#atMemberPanel') && e.target !== chatInput) {
+            closeAtMemberPanel();
+        }
+    });
+    
+    // 窗口大小改变时重新定位面板
+    window.addEventListener('resize', () => {
+        if (_atMemberPanelActive) {
+            positionAtMemberPanel();
+        }
+    });
+    
+    // 输入框滚动时重新定位面板
+    const chatContainer = document.getElementById('chatMessagesContainer');
+    if (chatContainer) {
+        chatContainer.addEventListener('scroll', () => {
+            if (_atMemberPanelActive) {
+                positionAtMemberPanel();
+            }
+        });
+    }
+}
+
+/**
+ * 处理输入框输入事件
+ */
+function handleAtMemberInput(e) {
+    const input = e.target;
+    const value = input.value;
+    const cursorPos = input.selectionStart;
+    
+    // 检查是否是群聊
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') {
+        closeAtMemberPanel();
+        return;
+    }
+    
+    // 查找光标前最近的@符号
+    let atPos = -1;
+    for (let i = cursorPos - 1; i >= 0; i--) {
+        if (value[i] === '@') {
+            // 检查@符号前是否是空格或开头
+            if (i === 0 || value[i - 1] === ' ' || value[i - 1] === '\n') {
+                atPos = i;
+                break;
+            }
+        }
+        // 如果遇到空格或换行，说明不在@状态
+        if (value[i] === ' ' || value[i] === '\n') {
+            break;
+        }
+    }
+    
+    if (atPos !== -1) {
+        // 找到了@符号，提取搜索文本
+        _atStartPosition = atPos;
+        _atSearchText = value.substring(atPos + 1, cursorPos);
+        
+        // 显示成员选择面板
+        showAtMemberPanel(_atSearchText);
+    } else {
+        // 没有找到@符号，关闭面板
+        closeAtMemberPanel();
+    }
+}
+
+/**
+ * 处理键盘事件
+ */
+function handleAtMemberKeydown(e) {
+    if (!_atMemberPanelActive) return;
+    
+    const items = document.querySelectorAll('.at-member-item');
+    
+    if (e.key === 'ArrowDown') {
+        // 下键
+        e.preventDefault();
+        _atSelectedIndex = Math.min(_atSelectedIndex + 1, items.length - 1);
+        updateAtMemberSelection();
+    } else if (e.key === 'ArrowUp') {
+        // 上键
+        e.preventDefault();
+        _atSelectedIndex = Math.max(_atSelectedIndex - 1, 0);
+        updateAtMemberSelection();
+    } else if (e.key === 'Enter') {
+        // 回车确认
+        if (items.length > 0 && _atSelectedIndex >= 0 && _atSelectedIndex < items.length) {
+            e.preventDefault();
+            const selectedItem = items[_atSelectedIndex];
+            const memberName = selectedItem.dataset.memberName;
+            selectAtMember(memberName);
+        }
+    } else if (e.key === 'Escape') {
+        // ESC取消
+        e.preventDefault();
+        closeAtMemberPanel();
+    }
+}
+
+/**
+ * 显示@成员选择面板
+ */
+function showAtMemberPanel(searchText) {
+    // 再次确认是群聊
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') {
+        closeAtMemberPanel();
+        return;
+    }
+    
+    // 获取群成员列表
+    const members = getGroupMembers();
+    
+    if (members.length === 0) {
+        closeAtMemberPanel();
+        return;
+    }
+    
+    // 过滤成员
+    let filteredMembers = members;
+    if (searchText) {
+        const search = searchText.toLowerCase();
+        filteredMembers = members.filter(m => {
+            const name = (m.remark || m.name || '').toLowerCase();
+            return name.includes(search);
+        });
+    }
+    
+    // 检查是否是群主或管理员
+    const isOwnerOrAdmin = isCurrentUserOwnerOrAdmin();
+    
+    // 创建或更新面板
+    if (!_atMemberPanel) {
+        _atMemberPanel = document.createElement('div');
+        _atMemberPanel.id = 'atMemberPanel';
+        _atMemberPanel.className = 'at-member-panel';
+        document.body.appendChild(_atMemberPanel);
+    }
+    
+    // 构建HTML
+    let html = '';
+    
+    // 如果是群主或管理员，添加@全员选项
+    if (isOwnerOrAdmin && (!searchText || '全员'.includes(searchText))) {
+        html += `
+            <div class="at-member-item at-all-item" data-member-name="全员" onclick="selectAtMember('全员')">
+                <div class="at-member-avatar at-all-avatar">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                </div>
+                <div class="at-member-info">
+                    <div class="at-member-name">全员</div>
+                    <div class="at-member-desc">提醒所有群成员</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // 添加成员列表
+    filteredMembers.forEach(member => {
+        const avatar = member.avatar || '';
+        const name = member.remark || member.name || '未命名';
+        
+        // 如果没有头像，使用SVG默认头像
+        const avatarHtml = avatar 
+            ? `<img src="${avatar}" alt="${escapeHtml(name)}">` 
+            : `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+               </svg>`;
+        
+        html += `
+            <div class="at-member-item" data-member-name="${escapeHtml(name)}" onclick="selectAtMember('${escapeHtml(name).replace(/'/g, "\\'")}')">
+                <div class="at-member-avatar ${!avatar ? 'at-default-avatar' : ''}">
+                    ${avatarHtml}
+                </div>
+                <div class="at-member-info">
+                    <div class="at-member-name">${escapeHtml(name)}</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    if (html === '') {
+        html = '<div class="at-member-empty">未找到匹配的成员</div>';
+    }
+    
+    _atMemberPanel.innerHTML = html;
+    
+    // 显示面板
+    _atMemberPanel.classList.add('active');
+    _atMemberPanelActive = true;
+    _atSelectedIndex = 0;
+    
+    // 更新选中状态
+    updateAtMemberSelection();
+    
+    // 定位面板
+    positionAtMemberPanel();
+}
+
+/**
+ * 关闭@成员选择面板
+ */
+function closeAtMemberPanel() {
+    if (_atMemberPanel) {
+        _atMemberPanel.classList.remove('active');
+    }
+    _atMemberPanelActive = false;
+    _atStartPosition = -1;
+    _atSearchText = '';
+    _atSelectedIndex = 0;
+}
+
+/**
+ * 选择@成员
+ */
+function selectAtMember(memberName) {
+    const input = document.getElementById('chatInputField');
+    if (!input) return;
+    
+    const value = input.value;
+    
+    // 替换@符号和搜索文本为@成员名
+    const before = value.substring(0, _atStartPosition);
+    const after = value.substring(input.selectionStart);
+    const newValue = before + '@' + memberName + ' ' + after;
+    
+    input.value = newValue;
+    
+    // 设置光标位置
+    const newCursorPos = before.length + memberName.length + 2; // +2 是 @ 和空格
+    input.setSelectionRange(newCursorPos, newCursorPos);
+    
+    // 关闭面板
+    closeAtMemberPanel();
+    
+    // 聚焦输入框
+    input.focus();
+}
+
+/**
+ * 更新选中状态
+ */
+function updateAtMemberSelection() {
+    const items = document.querySelectorAll('.at-member-item');
+    items.forEach((item, index) => {
+        if (index === _atSelectedIndex) {
+            item.classList.add('selected');
+            // 滚动到可见区域
+            item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+/**
+ * 定位@成员面板
+ */
+function positionAtMemberPanel() {
+    if (!_atMemberPanel) return;
+    
+    const input = document.getElementById('chatInputField');
+    if (!input) return;
+    
+    const inputRect = input.getBoundingClientRect();
+    
+    // 面板显示在输入框上方
+    _atMemberPanel.style.left = inputRect.left + 'px';
+    _atMemberPanel.style.width = inputRect.width + 'px';
+    _atMemberPanel.style.bottom = (window.innerHeight - inputRect.top + 10) + 'px';
+}
+
+/**
+ * 获取群成员列表
+ */
+function getGroupMembers() {
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') {
+        return [];
+    }
+    
+    const memberIds = currentChatCharacter.members || [];
+    const members = memberIds.map(id => {
+        return chatCharacters.find(c => c.id === id);
+    }).filter(m => m); // 过滤掉undefined
+    
+    // 添加用户自己作为成员
+    const userData = getUserDataForCharacter(currentChatCharacter.id);
+    const userMember = {
+        id: 'user',
+        name: userData.name || '用户',
+        avatar: userData.avatar || '',
+        remark: '', // 用户自己没有备注
+        isUser: true // 标记这是用户
+    };
+    
+    // 将用户添加到成员列表的开头
+    return [userMember, ...members];
+}
+
+/**
+ * 检查当前用户是否是群主或管理员
+ */
+function isCurrentUserOwnerOrAdmin() {
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') {
+        return false;
+    }
+    
+    // 这里简化处理，假设用户就是群主
+    // 实际应该根据用户ID判断
+    return true;
+}
+
+// ========== 页面加载时初始化 ==========
+
+document.addEventListener('DOMContentLoaded', () => {
+    initAtMemberFeature();
+});
+
+
+
+// ========== 群聊权限系统 ==========
+
+const GROUP_ROLES = {
+    OWNER: 'owner',
+    ADMIN: 'admin',
+    MEMBER: 'member'
+};
+
+function getMemberRole(groupData, memberId) {
+    if (groupData.owner === memberId) return GROUP_ROLES.OWNER;
+    if (groupData.admins?.includes(memberId)) return GROUP_ROLES.ADMIN;
+    return GROUP_ROLES.MEMBER;
+}
+
+function getRoleDisplayName(role) {
+    const names = {
+        'owner': '群主',
+        'admin': '管理员',
+        'member': '成员'
+    };
+    return names[role] || '成员';
+}
+
+function hasPermission(groupData, memberId, action) {
+    const role = getMemberRole(groupData, memberId);
+    
+    const permissions = {
+        'add_member': ['owner', 'admin'],
+        'remove_member': ['owner', 'admin'],
+        'mute_member': ['owner', 'admin'],
+        'unmute_member': ['owner', 'admin'],
+        'set_admin': ['owner'],
+        'remove_admin': ['owner'],
+        'transfer_owner': ['owner'],
+        'set_title': ['owner'],
+        'set_level': ['owner'],
+        'edit_group_info': ['owner', 'admin'],
+        'dissolve_group': ['owner'],
+        'set_relation': ['owner'],
+        'set_activity': ['owner']
+    };
+    
+    return permissions[action]?.includes(role) || false;
+}
+
+function canRemoveMember(groupData, operatorId, targetId) {
+    if (targetId === groupData.owner) return false;
+    
+    const operatorRole = getMemberRole(groupData, operatorId);
+    const targetRole = getMemberRole(groupData, targetId);
+    
+    if (operatorRole === 'admin' && targetRole === 'admin') return false;
+    
+    return hasPermission(groupData, operatorId, 'remove_member');
+}
+
+function canMuteMember(groupData, operatorId, targetId) {
+    if (targetId === groupData.owner) return false;
+    
+    const operatorRole = getMemberRole(groupData, operatorId);
+    const targetRole = getMemberRole(groupData, targetId);
+    
+    if (operatorRole === 'admin' && targetRole === 'admin') return false;
+    
+    return hasPermission(groupData, operatorId, 'mute_member');
+}
+
+function isMemberMuted(groupData, memberId) {
+    const status = groupData.memberStatus?.[memberId];
+    if (!status || !status.isMuted) return false;
+    
+    if (status.muteUntil) {
+        const now = new Date();
+        const until = new Date(status.muteUntil);
+        if (now >= until) {
+            status.isMuted = false;
+            status.muteUntil = null;
+            saveGroupChanges();
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+async function saveGroupChanges() {
+    if (!currentChatCharacter) return;
+    
+    await saveChatCharacters();
+    await saveChatCharacterToDB(currentChatCharacter);
+}
+
+// ========== 成员管理界面 ==========
+
 function openGroupMemberManagement() {
-    // TODO: 实现成员管理界面
-    iosAlert('成员管理功能开发中...', '提示');
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') {
+        iosAlert('当前不是群聊', '提示');
+        return;
+    }
+    
+    renderGroupMemberList();
+    document.getElementById('groupMemberManagementPage').style.display = 'block';
 }
 
-/**
- * 打开成员关系管理界面
- */
+function closeGroupMemberManagement() {
+    document.getElementById('groupMemberManagementPage').style.display = 'none';
+}
+
+function renderGroupMemberList() {
+    const groupData = currentChatCharacter;
+    const container = document.getElementById('groupMemberListContainer');
+    if (!container) return;
+    
+    const memberIds = groupData.members || [];
+    const members = memberIds.map(id => chatCharacters.find(c => c.id === id)).filter(Boolean);
+    
+    if (members.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无成员</div>';
+        return;
+    }
+    
+    let html = '';
+    members.forEach(member => {
+        const role = getMemberRole(groupData, member.id);
+        const status = groupData.memberStatus?.[member.id] || {};
+        const roleText = getRoleDisplayName(role);
+        const level = status.level || 1;
+        const title = status.title || '';
+        const isMuted = status.isMuted || false;
+        
+        html += `
+            <div class="member-item">
+                <div class="member-avatar">
+                    ${member.avatar ? `<img src="${member.avatar}" />` : ''}
+                </div>
+                <div class="member-info">
+                    <div class="member-name">${escapeHtml(member.remark || member.name)}</div>
+                    <div class="member-tags">
+                        <span class="role-tag role-${role}">${roleText}</span>
+                        <span class="level-tag">等级${level}</span>
+                        ${title ? `<span class="title-tag">${escapeHtml(title)}</span>` : ''}
+                        ${isMuted ? `<span class="muted-tag">已禁言</span>` : ''}
+                    </div>
+                </div>
+                <button class="member-action-btn" data-member-id="${member.id}">操作</button>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // 添加事件监听
+    container.querySelectorAll('.member-action-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const memberId = this.getAttribute('data-member-id');
+            showMemberActionMenu(memberId);
+        });
+    });
+}
+
+function showMemberActionMenu(memberId) {
+    const groupData = currentChatCharacter;
+    const operatorId = groupData.owner;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    const actions = [];
+    
+    const isAdmin = groupData.admins?.includes(memberId);
+    const role = getMemberRole(groupData, memberId);
+    
+    if (hasPermission(groupData, operatorId, 'set_admin') && memberId !== groupData.owner) {
+        actions.push({
+            text: isAdmin ? '取消管理员' : '设置为管理员',
+            onClick: () => toggleAdmin(memberId)
+        });
+    }
+    
+    if (hasPermission(groupData, operatorId, 'set_title')) {
+        actions.push({
+            text: '设置头衔',
+            onClick: () => setMemberTitle(memberId)
+        });
+    }
+    
+    if (hasPermission(groupData, operatorId, 'set_level')) {
+        actions.push({
+            text: '设置等级',
+            onClick: () => setMemberLevel(memberId)
+        });
+    }
+    
+    if (canMuteMember(groupData, operatorId, memberId)) {
+        const status = groupData.memberStatus?.[memberId];
+        const isMuted = status?.isMuted || false;
+        actions.push({
+            text: isMuted ? '解除禁言' : '禁言',
+            onClick: () => toggleMute(memberId)
+        });
+    }
+    
+    if (canRemoveMember(groupData, operatorId, memberId)) {
+        actions.push({
+            text: '踢出群聊',
+            onClick: () => removeMember(memberId),
+            style: 'color: #ff3b30;'
+        });
+    }
+    
+    if (groupData.owner === operatorId && memberId !== operatorId) {
+        actions.push({
+            text: '转让群主',
+            onClick: () => transferOwner(memberId),
+            style: 'color: #ff3b30;'
+        });
+    }
+    
+    showActionSheet(member.remark || member.name, actions);
+}
+
+function showActionSheet(title, actions) {
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-alert-overlay';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10003; display: flex; align-items: flex-end; justify-content: center;';
+    
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'background: white; width: 100%; max-width: 400px; border-radius: 14px 14px 0 0; padding: 0; animation: slideUp 0.3s; max-height: 60vh; display: flex; flex-direction: column;';
+    
+    let html = `<div style="padding: 20px; text-align: center; font-size: 13px; color: #8e8e93; border-bottom: 1px solid #e5e5ea; flex-shrink: 0;">${escapeHtml(title)}</div>`;
+    
+    html += `<div class="action-sheet-scroll" style="overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch;">`;
+    
+    actions.forEach((action, index) => {
+        html += `<div class="action-item" data-action-index="${index}" style="padding: 16px; text-align: center; font-size: 16px; color: #007aff; border-bottom: 1px solid #e5e5ea; cursor: pointer; ${action.style || ''}">${escapeHtml(action.text)}</div>`;
+    });
+    
+    html += `</div>`;
+    html += `<div class="action-cancel" style="padding: 16px; text-align: center; font-size: 16px; color: #007aff; font-weight: 600; cursor: pointer; border-top: 8px solid #f2f2f7; flex-shrink: 0;">取消</div>`;
+    
+    sheet.innerHTML = html;
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+    
+    // 添加事件监听
+    sheet.querySelectorAll('.action-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const index = parseInt(this.getAttribute('data-action-index'));
+            overlay.remove();
+            if (actions[index] && actions[index].onClick) {
+                actions[index].onClick();
+            }
+        });
+    });
+    
+    sheet.querySelector('.action-cancel').addEventListener('click', () => {
+        overlay.remove();
+    });
+    
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+}
+
+async function toggleAdmin(memberId) {
+    const groupData = currentChatCharacter;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    if (!groupData.admins) groupData.admins = [];
+    
+    const isAdmin = groupData.admins.includes(memberId);
+    
+    // 获取操作者信息
+    const operatorId = groupData.owner; // 当前操作者（假设是群主）
+    const operatorRole = getMemberRole(groupData, operatorId);
+    const operatorRoleText = getRoleDisplayName(operatorRole);
+    
+    // 获取操作者名字
+    let operatorName;
+    if (operatorId === 'user') {
+        const userData = getUserDataForCharacter(groupData.id);
+        operatorName = userData.name || '你';
+    } else {
+        const operatorChar = chatCharacters.find(c => c.id === operatorId);
+        operatorName = operatorChar ? (operatorChar.remark || operatorChar.name) : '未知';
+    }
+    
+    // 获取被操作者角色
+    const targetRole = getMemberRole(groupData, memberId);
+    const targetRoleText = getRoleDisplayName(targetRole);
+    const memberName = member.remark || member.name;
+    
+    if (isAdmin) {
+        groupData.admins = groupData.admins.filter(id => id !== memberId);
+        await saveGroupChanges();
+        renderGroupMemberList();
+        
+        // 添加系统消息
+        const systemContent = `${operatorRoleText}"${operatorName}"取消了"${memberName}"的管理员`;
+        await addGroupSystemMessage(systemContent);
+        
+        showToast(`已取消 ${memberName} 的管理员`);
+    } else {
+        groupData.admins.push(memberId);
+        await saveGroupChanges();
+        renderGroupMemberList();
+        
+        // 添加系统消息
+        const systemContent = `${operatorRoleText}"${operatorName}"设置"${memberName}"为管理员`;
+        await addGroupSystemMessage(systemContent);
+        
+        showToast(`已设置 ${memberName} 为管理员`);
+    }
+}
+
+async function setMemberTitle(memberId) {
+    const groupData = currentChatCharacter;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    const currentTitle = groupData.memberStatus?.[memberId]?.title || '';
+    
+    iosPrompt('设置群头衔', currentTitle, async (newTitle) => {
+        if (newTitle === null) return;
+        
+        if (!groupData.memberStatus) groupData.memberStatus = {};
+        if (!groupData.memberStatus[memberId]) {
+            groupData.memberStatus[memberId] = {
+                isMuted: false,
+                muteUntil: null,
+                joinTime: new Date().toISOString(),
+                title: '',
+                level: 1,
+                messageCount: 0,
+                lastActiveTime: null
+            };
+        }
+        
+        groupData.memberStatus[memberId].title = newTitle.trim();
+        
+        await saveGroupChanges();
+        renderGroupMemberList();
+        
+        // 获取操作者信息
+        const operatorId = groupData.owner; // 当前操作者（假设是群主）
+        const operatorRole = getMemberRole(groupData, operatorId);
+        const operatorRoleText = getRoleDisplayName(operatorRole);
+        
+        // 获取操作者名字
+        let operatorName;
+        if (operatorId === 'user') {
+            const userData = getUserDataForCharacter(groupData.id);
+            operatorName = userData.name || '你';
+        } else {
+            const operatorChar = chatCharacters.find(c => c.id === operatorId);
+            operatorName = operatorChar ? (operatorChar.remark || operatorChar.name) : '未知';
+        }
+        
+        const memberName = member.remark || member.name;
+        
+        // 添加系统消息
+        if (newTitle.trim()) {
+            const systemContent = `${operatorRoleText}"${operatorName}"将"${memberName}"的头衔设置为"${newTitle.trim()}"`;
+            await addGroupSystemMessage(systemContent);
+            showToast(`已设置头衔：${newTitle}`);
+        } else {
+            const systemContent = `${operatorRoleText}"${operatorName}"清除了"${memberName}"的头衔`;
+            await addGroupSystemMessage(systemContent);
+            showToast('已清除头衔');
+        }
+    });
+}
+
+async function setMemberLevel(memberId) {
+    const groupData = currentChatCharacter;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    const currentLevel = groupData.memberStatus?.[memberId]?.level || 1;
+    
+    const actions = [];
+    for (let i = 1; i <= 10; i++) {
+        actions.push({
+            text: `等级 ${i}`,
+            onClick: async () => {
+                if (!groupData.memberStatus) groupData.memberStatus = {};
+                if (!groupData.memberStatus[memberId]) {
+                    groupData.memberStatus[memberId] = {
+                        isMuted: false,
+                        muteUntil: null,
+                        joinTime: new Date().toISOString(),
+                        title: '',
+                        level: 1,
+                        messageCount: 0,
+                        lastActiveTime: null
+                    };
+                }
+                
+                groupData.memberStatus[memberId].level = i;
+                
+                await saveGroupChanges();
+                renderGroupMemberList();
+                
+                showToast(`已设置等级：${i}`);
+            }
+        });
+    }
+    
+    showActionSheet('选择等级', actions);
+}
+
+// 添加群聊系统消息（通用函数）
+async function addGroupSystemMessage(content) {
+    if (!currentChatCharacter) {
+        console.error('currentChatCharacter 为空，无法添加系统消息');
+        return;
+    }
+    
+    const systemMessageObj = {
+        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'system',
+        messageType: 'systemNotice',
+        content: content,
+        timestamp: new Date().toISOString(), // 修复：使用ISO字符串格式，与其他消息保持一致
+        characterId: currentChatCharacter.id, // 修复：使用characterId而不是conversation
+        sender: 'system'
+    };
+    
+    console.log('📢 添加群聊系统消息:', systemMessageObj);
+    
+    // 渲染到聊天界面（用户可见）
+    if (typeof appendSystemMessageToChat === 'function') {
+        appendSystemMessageToChat(systemMessageObj);
+    }
+    
+    // 保存到数据库（AI上下文）
+    if (typeof saveMessageToDB === 'function') {
+        await saveMessageToDB(systemMessageObj);
+    }
+    
+    // 滚动到底部
+    if (typeof scrollChatToBottom === 'function') {
+        scrollChatToBottom();
+    }
+}
+
+// 兼容旧函数名
+async function addMuteSystemMessage(content) {
+    return await addGroupSystemMessage(content);
+}
+
+async function toggleMute(memberId) {
+    const groupData = currentChatCharacter;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    if (!groupData.memberStatus) groupData.memberStatus = {};
+    if (!groupData.memberStatus[memberId]) {
+        groupData.memberStatus[memberId] = {
+            isMuted: false,
+            muteUntil: null,
+            joinTime: new Date().toISOString(),
+            title: '',
+            level: 1,
+            messageCount: 0,
+            lastActiveTime: null
+        };
+    }
+    
+    const status = groupData.memberStatus[memberId];
+    const isMuted = status.isMuted;
+    
+    if (isMuted) {
+        status.isMuted = false;
+        status.muteUntil = null;
+        await saveGroupChanges();
+        renderGroupMemberList();
+        
+        // 添加系统消息 - 修复：显示正确的角色身份
+        const operatorId = groupData.owner; // 当前操作者（假设是群主，实际应该传入）
+        const operatorRole = getMemberRole(groupData, operatorId);
+        const operatorRoleText = getRoleDisplayName(operatorRole);
+        
+        // 获取操作者名字
+        let operatorName;
+        if (operatorId === 'user') {
+            // 从当前群聊的用户数据中读取用户名
+            const userData = getUserDataForCharacter(groupData.id);
+            operatorName = userData.name || '你';
+        } else {
+            const operatorChar = chatCharacters.find(c => c.id === operatorId);
+            operatorName = operatorChar ? (operatorChar.remark || operatorChar.name) : '未知';
+        }
+        
+        // 获取被操作者角色
+        const targetRole = getMemberRole(groupData, memberId);
+        const targetRoleText = getRoleDisplayName(targetRole);
+        
+        const memberName = member.remark || member.name;
+        const systemContent = `${operatorRoleText}"${operatorName}"解除了${targetRoleText}"${memberName}"的禁言`;
+        await addMuteSystemMessage(systemContent);
+        
+        showToast(`已解除 ${memberName} 的禁言`);
+    } else {
+        const actions = [
+            { text: '10分钟', onClick: () => setMuteDuration(memberId, 10) },
+            { text: '30分钟', onClick: () => setMuteDuration(memberId, 30) },
+            { text: '1小时', onClick: () => setMuteDuration(memberId, 60) },
+            { text: '6小时', onClick: () => setMuteDuration(memberId, 360) },
+            { text: '1天', onClick: () => setMuteDuration(memberId, 1440) },
+            { text: '7天', onClick: () => setMuteDuration(memberId, 10080) },
+            { text: '永久', onClick: () => setMuteDuration(memberId, 0) }
+        ];
+        
+        showActionSheet('选择禁言时长', actions);
+    }
+}
+
+async function setMuteDuration(memberId, minutes) {
+    const groupData = currentChatCharacter;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    const status = groupData.memberStatus[memberId];
+    status.isMuted = true;
+    
+    if (minutes > 0) {
+        status.muteUntil = new Date(Date.now() + minutes * 60000).toISOString();
+    } else {
+        status.muteUntil = null;
+    }
+    
+    await saveGroupChanges();
+    renderGroupMemberList();
+    
+    const durationText = minutes > 0 ? `${minutes}分钟` : '永久';
+    const memberName = member.remark || member.name;
+    
+    // 添加系统消息 - 修复：显示正确的角色身份
+    const operatorId = groupData.owner; // 当前操作者（假设是群主，实际应该传入）
+    const operatorRole = getMemberRole(groupData, operatorId);
+    const operatorRoleText = getRoleDisplayName(operatorRole);
+    
+    // 获取操作者名字
+    let operatorName;
+    if (operatorId === 'user') {
+        // 从当前群聊的用户数据中读取用户名
+        const userData = getUserDataForCharacter(groupData.id);
+        operatorName = userData.name || '你';
+    } else {
+        const operatorChar = chatCharacters.find(c => c.id === operatorId);
+        operatorName = operatorChar ? (operatorChar.remark || operatorChar.name) : '未知';
+    }
+    
+    // 获取被操作者角色
+    const targetRole = getMemberRole(groupData, memberId);
+    const targetRoleText = getRoleDisplayName(targetRole);
+    
+    const systemContent = `${operatorRoleText}"${operatorName}"将${targetRoleText}"${memberName}"禁言 ${durationText}`;
+    await addMuteSystemMessage(systemContent);
+    
+    showToast(`已禁言 ${memberName} ${durationText}`);
+}
+
+async function removeMember(memberId) {
+    const groupData = currentChatCharacter;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    const confirmed = await iosConfirm(`确定要将 ${member.remark || member.name} 踢出群聊吗？`, '踢出成员');
+    if (!confirmed) return;
+    
+    // 获取操作者信息
+    const operatorId = groupData.owner; // 当前操作者（假设是群主）
+    const operatorRole = getMemberRole(groupData, operatorId);
+    const operatorRoleText = getRoleDisplayName(operatorRole);
+    
+    // 获取操作者名字
+    let operatorName;
+    if (operatorId === 'user') {
+        const userData = getUserDataForCharacter(groupData.id);
+        operatorName = userData.name || '你';
+    } else {
+        const operatorChar = chatCharacters.find(c => c.id === operatorId);
+        operatorName = operatorChar ? (operatorChar.remark || operatorChar.name) : '未知';
+    }
+    
+    // 获取被操作者角色
+    const targetRole = getMemberRole(groupData, memberId);
+    const targetRoleText = getRoleDisplayName(targetRole);
+    const memberName = member.remark || member.name;
+    
+    groupData.members = groupData.members.filter(id => id !== memberId);
+    
+    if (groupData.membersWhoKnowUser) {
+        groupData.membersWhoKnowUser = groupData.membersWhoKnowUser.filter(id => id !== memberId);
+    }
+    
+    if (groupData.memberStatus?.[memberId]) {
+        delete groupData.memberStatus[memberId];
+    }
+    
+    if (groupData.settings?.memberActivity?.[memberId]) {
+        delete groupData.settings.memberActivity[memberId];
+    }
+    
+    await saveGroupChanges();
+    renderGroupMemberList();
+    
+    // 添加系统消息
+    const systemContent = `${operatorRoleText}"${operatorName}"将${targetRoleText}"${memberName}"移出了群聊`;
+    await addGroupSystemMessage(systemContent);
+    
+    showToast(`已将 ${memberName} 踢出群聊`);
+}
+
+async function transferOwner(newOwnerId) {
+    const groupData = currentChatCharacter;
+    const newOwner = chatCharacters.find(c => c.id === newOwnerId);
+    if (!newOwner) return;
+    
+    const confirmed = await iosConfirm(
+        `确定要将群主转让给 ${newOwner.remark || newOwner.name} 吗？\n\n转让后您将失去群主权限。`,
+        '转让群主'
+    );
+    if (!confirmed) return;
+    
+    const oldOwnerId = groupData.owner;
+    
+    // 获取旧群主名字
+    let oldOwnerName;
+    if (oldOwnerId === 'user') {
+        const userData = getUserDataForCharacter(groupData.id);
+        oldOwnerName = userData.name || '你';
+    } else {
+        const oldOwnerChar = chatCharacters.find(c => c.id === oldOwnerId);
+        oldOwnerName = oldOwnerChar ? (oldOwnerChar.remark || oldOwnerChar.name) : '未知';
+    }
+    
+    const newOwnerName = newOwner.remark || newOwner.name;
+    
+    groupData.owner = newOwnerId;
+    
+    if (!groupData.admins) groupData.admins = [];
+    if (!groupData.admins.includes(oldOwnerId)) {
+        groupData.admins.push(oldOwnerId);
+    }
+    
+    groupData.admins = groupData.admins.filter(id => id !== newOwnerId);
+    
+    await saveGroupChanges();
+    renderGroupMemberList();
+    
+    // 添加系统消息
+    const systemContent = `"${oldOwnerName}"将群主转让给"${newOwnerName}"`;
+    await addGroupSystemMessage(systemContent);
+    
+    showToast(`已将群主转让给 ${newOwnerName}`);
+}
+
+async function dissolveGroup() {
+    const groupData = currentChatCharacter;
+    
+    const confirmed = await iosConfirm(
+        `确定要解散群聊"${groupData.groupName}"吗？\n\n解散后将删除所有群聊记录，此操作不可恢复。`,
+        '解散群聊'
+    );
+    
+    if (!confirmed) return;
+    
+    await deleteChatCharacter(groupData.id);
+    
+    closeGroupMemberManagement();
+    closeChatDetail();
+    
+    await iosAlert('群聊已解散', '提示');
+}
+
+async function openAddGroupMemberDialog() {
+    const groupData = currentChatCharacter;
+    const currentMembers = groupData.members || [];
+    
+    const availableCharacters = chatCharacters.filter(c => 
+        c.groupType !== 'group' && !currentMembers.includes(c.id)
+    );
+    
+    if (availableCharacters.length === 0) {
+        await iosAlert('没有可添加的角色', '提示');
+        return;
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-alert-overlay';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10004; display: flex; align-items: center; justify-content: center;';
+    
+    const dialog = document.createElement('div');
+    dialog.style.cssText = 'background: white; width: 90%; max-width: 350px; border-radius: 14px; overflow: hidden;';
+    
+    let html = '<div style="padding: 20px; text-align: center; font-size: 17px; font-weight: 600; border-bottom: 1px solid #e5e5ea;">选择成员</div>';
+    html += '<div style="max-height: 400px; overflow-y: auto;">';
+    
+    availableCharacters.forEach(char => {
+        html += `
+            <div class="add-member-item" data-char-id="${char.id}" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer;">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; overflow: hidden; flex-shrink: 0;">
+                    ${char.avatar ? `<img src="${char.avatar}" style="width: 100%; height: 100%; object-fit: cover;" />` : ''}
+                </div>
+                <div style="flex: 1; font-size: 15px; color: #333;">${escapeHtml(char.remark || char.name)}</div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    html += '<div class="cancel-add-member" style="padding: 12px; text-align: center; font-size: 16px; color: #007aff; font-weight: 600; cursor: pointer; border-top: 1px solid #e5e5ea;">取消</div>';
+    
+    dialog.innerHTML = html;
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    // 添加事件监听
+    dialog.querySelectorAll('.add-member-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const charId = this.getAttribute('data-char-id');
+            addMemberToGroup(charId);
+            overlay.remove();
+        });
+    });
+    
+    dialog.querySelector('.cancel-add-member').addEventListener('click', () => {
+        overlay.remove();
+    });
+}
+
+async function addMemberToGroup(memberId) {
+    const groupData = currentChatCharacter;
+    const member = chatCharacters.find(c => c.id === memberId);
+    if (!member) return;
+    
+    if (!groupData.members.includes(memberId)) {
+        groupData.members.push(memberId);
+        
+        if (!groupData.memberStatus) groupData.memberStatus = {};
+        groupData.memberStatus[memberId] = {
+            isMuted: false,
+            muteUntil: null,
+            joinTime: new Date().toISOString(),
+            title: '',
+            level: 1,
+            messageCount: 0,
+            lastActiveTime: null
+        };
+        
+        if (!groupData.settings.memberActivity) groupData.settings.memberActivity = {};
+        groupData.settings.memberActivity[memberId] = 0.5;
+        
+        await saveGroupChanges();
+        renderGroupMemberList();
+        
+        showToast(`已添加 ${member.remark || member.name}`);
+    }
+}
+
+// ========== 关系管理界面 ==========
+
 function openGroupRelationManagement() {
-    // TODO: 实现成员关系管理界面
-    iosAlert('成员关系管理功能开发中...', '提示');
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') {
+        iosAlert('当前不是群聊', '提示');
+        return;
+    }
+    
+    switchRelationTab('userRelation');
+    document.getElementById('groupRelationManagementPage').style.display = 'block';
+}
+
+function closeGroupRelationManagement() {
+    document.getElementById('groupRelationManagementPage').style.display = 'none';
+}
+
+function switchRelationTab(tab) {
+    const tabs = document.querySelectorAll('#groupRelationManagementPage .chat-settings-tab');
+    tabs.forEach(t => t.classList.remove('active'));
+    
+    if (tab === 'userRelation') {
+        tabs[0].classList.add('active');
+        document.getElementById('userRelationTabContent').style.display = 'block';
+        document.getElementById('memberRelationTabContent').style.display = 'none';
+        renderUserRelationList();
+    } else {
+        tabs[1].classList.add('active');
+        document.getElementById('userRelationTabContent').style.display = 'none';
+        document.getElementById('memberRelationTabContent').style.display = 'block';
+        renderMemberRelationList();
+    }
+}
+
+function renderUserRelationList() {
+    const groupData = currentChatCharacter;
+    const container = document.getElementById('userRelationListContainer');
+    if (!container) return;
+    
+    const memberIds = groupData.members || [];
+    const members = memberIds.map(id => chatCharacters.find(c => c.id === id)).filter(Boolean);
+    const knowsUser = groupData.membersWhoKnowUser || [];
+    
+    let html = '<div style="margin-bottom: 15px; font-size: 13px; color: #666; line-height: 1.5;">选中的成员在对话中会知道你的存在，未选中的成员不知道你。</div>';
+    
+    members.forEach(member => {
+        const checked = knowsUser.includes(member.id);
+        html += `
+            <div class="user-relation-item">
+                <div class="user-relation-info">
+                    <div style="width: 40px; height: 40px; border-radius: 50%; background: #e0e0e0; overflow: hidden; flex-shrink: 0;">
+                        ${member.avatar ? `<img src="${member.avatar}" style="width: 100%; height: 100%; object-fit: cover;" />` : ''}
+                    </div>
+                    <div style="font-size: 15px; color: #333;">${escapeHtml(member.remark || member.name)}</div>
+                </div>
+                <div class="relation-checkbox ${checked ? 'checked' : ''}" data-member-id="${member.id}"></div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // 添加事件监听
+    container.querySelectorAll('.relation-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('click', function() {
+            const memberId = this.getAttribute('data-member-id');
+            toggleUserRelation(memberId);
+        });
+    });
+}
+
+async function toggleUserRelation(memberId) {
+    const groupData = currentChatCharacter;
+    
+    if (!groupData.membersWhoKnowUser) groupData.membersWhoKnowUser = [];
+    
+    const index = groupData.membersWhoKnowUser.indexOf(memberId);
+    if (index > -1) {
+        groupData.membersWhoKnowUser.splice(index, 1);
+    } else {
+        groupData.membersWhoKnowUser.push(memberId);
+    }
+    
+    await saveGroupChanges();
+    renderUserRelationList();
+}
+
+function renderMemberRelationList() {
+    const groupData = currentChatCharacter;
+    const container = document.getElementById('memberRelationListContainer');
+    if (!container) return;
+    
+    const memberIds = groupData.members || [];
+    const members = memberIds.map(id => chatCharacters.find(c => c.id === id)).filter(Boolean);
+    
+    if (!groupData.memberRelations) groupData.memberRelations = {};
+    
+    let html = '<div style="margin-bottom: 15px; font-size: 13px; color: #666; line-height: 1.5;">设置成员之间的关系，影响他们在对话中的互动方式。</div>';
+    
+    for (let i = 0; i < members.length; i++) {
+        for (let j = i + 1; j < members.length; j++) {
+            const member1 = members[i];
+            const member2 = members[j];
+            const key = getMemberRelationKey(member1.id, member2.id);
+            const relation = groupData.memberRelations[key] || { type: 'stranger', intimacy: 0.1 };
+            
+            html += `
+                <div class="member-relation-item" data-member1-id="${member1.id}" data-member2-id="${member2.id}">
+                    <div class="member-relation-header">
+                        <div class="member-relation-names">${escapeHtml(member1.remark || member1.name)}</div>
+                        <div class="member-relation-arrow">↔</div>
+                        <div class="member-relation-names">${escapeHtml(member2.remark || member2.name)}</div>
+                    </div>
+                    <div class="member-relation-type">${getRelationTypeLabel(relation.type)}</div>
+                    <div class="member-relation-intimacy">
+                        <div class="intimacy-bar">
+                            <div class="intimacy-fill" style="width: ${relation.intimacy * 100}%"></div>
+                        </div>
+                        <div class="intimacy-value">${Math.round(relation.intimacy * 100)}%</div>
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    if (members.length < 2) {
+        html = '<div style="text-align: center; color: #999; padding: 20px;">至少需要2个成员才能设置关系</div>';
+    }
+    
+    container.innerHTML = html;
+    
+    // 添加事件监听
+    container.querySelectorAll('.member-relation-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const id1 = this.getAttribute('data-member1-id');
+            const id2 = this.getAttribute('data-member2-id');
+            editMemberRelation(id1, id2);
+        });
+    });
+}
+
+function getMemberRelationKey(id1, id2) {
+    return [id1, id2].sort().join('_');
+}
+
+const RELATION_TYPES = [
+    { value: 'stranger', label: '陌生人', intimacy: 0.1 },
+    { value: 'acquaintance', label: '认识', intimacy: 0.3 },
+    { value: 'friend', label: '朋友', intimacy: 0.6 },
+    { value: 'close_friend', label: '好友', intimacy: 0.8 },
+    { value: 'family', label: '家人', intimacy: 0.9 },
+    { value: 'lover', label: '恋人', intimacy: 0.95 },
+    { value: 'colleague', label: '同事', intimacy: 0.4 },
+    { value: 'enemy', label: '敌对', intimacy: 0.0 },
+    { value: 'custom', label: '自定义...', intimacy: 0.5 }
+];
+
+function getRelationTypeLabel(type) {
+    const relation = RELATION_TYPES.find(r => r.value === type);
+    return relation ? relation.label : '陌生人';
+}
+
+function editMemberRelation(id1, id2) {
+    const groupData = currentChatCharacter;
+    const member1 = chatCharacters.find(c => c.id === id1);
+    const member2 = chatCharacters.find(c => c.id === id2);
+    if (!member1 || !member2) return;
+    
+    const key = getMemberRelationKey(id1, id2);
+    const currentRelation = groupData.memberRelations?.[key] || { type: 'stranger', intimacy: 0.1 };
+    
+    const actions = RELATION_TYPES.map(relType => ({
+        text: relType.label,
+        onClick: async () => {
+            // 如果选择自定义，弹出输入框
+            if (relType.value === 'custom') {
+                showCustomRelationInput(id1, id2, member1, member2);
+                return;
+            }
+            
+            if (!groupData.memberRelations) groupData.memberRelations = {};
+            groupData.memberRelations[key] = {
+                type: relType.value,
+                intimacy: relType.intimacy,
+                description: relType.label
+            };
+            
+            await saveGroupChanges();
+            renderMemberRelationList();
+            showToast(`已设置关系：${relType.label}`);
+        }
+    }));
+    
+    showActionSheet(`${member1.remark || member1.name} 和 ${member2.remark || member2.name}`, actions);
+}
+
+// 显示自定义关系输入框
+function showCustomRelationInput(id1, id2, member1, member2) {
+    const groupData = currentChatCharacter;
+    const key = getMemberRelationKey(id1, id2);
+    const currentRelation = groupData.memberRelations?.[key];
+    const currentDesc = currentRelation?.description || '';
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'ios-alert-overlay';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10003; display: flex; align-items: center; justify-content: center; padding: 20px;';
+    
+    const dialog = document.createElement('div');
+    dialog.style.cssText = 'background: white; width: 100%; max-width: 320px; border-radius: 14px; overflow: hidden; animation: scaleIn 0.3s;';
+    
+    dialog.innerHTML = `
+        <div style="padding: 20px 20px 10px; text-align: center;">
+            <div style="font-size: 17px; font-weight: 600; color: #000; margin-bottom: 8px;">自定义关系</div>
+            <div style="font-size: 13px; color: #8e8e93; margin-bottom: 15px;">${escapeHtml(member1.remark || member1.name)} 和 ${escapeHtml(member2.remark || member2.name)}</div>
+            <input type="text" id="customRelationInput" placeholder="例如：师生、室友、竞争对手..." value="${escapeHtml(currentDesc)}" style="width: 100%; padding: 10px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 15px; box-sizing: border-box;" maxlength="20">
+            <div style="margin-top: 10px; font-size: 12px; color: #8e8e93;">亲密度 (0-1):</div>
+            <input type="number" id="customIntimacyInput" placeholder="0.5" value="${currentRelation?.intimacy || 0.5}" min="0" max="1" step="0.1" style="width: 100%; padding: 10px; border: 1px solid #e5e5ea; border-radius: 8px; font-size: 15px; box-sizing: border-box; margin-top: 5px;">
+        </div>
+        <div style="display: flex; border-top: 1px solid #e5e5ea;">
+            <div class="custom-relation-cancel" style="flex: 1; padding: 12px; text-align: center; font-size: 17px; color: #007aff; cursor: pointer; border-right: 1px solid #e5e5ea;">取消</div>
+            <div class="custom-relation-confirm" style="flex: 1; padding: 12px; text-align: center; font-size: 17px; color: #007aff; font-weight: 600; cursor: pointer;">确定</div>
+        </div>
+    `;
+    
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    const input = dialog.querySelector('#customRelationInput');
+    const intimacyInput = dialog.querySelector('#customIntimacyInput');
+    
+    // 自动聚焦
+    setTimeout(() => input.focus(), 100);
+    
+    // 取消按钮
+    dialog.querySelector('.custom-relation-cancel').addEventListener('click', () => {
+        overlay.remove();
+    });
+    
+    // 确定按钮
+    dialog.querySelector('.custom-relation-confirm').addEventListener('click', async () => {
+        const description = input.value.trim();
+        const intimacy = parseFloat(intimacyInput.value) || 0.5;
+        
+        if (!description) {
+            showToast('请输入关系描述');
+            return;
+        }
+        
+        // 限制亲密度范围
+        const clampedIntimacy = Math.max(0, Math.min(1, intimacy));
+        
+        if (!groupData.memberRelations) groupData.memberRelations = {};
+        groupData.memberRelations[key] = {
+            type: 'custom',
+            intimacy: clampedIntimacy,
+            description: description
+        };
+        
+        await saveGroupChanges();
+        renderMemberRelationList();
+        showToast(`已设置关系：${description}`);
+        overlay.remove();
+    });
+    
+    // 点击背景关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+    
+    // 回车确认
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            dialog.querySelector('.custom-relation-confirm').click();
+        }
+    });
+}
+
+// ========== 活跃度管理界面 ==========
+
+function openMemberActivitySettings() {
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') {
+        iosAlert('当前不是群聊', '提示');
+        return;
+    }
+    
+    renderMemberActivityList();
+    document.getElementById('memberActivitySettingsPage').style.display = 'block';
+}
+
+function closeMemberActivitySettings() {
+    document.getElementById('memberActivitySettingsPage').style.display = 'none';
+}
+
+function renderMemberActivityList() {
+    const groupData = currentChatCharacter;
+    const container = document.getElementById('memberActivityListContainer');
+    if (!container) return;
+    
+    const memberIds = groupData.members || [];
+    const members = memberIds.map(id => chatCharacters.find(c => c.id === id)).filter(Boolean);
+    
+    if (!groupData.settings.memberActivity) groupData.settings.memberActivity = {};
+    
+    let html = '<div style="margin-bottom: 15px; font-size: 13px; color: #666; line-height: 1.5;">活跃度影响成员在群聊中的发言频率，数值越高发言越频繁。</div>';
+    
+    members.forEach(member => {
+        const activity = groupData.settings.memberActivity[member.id] || 0.5;
+        const percentage = Math.round(activity * 100);
+        
+        html += `
+            <div class="activity-item">
+                <div class="activity-header">
+                    <div class="activity-avatar">
+                        ${member.avatar ? `<img src="${member.avatar}" />` : ''}
+                    </div>
+                    <div class="activity-name">${escapeHtml(member.remark || member.name)}</div>
+                    <div class="activity-value">${percentage}%</div>
+                </div>
+                <div class="activity-slider-container">
+                    <input type="range" class="activity-slider" min="0" max="100" value="${percentage}" 
+                           data-member-id="${member.id}" />
+                </div>
+                <div class="activity-labels">
+                    <span>低活跃</span>
+                    <span>高活跃</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // 添加事件监听
+    container.querySelectorAll('.activity-slider').forEach(slider => {
+        slider.addEventListener('input', function() {
+            const memberId = this.getAttribute('data-member-id');
+            const activity = this.value / 100;
+            updateMemberActivity(memberId, activity);
+        });
+    });
+}
+
+async function updateMemberActivity(memberId, activity) {
+    const groupData = currentChatCharacter;
+    
+    if (!groupData.settings.memberActivity) groupData.settings.memberActivity = {};
+    groupData.settings.memberActivity[memberId] = activity;
+    
+    await saveGroupChanges();
+    
+    const activityItem = event.target.closest('.activity-item');
+    if (activityItem) {
+        const valueDisplay = activityItem.querySelector('.activity-value');
+        if (valueDisplay) {
+            valueDisplay.textContent = Math.round(activity * 100) + '%';
+        }
+    }
+}
+
+async function batchSetActivity(activityLevel) {
+    const groupData = currentChatCharacter;
+    const members = groupData.members || [];
+    
+    if (!groupData.settings.memberActivity) groupData.settings.memberActivity = {};
+    
+    members.forEach(memberId => {
+        groupData.settings.memberActivity[memberId] = activityLevel;
+    });
+    
+    await saveGroupChanges();
+    renderMemberActivityList();
+    
+    const levelText = activityLevel >= 0.7 ? '高活跃' : activityLevel >= 0.4 ? '中活跃' : '低活跃';
+    showToast(`已将所有成员设为${levelText}`);
+}
+
+async function randomizeActivity() {
+    const groupData = currentChatCharacter;
+    const members = groupData.members || [];
+    
+    if (!groupData.settings.memberActivity) groupData.settings.memberActivity = {};
+    
+    members.forEach(memberId => {
+        groupData.settings.memberActivity[memberId] = 0.2 + Math.random() * 0.7;
+    });
+    
+    await saveGroupChanges();
+    renderMemberActivityList();
+    
+    showToast('已随机设置活跃度');
+}
+
+// ========== AI权限指令系统 ==========
+
+/**
+ * 解析并执行AI消息中的权限指令
+ * @param {string} content - AI回复的消息内容
+ * @param {string} senderId - 发送者ID（角色ID）
+ * @param {Object} groupData - 群聊数据
+ * @returns {Promise<Object>} { cleanContent: 清理后的内容, executedActions: 执行的操作列表, systemMessages: 系统消息列表 }
+ */
+async function parseAndExecutePermissionCommands(content, senderId, groupData) {
+    if (!content || !groupData || groupData.groupType !== 'group') {
+        return { cleanContent: content, executedActions: [], systemMessages: [] };
+    }
+    
+    console.log('🔧 parseAndExecutePermissionCommands 被调用');
+    console.log('   - 发送者ID:', senderId);
+    console.log('   - 消息内容:', content);
+    
+    const executedActions = [];
+    const systemMessages = [];
+    let cleanContent = content;
+    
+    // 定义权限指令的正则表达式
+    const commandPatterns = [
+        {
+            // [admin:memberId] - 设置管理员
+            regex: /\[admin:([^\]]+)\]/g,
+            handler: async (match, memberId) => {
+                const result = await executeAdminCommand(senderId, memberId.trim(), groupData, true);
+                if (result.success) {
+                    executedActions.push(result);
+                    systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        },
+        {
+            // [unadmin:memberId] - 取消管理员
+            regex: /\[unadmin:([^\]]+)\]/g,
+            handler: async (match, memberId) => {
+                const result = await executeAdminCommand(senderId, memberId.trim(), groupData, false);
+                if (result.success) {
+                    executedActions.push(result);
+                    systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        },
+        {
+            // [mute:memberId:duration] - 禁言（duration可以是数字分钟或"永久"）
+            regex: /\[mute:([^:]+):([^\]]+)\]/g,
+            handler: async (match, memberId, duration) => {
+                const result = await executeMuteCommand(senderId, memberId.trim(), duration.trim(), groupData);
+                if (result.success) {
+                    executedActions.push(result);
+                    systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        },
+        {
+            // [unmute:memberId] - 解除禁言
+            regex: /\[unmute:([^\]]+)\]/g,
+            handler: async (match, memberId) => {
+                const result = await executeUnmuteCommand(senderId, memberId.trim(), groupData);
+                if (result.success) {
+                    executedActions.push(result);
+                    systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        },
+        {
+            // [title:memberId:头衔] - 设置头衔
+            regex: /\[title:([^:]+):([^\]]+)\]/g,
+            handler: async (match, memberId, title) => {
+                const result = await executeTitleCommand(senderId, memberId.trim(), title.trim(), groupData);
+                if (result.success) {
+                    executedActions.push(result);
+                    systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        },
+        {
+            // [kick:memberId] - 踢出群聊
+            regex: /\[kick:([^\]]+)\]/g,
+            handler: async (match, memberId) => {
+                const result = await executeKickCommand(senderId, memberId.trim(), groupData);
+                if (result.success) {
+                    executedActions.push(result);
+                    systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        },
+        {
+            // [transfer:memberId] - 转让群主
+            regex: /\[transfer:([^\]]+)\]/g,
+            handler: async (match, memberId) => {
+                const result = await executeTransferCommand(senderId, memberId.trim(), groupData);
+                if (result.success) {
+                    executedActions.push(result);
+                    systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        }
+    ];
+    
+    // 遍历所有指令模式
+    for (const pattern of commandPatterns) {
+        const matches = [...cleanContent.matchAll(pattern.regex)];
+        
+        for (const match of matches) {
+            try {
+                // 执行指令处理器
+                const success = await pattern.handler(...match);
+                
+                // 无论执行成功还是失败，都从内容中移除指令标记
+                // 这样即使权限不足或其他原因导致失败，指令也不会显示在消息中
+                cleanContent = cleanContent.replace(match[0], '');
+                
+                if (success) {
+                    console.log('✅ 权限指令执行成功:', match[0]);
+                } else {
+                    console.log('⚠️ 权限指令执行失败（已移除标记）:', match[0]);
+                }
+            } catch (error) {
+                console.error('❌ 执行权限指令异常（已移除标记）:', match[0], error);
+                // 即使出现异常，也要移除指令标记
+                cleanContent = cleanContent.replace(match[0], '');
+            }
+        }
+    }
+    
+    // 清理多余的空白
+    cleanContent = cleanContent.trim();
+    
+    console.log('🏁 parseAndExecutePermissionCommands 完成');
+    console.log('   - 清理后内容:', cleanContent);
+    console.log('   - 执行的操作数:', executedActions.length);
+    console.log('   - 系统消息数:', systemMessages.length);
+    
+    return { cleanContent, executedActions, systemMessages };
 }
 
 /**
- * 打开成员活跃度设置界面
+ * 执行设置/取消管理员指令
  */
-function openMemberActivitySettings() {
-    // TODO: 实现成员活跃度设置界面
-    iosAlert('成员活跃度设置功能开发中...', '提示');
+async function executeAdminCommand(operatorId, targetId, groupData, setAdmin) {
+    // 权限检查
+    if (!hasPermission(groupData, operatorId, 'set_admin')) {
+        console.warn(`角色 ${operatorId} 没有设置管理员的权限`);
+        return { success: false, reason: '权限不足' };
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`找不到成员: ${targetId}`);
+        return { success: false, reason: '成员不存在' };
+    }
+    
+    // 不能对群主操作
+    if (targetId === groupData.owner) {
+        return { success: false, reason: '不能对群主操作' };
+    }
+    
+    // 检查是否已经是管理员
+    if (!groupData.admins) groupData.admins = [];
+    const isAdmin = groupData.admins.includes(targetId);
+    
+    if (setAdmin && isAdmin) {
+        return { success: false, reason: '已经是管理员' };
+    }
+    
+    if (!setAdmin && !isAdmin) {
+        return { success: false, reason: '不是管理员' };
+    }
+    
+    // 执行操作
+    if (setAdmin) {
+        groupData.admins.push(targetId);
+    } else {
+        groupData.admins = groupData.admins.filter(id => id !== targetId);
+    }
+    
+    await saveGroupChanges();
+    
+    // 获取操作者和目标的信息
+    const operatorName = getCharacterDisplayName(operatorId, groupData);
+    const operatorRole = getRoleDisplayName(getMemberRole(groupData, operatorId));
+    const targetName = targetMember.remark || targetMember.name;
+    
+    // 生成系统消息内容（不直接添加，而是返回）
+    const systemContent = setAdmin
+        ? `${operatorRole}"${operatorName}"设置"${targetName}"为管理员`
+        : `${operatorRole}"${operatorName}"取消了"${targetName}"的管理员`;
+    
+    return {
+        success: true,
+        action: setAdmin ? 'setAdmin' : 'removeAdmin',
+        operator: operatorName,
+        target: targetName,
+        systemMessage: systemContent
+    };
+}
+
+/**
+ * 执行禁言指令
+ */
+async function executeMuteCommand(operatorId, targetId, duration, groupData) {
+    console.log('🔇 executeMuteCommand 被调用');
+    console.log('   - 操作者:', operatorId);
+    console.log('   - 目标:', targetId);
+    console.log('   - 时长:', duration);
+    
+    // 权限检查
+    if (!canMuteMember(groupData, operatorId, targetId)) {
+        console.warn(`❌ 角色 ${operatorId} 没有禁言 ${targetId} 的权限`);
+        return { success: false, reason: '权限不足' };
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`❌ 找不到成员: ${targetId}`);
+        return { success: false, reason: '成员不存在' };
+    }
+    
+    // 初始化成员状态
+    if (!groupData.memberStatus) groupData.memberStatus = {};
+    if (!groupData.memberStatus[targetId]) {
+        groupData.memberStatus[targetId] = {
+            isMuted: false,
+            muteUntil: null,
+            joinTime: new Date().toISOString(),
+            title: '',
+            level: 1,
+            messageCount: 0,
+            lastActiveTime: null
+        };
+    }
+    
+    const status = groupData.memberStatus[targetId];
+    
+    // 解析禁言时长
+    let minutes = 0;
+    let durationText = '';
+    
+    if (duration === '永久' || duration === 'permanent' || duration === '0') {
+        minutes = 0;
+        durationText = '永久';
+    } else {
+        minutes = parseInt(duration);
+        if (isNaN(minutes) || minutes < 0) {
+            console.warn(`❌ 无效的禁言时长: ${duration}`);
+            return { success: false, reason: '无效的禁言时长' };
+        }
+        durationText = `${minutes}分钟`;
+    }
+    
+    // 执行禁言
+    status.isMuted = true;
+    if (minutes > 0) {
+        status.muteUntil = new Date(Date.now() + minutes * 60000).toISOString();
+    } else {
+        status.muteUntil = null;
+    }
+    
+    console.log('✅ 禁言状态已更新:', status);
+    
+    await saveGroupChanges();
+    
+    console.log('💾 群聊数据已保存');
+    
+    // 获取操作者和目标的信息
+    const operatorName = getCharacterDisplayName(operatorId, groupData);
+    const operatorRole = getRoleDisplayName(getMemberRole(groupData, operatorId));
+    const targetName = targetMember.remark || targetMember.name;
+    const targetRole = getRoleDisplayName(getMemberRole(groupData, targetId));
+    
+    // 生成系统消息内容（不直接添加，而是返回）
+    const systemContent = `${operatorRole}"${operatorName}"将${targetRole}"${targetName}"禁言 ${durationText}`;
+    
+    console.log('📢 生成系统消息:', systemContent);
+    
+    return {
+        success: true,
+        action: 'mute',
+        operator: operatorName,
+        target: targetName,
+        duration: durationText,
+        systemMessage: systemContent
+    };
+}
+
+/**
+ * 执行解除禁言指令
+ */
+async function executeUnmuteCommand(operatorId, targetId, groupData) {
+    // 权限检查
+    if (!canMuteMember(groupData, operatorId, targetId)) {
+        console.warn(`角色 ${operatorId} 没有解除禁言 ${targetId} 的权限`);
+        return { success: false, reason: '权限不足' };
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`找不到成员: ${targetId}`);
+        return { success: false, reason: '成员不存在' };
+    }
+    
+    // 检查是否被禁言
+    if (!groupData.memberStatus?.[targetId]?.isMuted) {
+        return { success: false, reason: '该成员未被禁言' };
+    }
+    
+    const status = groupData.memberStatus[targetId];
+    status.isMuted = false;
+    status.muteUntil = null;
+    
+    await saveGroupChanges();
+    
+    // 获取操作者和目标的信息
+    const operatorName = getCharacterDisplayName(operatorId, groupData);
+    const operatorRole = getRoleDisplayName(getMemberRole(groupData, operatorId));
+    const targetName = targetMember.remark || targetMember.name;
+    const targetRole = getRoleDisplayName(getMemberRole(groupData, targetId));
+    
+    // 生成系统消息内容（不直接添加，而是返回）
+    const systemContent = `${operatorRole}"${operatorName}"解除了${targetRole}"${targetName}"的禁言`;
+    
+    return {
+        success: true,
+        action: 'unmute',
+        operator: operatorName,
+        target: targetName,
+        systemMessage: systemContent
+    };
+}
+
+/**
+ * 执行设置头衔指令
+ */
+async function executeTitleCommand(operatorId, targetId, title, groupData) {
+    // 权限检查
+    if (!hasPermission(groupData, operatorId, 'set_title')) {
+        console.warn(`角色 ${operatorId} 没有设置头衔的权限`);
+        return { success: false, reason: '权限不足' };
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`找不到成员: ${targetId}`);
+        return { success: false, reason: '成员不存在' };
+    }
+    
+    // 初始化成员状态
+    if (!groupData.memberStatus) groupData.memberStatus = {};
+    if (!groupData.memberStatus[targetId]) {
+        groupData.memberStatus[targetId] = {
+            isMuted: false,
+            muteUntil: null,
+            joinTime: new Date().toISOString(),
+            title: '',
+            level: 1,
+            messageCount: 0,
+            lastActiveTime: null
+        };
+    }
+    
+    // 设置头衔
+    groupData.memberStatus[targetId].title = title;
+    
+    await saveGroupChanges();
+    
+    // 获取操作者和目标的信息
+    const operatorName = getCharacterDisplayName(operatorId, groupData);
+    const operatorRole = getRoleDisplayName(getMemberRole(groupData, operatorId));
+    const targetName = targetMember.remark || targetMember.name;
+    
+    // 生成系统消息内容（不直接添加，而是返回）
+    const systemContent = title
+        ? `${operatorRole}"${operatorName}"将"${targetName}"的头衔设置为"${title}"`
+        : `${operatorRole}"${operatorName}"清除了"${targetName}"的头衔`;
+    
+    return {
+        success: true,
+        action: 'setTitle',
+        operator: operatorName,
+        target: targetName,
+        title: title,
+        systemMessage: systemContent
+    };
+}
+
+/**
+ * 执行踢出群聊指令
+ */
+async function executeKickCommand(operatorId, targetId, groupData) {
+    // 权限检查
+    if (!canRemoveMember(groupData, operatorId, targetId)) {
+        console.warn(`角色 ${operatorId} 没有踢出 ${targetId} 的权限`);
+        return { success: false, reason: '权限不足' };
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`找不到成员: ${targetId}`);
+        return { success: false, reason: '成员不存在' };
+    }
+    
+    // 获取操作者和目标的信息（在删除前）
+    const operatorName = getCharacterDisplayName(operatorId, groupData);
+    const operatorRole = getRoleDisplayName(getMemberRole(groupData, operatorId));
+    const targetName = targetMember.remark || targetMember.name;
+    const targetRole = getRoleDisplayName(getMemberRole(groupData, targetId));
+    
+    // 执行踢出
+    groupData.members = groupData.members.filter(id => id !== targetId);
+    
+    if (groupData.membersWhoKnowUser) {
+        groupData.membersWhoKnowUser = groupData.membersWhoKnowUser.filter(id => id !== targetId);
+    }
+    
+    if (groupData.memberStatus?.[targetId]) {
+        delete groupData.memberStatus[targetId];
+    }
+    
+    if (groupData.settings?.memberActivity?.[targetId]) {
+        delete groupData.settings.memberActivity[targetId];
+    }
+    
+    await saveGroupChanges();
+    
+    // 生成系统消息内容（不直接添加，而是返回）
+    const systemContent = `${operatorRole}"${operatorName}"将${targetRole}"${targetName}"移出了群聊`;
+    
+    return {
+        success: true,
+        action: 'kick',
+        operator: operatorName,
+        target: targetName,
+        systemMessage: systemContent
+    };
+}
+
+/**
+ * 执行转让群主指令
+ */
+async function executeTransferCommand(operatorId, targetId, groupData) {
+    // 权限检查：只有群主可以转让
+    if (groupData.owner !== operatorId) {
+        console.warn(`角色 ${operatorId} 不是群主，无法转让群主`);
+        return { success: false, reason: '只有群主可以转让群主' };
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`找不到成员: ${targetId}`);
+        return { success: false, reason: '成员不存在' };
+    }
+    
+    // 不能转让给自己
+    if (targetId === operatorId) {
+        return { success: false, reason: '不能转让给自己' };
+    }
+    
+    // 获取操作者和目标的信息
+    const operatorName = getCharacterDisplayName(operatorId, groupData);
+    const targetName = targetMember.remark || targetMember.name;
+    
+    // 执行转让
+    const oldOwnerId = groupData.owner;
+    groupData.owner = targetId;
+    
+    // 将旧群主设为管理员
+    if (!groupData.admins) groupData.admins = [];
+    if (!groupData.admins.includes(oldOwnerId)) {
+        groupData.admins.push(oldOwnerId);
+    }
+    
+    // 移除新群主的管理员身份（如果有）
+    groupData.admins = groupData.admins.filter(id => id !== targetId);
+    
+    await saveGroupChanges();
+    
+    // 生成系统消息内容（不直接添加，而是返回）
+    const systemContent = `"${operatorName}"将群主转让给"${targetName}"`;
+    
+    return {
+        success: true,
+        action: 'transfer',
+        operator: operatorName,
+        target: targetName,
+        systemMessage: systemContent
+    };
+}
+
+/**
+ * 获取角色显示名称（处理user的情况）
+ */
+function getCharacterDisplayName(characterId, groupData) {
+    if (characterId === 'user') {
+        const userData = getUserDataForCharacter(groupData.id);
+        return userData.name || '你';
+    }
+    
+    const character = chatCharacters.find(c => c.id === characterId);
+    return character ? (character.remark || character.name) : '未知';
 }

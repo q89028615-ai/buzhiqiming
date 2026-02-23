@@ -23,11 +23,11 @@
     <!-- Chart.js 图表库 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <!-- docx解析库 -->
-    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <!-- ZIP解析库 -->
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- docx生成库 -->
-    <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/index.js"></script>
 </head>
 <body>
     <!-- 消息通知弹窗容器 -->
@@ -2091,6 +2091,61 @@
                 </div>
             </div>
 
+            <!-- 移动端控制台 -->
+            <div style="margin-top: 50px;">
+                <div class="section-title">
+                    <span class="section-title-text">开发者工具</span>
+                </div>
+                
+                <button class="btn-primary" onclick="openMobileConsole()" style="background: #333; color: white; border: none;">
+                    移动端控制台
+                </button>
+                <div style="margin-top: 8px; font-size: 12px; color: #999; text-align: center;">
+                    查看控制台日志、警告和错误信息
+                </div>
+            </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- 移动端控制台面板 -->
+    <div class="settings-page" id="mobileConsolePanel" style="z-index: 10005;">
+        <div class="settings-content" style="max-width: 100%;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeMobileConsole()">←</div>
+                <div class="settings-title">移动端控制台</div>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <div class="settings-action" onclick="exportConsoleLogs()" style="font-size: 14px; color: #007aff; cursor: pointer;">导出</div>
+                    <div class="settings-action" onclick="clearConsoleLogs()" style="font-size: 14px; color: #ff3b30; cursor: pointer;">清空</div>
+                </div>
+            </div>
+
+            <div class="settings-card" style="padding: 0;">
+                <!-- 筛选按钮 -->
+                <div class="console-filter-bar">
+                    <button class="console-filter-btn active" data-filter="all" onclick="filterConsoleLogs('all')">
+                        全部 <span class="console-count" id="consoleCountAll">0</span>
+                    </button>
+                    <button class="console-filter-btn" data-filter="log" onclick="filterConsoleLogs('log')">
+                        日志 <span class="console-count" id="consoleCountLog">0</span>
+                    </button>
+                    <button class="console-filter-btn" data-filter="warn" onclick="filterConsoleLogs('warn')">
+                        警告 <span class="console-count" id="consoleCountWarn">0</span>
+                    </button>
+                    <button class="console-filter-btn" data-filter="error" onclick="filterConsoleLogs('error')">
+                        错误 <span class="console-count" id="consoleCountError">0</span>
+                    </button>
+                </div>
+
+                <!-- 日志列表 -->
+                <div class="console-logs-container" id="consoleLogsContainer">
+                    <div class="console-empty-state">
+                        <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
+                        <div style="font-size: 14px; color: #999; margin-bottom: 6px;">暂无日志</div>
+                        <div style="font-size: 12px; color: #bbb;">控制台输出将显示在这里</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -3932,6 +3987,11 @@
             display: flex;
             flex-direction: column;
         }
+        
+        /* 多选模式下为顶部栏预留空间 */
+        .multiselect-mode .chat-messages-container {
+            padding-top: calc(60px + env(safe-area-inset-top));
+        }
 
         .chat-empty-message {
             flex: 1;
@@ -4105,6 +4165,109 @@
         }
         .bubble-shape-8 .chat-message-user .chat-message-bubble::after,
         .bubble-shape-8 .chat-message-char .chat-message-bubble::after {
+            display: none !important;
+        }
+
+        /* ========== 语音气泡样式（跟随气泡方案） ========== */
+        
+        /* 方案1：圆角气泡 - 语音气泡样式 */
+        .bubble-shape-1 .chat-message-user .chat-voice-bubble {
+            border-radius: 18px !important;
+            border-bottom-right-radius: 4px !important;
+        }
+        .bubble-shape-1 .chat-message-char .chat-voice-bubble {
+            border-radius: 18px !important;
+            border-bottom-left-radius: 4px !important;
+        }
+
+        /* 方案2：全圆角（胶囊） - 语音气泡样式 */
+        .bubble-shape-2 .chat-message-user .chat-voice-bubble,
+        .bubble-shape-2 .chat-message-char .chat-voice-bubble {
+            border-radius: 20px !important;
+        }
+        .bubble-shape-2 .chat-message-user .chat-voice-bubble::before,
+        .bubble-shape-2 .chat-message-user .chat-voice-bubble::after,
+        .bubble-shape-2 .chat-message-char .chat-voice-bubble::before,
+        .bubble-shape-2 .chat-message-char .chat-voice-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案3：直角矩形 - 语音气泡样式 */
+        .bubble-shape-3 .chat-message-user .chat-voice-bubble,
+        .bubble-shape-3 .chat-message-char .chat-voice-bubble {
+            border-radius: 4px !important;
+        }
+        .bubble-shape-3 .chat-message-user .chat-voice-bubble::before,
+        .bubble-shape-3 .chat-message-user .chat-voice-bubble::after,
+        .bubble-shape-3 .chat-message-char .chat-voice-bubble::before,
+        .bubble-shape-3 .chat-message-char .chat-voice-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案4：大圆角无尾巴 - 语音气泡样式 */
+        .bubble-shape-4 .chat-message-user .chat-voice-bubble,
+        .bubble-shape-4 .chat-message-char .chat-voice-bubble {
+            border-radius: 16px !important;
+        }
+        .bubble-shape-4 .chat-message-user .chat-voice-bubble::before,
+        .bubble-shape-4 .chat-message-user .chat-voice-bubble::after,
+        .bubble-shape-4 .chat-message-char .chat-voice-bubble::before,
+        .bubble-shape-4 .chat-message-char .chat-voice-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案5：不规则圆角（iOS拟态） - 语音气泡样式 */
+        .bubble-shape-5 .chat-message-user .chat-voice-bubble {
+            border-radius: 18px 18px 4px 18px !important;
+        }
+        .bubble-shape-5 .chat-message-char .chat-voice-bubble {
+            border-radius: 18px 18px 18px 4px !important;
+        }
+        .bubble-shape-5 .chat-message-user .chat-voice-bubble::before,
+        .bubble-shape-5 .chat-message-user .chat-voice-bubble::after,
+        .bubble-shape-5 .chat-message-char .chat-voice-bubble::before,
+        .bubble-shape-5 .chat-message-char .chat-voice-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案6：扁平方形带边框 - 语音气泡样式 */
+        .bubble-shape-6 .chat-message-user .chat-voice-bubble {
+            border-radius: 8px !important;
+            border: 1.5px solid #0066cc !important;
+        }
+        .bubble-shape-6 .chat-message-char .chat-voice-bubble {
+            border-radius: 8px !important;
+            border: 1.5px solid #d0d0d0 !important;
+        }
+        .bubble-shape-6 .chat-message-user .chat-voice-bubble::before,
+        .bubble-shape-6 .chat-message-user .chat-voice-bubble::after,
+        .bubble-shape-6 .chat-message-char .chat-voice-bubble::before,
+        .bubble-shape-6 .chat-message-char .chat-voice-bubble::after {
+            display: none !important;
+        }
+
+        /* 方案7：气泡形（对话框） - 语音气泡样式 */
+        .bubble-shape-7 .chat-message-user .chat-voice-bubble {
+            border-radius: 20px 20px 4px 20px !important;
+        }
+        .bubble-shape-7 .chat-message-char .chat-voice-bubble {
+            border-radius: 20px 20px 20px 4px !important;
+        }
+        /* 方案7保留尾巴，所以不隐藏伪元素 */
+
+        /* 方案8：卡片式带阴影 - 语音气泡样式 */
+        .bubble-shape-8 .chat-message-user .chat-voice-bubble {
+            border-radius: 12px !important;
+            box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2) !important;
+        }
+        .bubble-shape-8 .chat-message-char .chat-voice-bubble {
+            border-radius: 12px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+        }
+        .bubble-shape-8 .chat-message-user .chat-voice-bubble::before,
+        .bubble-shape-8 .chat-message-user .chat-voice-bubble::after,
+        .bubble-shape-8 .chat-message-char .chat-voice-bubble::before,
+        .bubble-shape-8 .chat-message-char .chat-voice-bubble::after {
             display: none !important;
         }
 
@@ -4697,6 +4860,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 14px 16px;
+            padding-top: max(14px, env(safe-area-inset-top));
             box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
         .msg-multiselect-bar .ms-cancel {
@@ -7011,6 +7175,19 @@
                             <div>• 在气泡上添加装饰图片（支持GIF）</div>
                             <div>• 可调节位置、大小、透明度等</div>
                             <div>• 支持保存和管理装饰预设</div>
+                            <div>• 用户和角色气泡可分别设置装饰</div>
+                        </div>
+                    </div>
+
+                    <!-- 类型切换标签 -->
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; gap: 10px; background: #f8f8f8; padding: 4px; border-radius: 10px;">
+                            <button class="bubble-decoration-type-tab active" onclick="switchBubbleDecorationType('user', event)">
+                                用户气泡
+                            </button>
+                            <button class="bubble-decoration-type-tab" onclick="switchBubbleDecorationType('char', event)">
+                                角色气泡
+                            </button>
                         </div>
                     </div>
 
@@ -7106,25 +7283,6 @@
                     <div style="margin-bottom: 20px;">
                         <label class="form-label">旋转角度: <span id="bubbleDecorationRotationValue">0</span>°</label>
                         <input type="range" id="bubbleDecorationRotation" class="param-slider" min="0" max="360" value="0" step="15" oninput="updateBubbleDecorationRotation()">
-                    </div>
-
-                    <!-- 应用范围 -->
-                    <div style="margin-bottom: 20px;">
-                        <label class="form-label">应用到</label>
-                        <div style="display: flex; gap: 10px;">
-                            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: #f8f8f8; border-radius: 8px; cursor: pointer;">
-                                <input type="radio" name="bubbleDecorationApplyTo" value="both" checked onchange="updateBubbleDecorationApplyTo()">
-                                <span style="font-size: 13px; color: #333;">全部</span>
-                            </label>
-                            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: #f8f8f8; border-radius: 8px; cursor: pointer;">
-                                <input type="radio" name="bubbleDecorationApplyTo" value="user" onchange="updateBubbleDecorationApplyTo()">
-                                <span style="font-size: 13px; color: #333;">我</span>
-                            </label>
-                            <label style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; background: #f8f8f8; border-radius: 8px; cursor: pointer;">
-                                <input type="radio" name="bubbleDecorationApplyTo" value="char" onchange="updateBubbleDecorationApplyTo()">
-                                <span style="font-size: 13px; color: #333;">对方</span>
-                            </label>
-                        </div>
                     </div>
 
                     <!-- 保存设置 -->
@@ -8869,7 +9027,9 @@
                     <!-- 饼状图 -->
                     <div style="background: #ffffff; border: 2px solid #e5e5ea; padding: 20px; border-radius: 8px; margin-bottom: 15px;">
                         <div style="font-size: 14px; color: #333; font-weight: 500; margin-bottom: 15px; text-align: center;">数据分布</div>
-                        <canvas id="dataChart" style="max-width: 300px; max-height: 300px; margin: 0 auto; display: block;"></canvas>
+                        <div style="position: relative; width: 100%; max-width: 300px; margin: 0 auto;">
+                            <canvas id="dataChart"></canvas>
+                        </div>
                         <div id="chartLegend" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; font-size: 12px;"></div>
                     </div>
 
@@ -8981,6 +9141,78 @@
                     <button class="data-action-btn clear-all-btn" onclick="clearAllData()">
                         清空所有数据
                     </button>
+                </div>
+
+                <!-- 版本信息 -->
+                <div class="section-title" style="margin-top: 40px;">
+                    <span class="section-title-text">关于</span>
+                </div>
+
+                <div class="form-group">
+                    <!-- 版本信息卡片 -->
+                    <div style="background: #ffffff; border: 2px solid #e5e5ea; padding: 20px; border-radius: 12px; margin-bottom: 15px;">
+                        <div style="text-align: center; margin-bottom: 15px;">
+                            <div style="font-size: 15px; color: #999; margin-bottom: 8px;">当前版本</div>
+                            <div style="font-size: 32px; font-weight: 600; color: #007aff;" id="appVersion">v1.0.0</div>
+                        </div>
+                        <div style="text-align: center; padding-top: 15px; border-top: 1px solid #e5e5ea;">
+                            <div style="font-size: 13px; color: #666; line-height: 1.6;">
+                                不知道叫什么名字小手机
+                            </div>
+                            <div style="font-size: 12px; color: #999; margin-top: 8px;">
+                                © 2026 · 首次发布
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 查看更新日志按钮 -->
+                    <button class="data-action-btn" onclick="openChangelogModal()" style="background: #007aff; color: #fff; border: none;">
+                        查看更新日志
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 更新日志弹窗 -->
+    <div class="settings-page" id="changelogModal" style="z-index: 2000;">
+        <div class="settings-content" style="max-width: 500px;">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeChangelogModal()">←</div>
+                <div class="settings-title">更新日志</div>
+                <div style="width: 44px;"></div>
+            </div>
+
+            <div class="settings-card">
+                <!-- 版本历史列表 -->
+                <div id="changelogContent" style="max-height: 600px; overflow-y: auto;">
+                    <!-- v1.0.0 -->
+                    <div class="changelog-version">
+                        <div class="changelog-version-header">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div style="font-size: 20px; font-weight: 600; color: #007aff;">v1.0.0</div>
+                                <div style="padding: 4px 10px; background: #007aff; color: white; border-radius: 12px; font-size: 11px; font-weight: 600;">最新</div>
+                            </div>
+                            <div style="font-size: 13px; color: #999; margin-top: 4px;">2026-02-23</div>
+                        </div>
+                        <div class="changelog-version-content">
+                            <div class="changelog-section">
+                                <div class="changelog-section-title">🎉 首次发布</div>
+                                <ul class="changelog-list">
+                                    <li>完整的聊天功能，支持多角色对话</li>
+                                    <li>API设置与管理，支持多种AI模型</li>
+                                    <li>外观自定义，包括主题、字体、气泡样式</li>
+                                    <li>数据管理功能，支持导入导出备份</li>
+                                    <li>世界书系统，丰富角色背景设定</li>
+                                    <li>人设管理，自定义角色人格</li>
+                                    <li>音乐搜索与播放功能</li>
+                                    <li>视频通话界面</li>
+                                    <li>情侣头像小组件</li>
+                                    <li>PWA支持，可安装到桌面</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -9555,6 +9787,76 @@
 
     <!-- 音频播放器（隐藏） -->
     <audio id="audioPlayer" style="display: none;"></audio>
+
+    <!-- 群聊成员管理页面 -->
+    <div class="settings-page" id="groupMemberManagementPage" style="display: none; z-index: 10002;">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeGroupMemberManagement()">←</div>
+                <div class="settings-title">成员管理</div>
+                <div class="save-btn" onclick="openAddGroupMemberDialog()">添加</div>
+            </div>
+            <div class="settings-card">
+                <div id="groupMemberListContainer"></div>
+                <div class="form-group" style="margin-top: 30px;">
+                    <button class="btn-primary" onclick="dissolveGroup()" style="width: 100%; background: #ff3b30;">
+                        解散群聊
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 群聊关系管理页面 -->
+    <div class="settings-page" id="groupRelationManagementPage" style="display: none; z-index: 10002;">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeGroupRelationManagement()">←</div>
+                <div class="settings-title">成员关系设置</div>
+                <div style="width: 44px;"></div>
+            </div>
+            <div class="chat-settings-tabs">
+                <div class="chat-settings-tab active" onclick="switchRelationTab('userRelation')">用户关系</div>
+                <div class="chat-settings-tab" onclick="switchRelationTab('memberRelation')">成员关系</div>
+            </div>
+            <div class="settings-card">
+                <div id="userRelationTabContent" class="relation-tab-content">
+                    <div class="section-title">
+                        <span class="section-title-text">哪些成员认识你</span>
+                    </div>
+                    <div id="userRelationListContainer"></div>
+                </div>
+                <div id="memberRelationTabContent" class="relation-tab-content" style="display: none;">
+                    <div class="section-title">
+                        <span class="section-title-text">成员之间的关系</span>
+                    </div>
+                    <div id="memberRelationListContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 成员活跃度设置页面 -->
+    <div class="settings-page" id="memberActivitySettingsPage" style="display: none; z-index: 10002;">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="back-btn" onclick="closeMemberActivitySettings()">←</div>
+                <div class="settings-title">成员活跃度</div>
+                <div style="width: 44px;"></div>
+            </div>
+            <div class="settings-card">
+                <div class="form-group">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;">
+                        <button class="btn-primary" onclick="batchSetActivity(0.8)" style="flex: 1; min-width: 80px; font-size: 13px;">高活跃</button>
+                        <button class="btn-primary" onclick="batchSetActivity(0.5)" style="flex: 1; min-width: 80px; font-size: 13px;">中活跃</button>
+                        <button class="btn-primary" onclick="batchSetActivity(0.2)" style="flex: 1; min-width: 80px; font-size: 13px;">低活跃</button>
+                        <button class="btn-primary" onclick="randomizeActivity()" style="flex: 1; min-width: 80px; font-size: 13px; background: #6c757d;">随机</button>
+                    </div>
+                </div>
+                <div id="memberActivityListContainer"></div>
+            </div>
+        </div>
+    </div>
 
     <script src="prompts.js"></script>
     <script src="script3.js"></script>

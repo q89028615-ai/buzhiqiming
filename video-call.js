@@ -1,6 +1,14 @@
 // ========== video-call.js - 视频通话功能模块 ==========
 console.log('video-call.js 开始加载...');
 
+// 移动端适配检查
+(function checkMobileViewport() {
+    const viewport = document.querySelector('meta[name="viewport"]');
+    if (!viewport) {
+        console.warn('建议添加viewport meta标签以优化移动端显示');
+    }
+})();
+
 // ========== 视频通话数据管理 ==========
 
 // 获取视频通话记忆库（按角色过滤）
@@ -68,24 +76,64 @@ let isVideoViewSwapped = false; // 是否切换了大小窗
 
 // 最小化视频通话
 window.minimizeVideoCall = function minimizeVideoCall() {
+    console.log('=== 最小化视频通话 ===');
+    
     const overlay = document.getElementById('videoCallOverlay');
-    if (!overlay) return;
+    if (!overlay) {
+        console.error('找不到 videoCallOverlay');
+        return;
+    }
+    
+    // 检查当前通话状态
+    if (!currentVideoCall) {
+        console.error('currentVideoCall 不存在');
+        return;
+    }
+    
+    console.log('当前通话状态:', currentVideoCall.status);
     
     isVideoCallMinimized = true;
-    overlay.style.display = 'none';
     
-    // 创建悬浮球
-    createVideoCallFloatingBall();
+    // 恢复页面滚动（最小化时）
+    document.body.classList.remove('video-call-active');
+    
+    // 使用 requestAnimationFrame 确保动画流畅
+    requestAnimationFrame(() => {
+        overlay.classList.remove('show');
+        
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            console.log('视频通话界面已隐藏');
+            
+            // 创建悬浮球
+            createVideoCallFloatingBall();
+        }, 300);
+    });
 }
 
 // 恢复视频通话
 window.restoreVideoCall = function restoreVideoCall() {
+    console.log('=== 恢复视频通话 ===');
+    
     const overlay = document.getElementById('videoCallOverlay');
     const floatingBall = document.getElementById('videoCallFloatingBall');
     
     if (overlay) {
         isVideoCallMinimized = false;
-        overlay.style.display = 'flex';
+        
+        // 恢复时禁止页面滚动
+        document.body.classList.add('video-call-active');
+        
+        // 使用 requestAnimationFrame 确保渲染正确
+        requestAnimationFrame(() => {
+            overlay.style.display = 'flex';
+            
+            // 再次使用 requestAnimationFrame 确保 display 生效后再添加 show 类
+            requestAnimationFrame(() => {
+                overlay.classList.add('show');
+                console.log('视频通话界面已恢复显示');
+            });
+        });
     }
     
     if (floatingBall) {
@@ -123,16 +171,49 @@ function createVideoCallFloatingBall() {
     
     document.body.appendChild(ball);
     
-    // 计算初始位置（小手机右上角）
-    const phoneContainer = document.querySelector('.phone-container') || document.body;
-    const phoneRect = phoneContainer.getBoundingClientRect();
-    ball.style.left = (phoneRect.right - 90) + 'px';
-    ball.style.top = '100px';
-    ball.style.right = 'auto';
+    // 移动端优化的初始位置计算
+    const isMobile = window.innerWidth <= 767;
     
-    // 点击恢复
+    if (isMobile) {
+        // 移动端：固定在右上角
+        ball.style.right = '20px';
+        ball.style.top = '80px';
+        ball.style.left = 'auto';
+    } else {
+        // PC端：相对于小手机容器
+        const phoneContainer = document.querySelector('.phone-container');
+        if (phoneContainer) {
+            const phoneRect = phoneContainer.getBoundingClientRect();
+            ball.style.left = (phoneRect.right - 90) + 'px';
+            ball.style.top = '100px';
+            ball.style.right = 'auto';
+        } else {
+            // 降级方案
+            ball.style.right = '20px';
+            ball.style.top = '100px';
+            ball.style.left = 'auto';
+        }
+    }
+    
+    // 点击恢复（使用touchend优化移动端体验）
+    let touchStartTime = 0;
+    
+    ball.addEventListener('touchstart', (e) => {
+        touchStartTime = Date.now();
+    });
+    
+    ball.addEventListener('touchend', (e) => {
+        const touchDuration = Date.now() - touchStartTime;
+        // 如果触摸时间很短且没有拖动，认为是点击
+        if (touchDuration < 200 && !isDragging) {
+            e.preventDefault();
+            restoreVideoCall();
+        }
+    });
+    
     ball.addEventListener('click', (e) => {
-        if (!isDragging) {
+        // 只在非触摸设备上响应click事件
+        if (!('ontouchstart' in window) && !isDragging) {
             restoreVideoCall();
         }
     });
@@ -179,22 +260,24 @@ let dragStartY = 0;
 let ballStartX = 0;
 let ballStartY = 0;
 
-// 使元素可拖动
+// 使元素可拖动（移动端优化版）
 function makeDraggable(element) {
     let startX, startY, initialX, initialY;
+    let hasMoved = false;
     
-    element.addEventListener('touchstart', dragStart, { passive: false });
-    element.addEventListener('touchmove', drag, { passive: false });
-    element.addEventListener('touchend', dragEnd, { passive: false });
+    // 触摸事件处理
+    element.addEventListener('touchstart', touchStart, { passive: false });
+    element.addEventListener('touchmove', touchMove, { passive: false });
+    element.addEventListener('touchend', touchEnd, { passive: false });
     
-    element.addEventListener('mousedown', dragStart);
-    document.addEventListener('mousemove', drag);
-    document.addEventListener('mouseup', dragEnd);
+    // 鼠标事件处理（PC端）
+    element.addEventListener('mousedown', mouseStart);
     
-    function dragStart(e) {
+    function touchStart(e) {
         isDragging = false;
+        hasMoved = false;
         
-        const touch = e.touches ? e.touches[0] : e;
+        const touch = e.touches[0];
         startX = touch.clientX;
         startY = touch.clientY;
         
@@ -208,15 +291,76 @@ function makeDraggable(element) {
         ballStartY = initialY;
         
         element.style.transition = 'none';
+    }
+    
+    function touchMove(e) {
+        const touch = e.touches[0];
+        const currentX = touch.clientX;
+        const currentY = touch.clientY;
+        
+        const deltaX = currentX - dragStartX;
+        const deltaY = currentY - dragStartY;
+        
+        // 如果移动超过10px，认为是拖动
+        if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
+            isDragging = true;
+            hasMoved = true;
+            e.preventDefault(); // 阻止滚动
+        }
+        
+        if (isDragging) {
+            const newX = ballStartX + deltaX;
+            const newY = ballStartY + deltaY;
+            
+            // 边界限制
+            const maxX = window.innerWidth - element.offsetWidth;
+            const maxY = window.innerHeight - element.offsetHeight;
+            
+            const boundedX = Math.max(0, Math.min(newX, maxX));
+            const boundedY = Math.max(0, Math.min(newY, maxY));
+            
+            element.style.left = boundedX + 'px';
+            element.style.top = boundedY + 'px';
+            element.style.right = 'auto';
+        }
+    }
+    
+    function touchEnd(e) {
+        element.style.transition = 'all 0.3s ease';
+        
+        // 延迟重置isDragging，避免触发点击事件
+        setTimeout(() => {
+            isDragging = false;
+        }, 100);
+    }
+    
+    function mouseStart(e) {
+        isDragging = false;
+        hasMoved = false;
+        
+        startX = e.clientX;
+        startY = e.clientY;
+        
+        const rect = element.getBoundingClientRect();
+        initialX = rect.left;
+        initialY = rect.top;
+        
+        dragStartX = startX;
+        dragStartY = startY;
+        ballStartX = initialX;
+        ballStartY = initialY;
+        
+        element.style.transition = 'none';
+        
+        document.addEventListener('mousemove', mouseMove);
+        document.addEventListener('mouseup', mouseEnd);
+        
         e.preventDefault();
     }
     
-    function drag(e) {
-        if (e.type === 'mousemove' && e.buttons !== 1) return;
-        
-        const touch = e.touches ? e.touches[0] : e;
-        const currentX = touch.clientX;
-        const currentY = touch.clientY;
+    function mouseMove(e) {
+        const currentX = e.clientX;
+        const currentY = e.clientY;
         
         const deltaX = currentX - dragStartX;
         const deltaY = currentY - dragStartY;
@@ -224,37 +368,31 @@ function makeDraggable(element) {
         // 如果移动超过5px，认为是拖动
         if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
             isDragging = true;
+            hasMoved = true;
         }
         
         if (isDragging) {
             const newX = ballStartX + deltaX;
             const newY = ballStartY + deltaY;
             
-            // 获取小手机容器的边界
-            const phoneContainer = document.querySelector('.phone-container');
-            let maxX = window.innerWidth - element.offsetWidth;
-            let minX = 0;
-            
-            if (phoneContainer) {
-                const phoneRect = phoneContainer.getBoundingClientRect();
-                minX = phoneRect.left;
-                maxX = phoneRect.right - element.offsetWidth;
-            }
-            
+            // 边界限制
+            const maxX = window.innerWidth - element.offsetWidth;
             const maxY = window.innerHeight - element.offsetHeight;
             
-            const boundedX = Math.max(minX, Math.min(newX, maxX));
+            const boundedX = Math.max(0, Math.min(newX, maxX));
             const boundedY = Math.max(0, Math.min(newY, maxY));
             
             element.style.left = boundedX + 'px';
             element.style.top = boundedY + 'px';
-            
-            e.preventDefault();
+            element.style.right = 'auto';
         }
     }
     
-    function dragEnd(e) {
+    function mouseEnd(e) {
         element.style.transition = 'all 0.3s ease';
+        
+        document.removeEventListener('mousemove', mouseMove);
+        document.removeEventListener('mouseup', mouseEnd);
         
         setTimeout(() => {
             isDragging = false;
@@ -264,6 +402,15 @@ function makeDraggable(element) {
 
 // 发起视频通话
 window.startVideoCall = async function startVideoCall() {
+    console.log('=== 发起视频通话 ===');
+    console.log('设备信息:', {
+        userAgent: navigator.userAgent,
+        screenWidth: window.innerWidth,
+        screenHeight: window.innerHeight,
+        isMobile: window.innerWidth <= 767,
+        hasTouch: 'ontouchstart' in window
+    });
+    
     if (!currentChatCharacter) {
         showIosAlert('提示', '请先打开一个聊天');
         return;
@@ -283,6 +430,8 @@ window.startVideoCall = async function startVideoCall() {
         day: new Date().getDate()
     };
     
+    console.log('通话状态已初始化:', currentVideoCall);
+    
     // 显示拨打界面
     showCallingUI();
     
@@ -292,6 +441,11 @@ window.startVideoCall = async function startVideoCall() {
 
 // 显示拨打界面
 function showCallingUI() {
+    console.log('=== 显示拨打界面 ===');
+    
+    // 移动端防止页面滚动
+    document.body.classList.add('video-call-active');
+    
     const overlay = document.createElement('div');
     overlay.className = 'video-call-overlay';
     overlay.id = 'videoCallOverlay';
@@ -331,7 +485,13 @@ function showCallingUI() {
     `;
     
     document.body.appendChild(overlay);
-    setTimeout(() => overlay.classList.add('show'), 10);
+    console.log('拨打界面已添加到DOM');
+    
+    // 使用 requestAnimationFrame 确保动画流畅
+    requestAnimationFrame(() => {
+        overlay.classList.add('show');
+        console.log('拨打界面显示动画已触发');
+    });
 }
 
 // 请求角色接听
@@ -481,7 +641,12 @@ function handleCallRejected(reason) {
 
 // 处理通话被接听
 function handleCallAccepted(environment) {
-    if (!currentVideoCall) return;
+    if (!currentVideoCall) {
+        console.error('currentVideoCall 不存在');
+        return;
+    }
+    
+    console.log('=== 通话被接听 ===');
     
     currentVideoCall.status = 'connected';
     currentVideoCall.connectedTime = Date.now();
@@ -490,14 +655,21 @@ function handleCallAccepted(environment) {
     // 显示通话界面
     showConnectedUI();
     
-    // 开始计时
-    startCallTimer();
+    // 延迟启动计时器，确保界面已渲染
+    setTimeout(() => {
+        startCallTimer();
+    }, 100);
 }
 
 // 显示已接通界面
 function showConnectedUI() {
     const overlay = document.getElementById('videoCallOverlay');
-    if (!overlay) return;
+    if (!overlay) {
+        console.error('找不到 videoCallOverlay 元素');
+        return;
+    }
+    
+    console.log('=== 显示已接通界面 ===');
     
     // 获取头像
     const videoCallAvatars = getVideoCallAvatars(currentChatCharacter.id);
@@ -525,59 +697,82 @@ function showConnectedUI() {
         ? `<img src="${userAvatar}" alt="用户头像">` 
         : `<div style="width:100%;height:100%;background:#ccc;border-radius:50%;"></div>`;
     
-    overlay.innerHTML = `
-        <div class="video-call-container connected">
-            <button class="video-call-minimize-btn" onclick="minimizeVideoCall()" title="最小化">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-            </button>
-            <!-- 顶部时长显示 -->
-            <div class="video-call-timer" id="videoCallTimer">00:00</div>
-            
-            <!-- 角色视频画面 -->
-            <div class="video-call-main-view" id="mainView">
-                <div class="video-call-character-avatar breathing">
-                    ${charAvatarHtml}
+    // 使用 requestAnimationFrame 确保DOM更新在下一帧完成
+    requestAnimationFrame(() => {
+        overlay.innerHTML = `
+            <div class="video-call-container connected">
+                <button class="video-call-minimize-btn" onclick="minimizeVideoCall()" title="最小化">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+                <!-- 顶部时长显示 -->
+                <div class="video-call-timer" id="videoCallTimer">00:00</div>
+                
+                <!-- 角色视频画面 -->
+                <div class="video-call-main-view" id="mainView">
+                    <div class="video-call-character-avatar breathing">
+                        ${charAvatarHtml}
+                    </div>
+                </div>
+                
+                <!-- 用户小窗 -->
+                <div class="video-call-user-view" id="userView">
+                    ${userAvatarHtml}
+                </div>
+                
+                <!-- 消息显示区域 -->
+                <div class="video-call-messages" id="videoCallMessages">
+                    <!-- 动态添加消息 -->
+                </div>
+                
+                <!-- 底部操作按钮 -->
+                <div class="video-call-actions">
+                    <button class="video-call-btn speak" onclick="openVideoCallInput()">
+                        <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="30" cy="30" r="28" />
+                            <rect x="26" y="18" width="8" height="14" rx="4" fill="white"/>
+                            <path d="M20 28 Q20 36 30 38 Q40 36 40 28" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                            <line x1="30" y1="38" x2="30" y2="44" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+                            <line x1="24" y1="44" x2="36" y2="44" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <button class="video-call-btn hangup" onclick="hangupVideoCall()">
+                        <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="30" cy="30" r="28" />
+                            <path d="M20 28 Q20 22 26 22 L34 22 Q40 22 40 28 L40 32 Q40 35 37 35 L35 35 Q33 35 33 33 L33 30 Q33 28 31 28 L29 28 Q27 28 27 30 L27 33 Q27 35 25 35 L23 35 Q20 35 20 32 Z" fill="white" transform="rotate(135 30 30)"/>
+                        </svg>
+                    </button>
+                    <button class="video-call-btn api" onclick="callCharacterResponse()">
+                        <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="30" cy="30" r="28" />
+                            <path d="M18 30 L28 20 L28 26 L42 26 L42 34 L28 34 L28 40 Z" fill="white"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
-            
-            <!-- 用户小窗 -->
-            <div class="video-call-user-view" id="userView" onclick="toggleVideoView()">
-                ${userAvatarHtml}
-            </div>
-            
-            <!-- 消息显示区域 -->
-            <div class="video-call-messages" id="videoCallMessages">
-                <!-- 动态添加消息 -->
-            </div>
-            
-            <!-- 底部操作按钮 -->
-            <div class="video-call-actions">
-                <button class="video-call-btn speak" onclick="openVideoCallInput()">
-                    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="30" cy="30" r="28" />
-                        <rect x="26" y="18" width="8" height="14" rx="4" fill="white"/>
-                        <path d="M20 28 Q20 36 30 38 Q40 36 40 28" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-                        <line x1="30" y1="38" x2="30" y2="44" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
-                        <line x1="24" y1="44" x2="36" y2="44" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
-                    </svg>
-                </button>
-                <button class="video-call-btn hangup" onclick="hangupVideoCall()">
-                    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="30" cy="30" r="28" />
-                        <path d="M20 28 Q20 22 26 22 L34 22 Q40 22 40 28 L40 32 Q40 35 37 35 L35 35 Q33 35 33 33 L33 30 Q33 28 31 28 L29 28 Q27 28 27 30 L27 33 Q27 35 25 35 L23 35 Q20 35 20 32 Z" fill="white" transform="rotate(135 30 30)"/>
-                    </svg>
-                </button>
-                <button class="video-call-btn api" onclick="callCharacterResponse()">
-                    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="30" cy="30" r="28" />
-                        <path d="M18 30 L28 20 L28 26 L42 26 L42 34 L28 34 L28 40 Z" fill="white"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    `;
+        `;
+        
+        // 确保overlay可见
+        overlay.style.display = 'flex';
+        overlay.classList.add('show');
+        
+        // 为用户小窗添加触摸事件（移动端优化）
+        const userView = document.getElementById('userView');
+        if (userView) {
+            userView.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                toggleVideoView();
+            });
+            userView.addEventListener('click', function(e) {
+                if (!('ontouchstart' in window)) {
+                    toggleVideoView();
+                }
+            });
+        }
+        
+        console.log('已接通界面渲染完成');
+    });
 }
 
 // 切换大小窗显示
@@ -1083,10 +1278,15 @@ window.hangupVideoCall = async function hangupVideoCall() {
 
 // 关闭视频通话界面
 function closeVideoCall() {
+    console.log('=== 关闭视频通话界面 ===');
+    
     const overlay = document.getElementById('videoCallOverlay');
     if (overlay) {
         overlay.classList.remove('show');
-        setTimeout(() => overlay.remove(), 300);
+        setTimeout(() => {
+            overlay.remove();
+            console.log('视频通话界面已移除');
+        }, 300);
     }
     
     // 移除悬浮球
@@ -1094,6 +1294,9 @@ function closeVideoCall() {
     if (floatingBall) {
         floatingBall.remove();
     }
+    
+    // 恢复页面滚动
+    document.body.classList.remove('video-call-active');
     
     isVideoCallMinimized = false;
     isVideoViewSwapped = false;

@@ -108,11 +108,13 @@ function renderDataChart(imageCount, chatCount, fileCount, characterCount) {
         options: {
             responsive: true,
             maintainAspectRatio: true,
+            aspectRatio: 1,
             plugins: {
                 legend: {
                     display: false // 隐藏默认图例，使用自定义图例
                 },
                 tooltip: {
+                    enabled: true,
                     callbacks: {
                         label: function(context) {
                             const label = context.label || '';
@@ -123,6 +125,9 @@ function renderDataChart(imageCount, chatCount, fileCount, characterCount) {
                         }
                     }
                 }
+            },
+            layout: {
+                padding: 10
             }
         }
     };
@@ -1188,13 +1193,19 @@ async function cleanRedundantData() {
             }
         });
         
-        // - 用户头像（从localStorage）
+        // - 用户头像（从localStorage，按角色存储）
         try {
-            const userDataStr = localStorage.getItem('chatUserData');
-            if (userDataStr) {
-                const userData = JSON.parse(userDataStr);
-                if (userData.avatar) {
-                    usedImageIds.add(userData.avatar);
+            // 遍历所有角色的用户数据
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('chatUserData_')) {
+                    const userDataStr = localStorage.getItem(key);
+                    if (userDataStr) {
+                        const userData = JSON.parse(userDataStr);
+                        if (userData.avatar) {
+                            usedImageIds.add(userData.avatar);
+                        }
+                    }
                 }
             }
         } catch (e) {}
@@ -1251,7 +1262,7 @@ async function cleanRedundantData() {
         // 2. 清理无效的localStorage数据
         let localStorageCleaned = 0;
         const validKeys = [
-            'chatCharacters', 'personas', 'chatUserData', 'lockScreenEnabled', 
+            'chatCharacters', 'personas', 'lockScreenEnabled', 
             'lockScreenSlideMode', 'lockPasswordEnabled', 'passwordType', 
             'lockPassword', 'lockGesture', 'lockWallpaperEnabled', 
             'customStyleEnabled', 'statusBarEnabled', 'phoneBorderEnabled', 
@@ -1260,7 +1271,8 @@ async function cleanRedundantData() {
         
         for (let i = localStorage.length - 1; i >= 0; i--) {
             const key = localStorage.key(i);
-            if (key && !validKeys.includes(key)) {
+            // 保留chatUserData_开头的键（按角色存储的用户数据）
+            if (key && !validKeys.includes(key) && !key.startsWith('chatUserData_')) {
                 // 检查是否是临时数据或过期数据
                 if (key.startsWith('temp_') || key.startsWith('cache_') || key.includes('backup_old')) {
                     localStorage.removeItem(key);
@@ -1760,3 +1772,29 @@ async function compressAllImages() {
         await iosAlert('压缩失败：' + error.message, '错误');
     }
 }
+
+// ========== 版本信息与更新日志 ==========
+
+// 打开更新日志弹窗
+function openChangelogModal() {
+    document.getElementById('changelogModal').classList.add('active');
+}
+
+// 关闭更新日志弹窗
+function closeChangelogModal() {
+    document.getElementById('changelogModal').classList.remove('active');
+}
+
+// 初始化版本信息
+function initVersionInfo() {
+    const version = 'v1.0.0';
+    const versionElement = document.getElementById('appVersion');
+    if (versionElement) {
+        versionElement.textContent = version;
+    }
+}
+
+// 页面加载时初始化版本信息
+document.addEventListener('DOMContentLoaded', function() {
+    initVersionInfo();
+});

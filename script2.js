@@ -457,17 +457,13 @@ async function addBankTransferSystemMessage(card, amount) {
     // 获取角色真名
     const charName = currentChatCharacter.name || '角色';
     
-    // 获取用户真名
+    // 获取用户真名（按角色获取）
     let userName = '用户';
     try {
-        const userDataStr = localStorage.getItem('chatUserData');
-        console.log('📋 userData字符串:', userDataStr);
-        if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
-            console.log('📋 userData对象:', userData);
-            if (userData.name && userData.name.trim()) {
-                userName = userData.name.trim();
-            }
+        const userData = getUserDataForCharacter(currentChatCharacter.id);
+        console.log('📋 userData对象:', userData);
+        if (userData.name && userData.name.trim()) {
+            userName = userData.name.trim();
         }
     } catch (e) {
         console.error('获取用户名失败:', e);
@@ -2664,11 +2660,8 @@ async function performAutoSummary(characterId, interval) {
     const charName = character.name || '角色';
     let userName = '对方';
     try {
-        const userDataStr = localStorage.getItem('chatUserData');
-        if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
-            if (userData.name) userName = userData.name;
-        }
+        const userData = getUserDataForCharacter(characterId);
+        if (userData.name) userName = userData.name;
     } catch (e) {}
 
     // 获取最近的interval条消息用于总结
@@ -2825,11 +2818,8 @@ async function buildLongTermMemoryPrompt(characterId) {
     const charName = character ? (character.name || '你') : '你';
     let userName = '对方';
     try {
-        const userDataStr = localStorage.getItem('chatUserData');
-        if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
-            if (userData.name) userName = userData.name;
-        }
+        const userData = getUserDataForCharacter(currentChatCharacter.id);
+        if (userData.name) userName = userData.name;
     } catch (e) {}
 
     const memoryTexts = memories.map(m => '- ' + m.content).join('\n');
@@ -4701,6 +4691,8 @@ if (_origSaveMessageToDB) {
                 else if (messageObj.messageType === 'image') text = '[图片]';
                 else if (messageObj.messageType === 'textImage') text = '[图片]';
                 else if (messageObj.messageType === 'location') text = '[位置]';
+                else if (messageObj.messageType === 'video-call') text = messageObj.content;
+                else if (messageObj.messageType === 'incoming-video-call') text = messageObj.content;
 
                 showMsgNotification(
                     character.id,
@@ -4746,38 +4738,136 @@ async function updateChatStats() {
         // 估算总token：模拟实际发送给API的完整内容
         let totalTokens = 0;
         
-        // 三大分类统计
+        // 分类统计
         let tokenStats = {
-            systemPrompt: 0,      // 系统提示词
+            systemPrompt: 0,      // 系统提示词（内置的固定提示词）
+            persona: 0,           // 人设（角色人设+用户人设）
+            worldBook: 0,         // 世界书
             longTermMemory: 0,    // 长期记忆
             shortTermMemory: 0,   // 短期记忆（聊天历史）
             recentMessages: []
         };
 
-        // 1. 系统提示词（包含所有提示词内容）
+        // 1. 系统提示词（只包含内置的固定提示词）
         try {
-            const systemPrompt = await buildRolePlaySystemPrompt(currentChatCharacter);
-            tokenStats.systemPrompt = estimateTokenCount(systemPrompt);
+            // 计算内置提示词的token
+            let builtInPrompt = MAIN_CHAT_PROMPT + FORMAT_REMINDER_PROMPT;
+            builtInPrompt += VOICE_ABILITY_PROMPT;
+            builtInPrompt += TRANSFER_RECEIVE_PROMPT;
+            builtInPrompt += TRANSFER_SEND_PROMPT;
+            builtInPrompt += IMAGE_SEND_PROMPT;
+            builtInPrompt += LOCATION_SEND_PROMPT;
+            builtInPrompt += QUOTE_ABILITY_PROMPT;
+            
+            // 条件性功能提示词
+            if (currentChatCharacter && currentChatCharacter.incomingCallEnabled !== false) {
+                builtInPrompt += INCOMING_CALL_PROMPT;
+            }
+            
+            const bgCfg = typeof getBgActivityConfig === 'function' ? getBgActivityConfig(currentChatCharacter.id) : null;
+            if (bgCfg && bgCfg.enabled && typeof BG_ACTIVITY_STATUS_PROMPT !== 'undefined') {
+                builtInPrompt += BG_ACTIVITY_STATUS_PROMPT;
+            }
+            
+            const blockActive = typeof isAnyBlockActive === 'function' && isAnyBlockActive(currentChatCharacter.id);
+            if (!blockActive && typeof BLOCK_USER_ABILITY_PROMPT !== 'undefined') {
+                builtInPrompt += BLOCK_USER_ABILITY_PROMPT;
+            }
+            
+            // 时间感知提示词
+            if (currentChatCharacter && currentChatCharacter.timeAwareness !== false) {
+                const now = typeof getCurrentTime === 'function' ? getCurrentTime() : new Date();
+                const isCustomTime = currentChatCharacter && currentChatCharacter.customTime && currentChatCharacter.customTime.enabled;
+                const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+                const timeInfo = {
+                    year: now.getFullYear(),
+                    month: now.getMonth() + 1,
+                    day: now.getDate(),
+                    weekDay: weekDays[now.getDay()],
+                    hours: String(now.getHours()).padStart(2, '0'),
+                    minutes: String(now.getMinutes()).padStart(2, '0'),
+                    seconds: String(now.getSeconds()).padStart(2, '0'),
+                    isCustomTime: isCustomTime
+                };
+                if (typeof buildTimeAwarenessPrompt === 'function') {
+                    builtInPrompt += buildTimeAwarenessPrompt(timeInfo);
+                }
+            }
+            
+            builtInPrompt += FINAL_FORMAT_REMINDER;
+            
+            tokenStats.systemPrompt = estimateTokenCount(builtInPrompt);
             totalTokens += tokenStats.systemPrompt;
         } catch (e) {
             console.warn('估算系统提示词token失败:', e);
         }
 
-        // 2. 长期记忆（单独统计）
+        // 2. 人设（角色人设+用户人设）
+        try {
+            let personaPrompt = '';
+            
+            // 角色人设
+            if (currentChatCharacter) {
+                personaPrompt += `\n你叫${currentChatCharacter.name || '（未设置名字）'}。${currentChatCharacter.remark ? `关于你：${currentChatCharacter.remark}` : ''}
+${currentChatCharacter.description ? `\n${currentChatCharacter.description}` : ''}
+这些就是你，不需要刻意表演，因为你本来就是这样的人。`;
+            }
+            
+            // 用户人设（按角色获取）
+            try {
+                const userData = getUserDataForCharacter(currentChatCharacter.id);
+                if (userData.name || userData.description) {
+                    personaPrompt += `\n你正在跟${userData.name || '对方'}聊天。${userData.description ? `关于对方：${userData.description}` : ''}`;
+                }
+            } catch (e) {}
+            
+            tokenStats.persona = estimateTokenCount(personaPrompt);
+            totalTokens += tokenStats.persona;
+        } catch (e) {
+            console.warn('估算人设token失败:', e);
+        }
+
+        // 3. 世界书
+        try {
+            let worldBookPrompt = '';
+            
+            if (worldBooks && worldBooks.length > 0) {
+                const boundWorldBookIds = currentChatCharacter && currentChatCharacter.boundWorldBooks 
+                    ? currentChatCharacter.boundWorldBooks 
+                    : [];
+                
+                worldBooks.forEach(book => {
+                    if (!book.content) return;
+                    
+                    const isGlobal = book.isGlobal;
+                    const isBound = boundWorldBookIds.includes(book.id);
+                    
+                    if (isGlobal || isBound) {
+                        worldBookPrompt += `### ${book.name}\n${book.content}\n\n`;
+                    }
+                });
+            }
+            
+            tokenStats.worldBook = estimateTokenCount(worldBookPrompt);
+            totalTokens += tokenStats.worldBook;
+        } catch (e) {
+            console.warn('估算世界书token失败:', e);
+        }
+
+        // 4. 长期记忆（单独统计）
         if (typeof buildLongTermMemoryPrompt === 'function') {
             try {
                 const ltmPrompt = await buildLongTermMemoryPrompt(currentChatCharacter.id);
                 if (ltmPrompt) {
                     tokenStats.longTermMemory = estimateTokenCount(ltmPrompt);
-                    // 长期记忆已经包含在系统提示词中，需要从系统提示词中减去避免重复计算
-                    tokenStats.systemPrompt -= tokenStats.longTermMemory;
+                    totalTokens += tokenStats.longTermMemory;
                 }
             } catch (e) {
                 console.warn('估算长期记忆token失败:', e);
             }
         }
 
-        // 3. 短期记忆（聊天历史）
+        // 5. 短期记忆（聊天历史）
         const memoryLimit = currentChatCharacter.shortTermMemory || 10;
         try {
             const recentMsgs = await getChatHistory(currentChatCharacter.id, memoryLimit);
@@ -4886,6 +4976,8 @@ function showTokenDistribution() {
     const stats = data.stats;
 
     const systemPercent = total > 0 ? ((stats.systemPrompt / total) * 100).toFixed(1) : 0;
+    const personaPercent = total > 0 ? ((stats.persona / total) * 100).toFixed(1) : 0;
+    const worldBookPercent = total > 0 ? ((stats.worldBook / total) * 100).toFixed(1) : 0;
     const ltmPercent = total > 0 ? ((stats.longTermMemory / total) * 100).toFixed(1) : 0;
     const stmPercent = total > 0 ? ((stats.shortTermMemory / total) * 100).toFixed(1) : 0;
 
@@ -4927,9 +5019,41 @@ function showTokenDistribution() {
         <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-bottom:8px;">
             <div style="height:100%;background:#333;width:${systemPercent}%;transition:width 0.5s ease;"></div>
         </div>
-        <div style="font-size:12px;color:#999;line-height:1.5;">包含角色人设、用户信息、世界书、功能说明等</div>
+        <div style="font-size:12px;color:#999;line-height:1.5;">内置的固定提示词（聊天规则、功能说明等）</div>
     `;
     body.appendChild(systemSection);
+
+    // 人设
+    const personaSection = document.createElement('div');
+    personaSection.style.cssText = 'margin-bottom:20px;';
+    personaSection.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:15px;color:#333;font-weight:600;">人设</span>
+            <span style="font-size:15px;color:#333;font-weight:700;">${stats.persona.toLocaleString()} <span style="font-size:13px;color:#999;font-weight:500;">(${personaPercent}%)</span></span>
+        </div>
+        <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-bottom:8px;">
+            <div style="height:100%;background:#4CAF50;width:${personaPercent}%;transition:width 0.5s ease;"></div>
+        </div>
+        <div style="font-size:12px;color:#999;line-height:1.5;">角色人设和用户人设</div>
+    `;
+    body.appendChild(personaSection);
+
+    // 世界书
+    if (stats.worldBook > 0) {
+        const worldBookSection = document.createElement('div');
+        worldBookSection.style.cssText = 'margin-bottom:20px;';
+        worldBookSection.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <span style="font-size:15px;color:#333;font-weight:600;">世界书</span>
+                <span style="font-size:15px;color:#333;font-weight:700;">${stats.worldBook.toLocaleString()} <span style="font-size:13px;color:#999;font-weight:500;">(${worldBookPercent}%)</span></span>
+            </div>
+            <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-bottom:8px;">
+                <div style="height:100%;background:#2196F3;width:${worldBookPercent}%;transition:width 0.5s ease;"></div>
+            </div>
+            <div style="font-size:12px;color:#999;line-height:1.5;">世界观设定和背景知识</div>
+        `;
+        body.appendChild(worldBookSection);
+    }
 
     // 长期记忆
     if (stats.longTermMemory > 0) {
@@ -4941,7 +5065,7 @@ function showTokenDistribution() {
                 <span style="font-size:15px;color:#333;font-weight:700;">${stats.longTermMemory.toLocaleString()} <span style="font-size:13px;color:#999;font-weight:500;">(${ltmPercent}%)</span></span>
             </div>
             <div style="height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin-bottom:8px;">
-                <div style="height:100%;background:#666;width:${ltmPercent}%;transition:width 0.5s ease;"></div>
+                <div style="height:100%;background:#FF9800;width:${ltmPercent}%;transition:width 0.5s ease;"></div>
             </div>
             <div style="font-size:12px;color:#999;line-height:1.5;">AI记住的重要事件和关键信息</div>
         `;
@@ -5010,9 +5134,11 @@ function showTokenDistribution() {
         <div style="font-size:12px;color:#666;line-height:1.6;">
             <div style="font-weight:600;margin-bottom:8px;color:#333;">说明</div>
             <div style="margin-bottom:4px;">• Token数为粗略估算，实际消耗可能略有差异</div>
-            <div style="margin-bottom:4px;">• 系统提示词包含角色设定、功能说明等固定内容</div>
-            <div style="margin-bottom:4px;">• 长期记忆保存AI记住的重要信息</div>
-            <div>• 短期记忆是最近的对话历史，条数可在设置中调整</div>
+            <div style="margin-bottom:4px;">• 系统提示词：内置的固定提示词（聊天规则、功能说明等）</div>
+            <div style="margin-bottom:4px;">• 人设：角色人设和用户人设</div>
+            <div style="margin-bottom:4px;">• 世界书：世界观设定和背景知识</div>
+            <div style="margin-bottom:4px;">• 长期记忆：AI记住的重要信息</div>
+            <div>• 短期记忆：最近的对话历史，条数可在设置中调整</div>
         </div>
     `;
     body.appendChild(tipSection);
@@ -5125,8 +5251,8 @@ async function openDiarySummaryModal() {
     const charName = currentChatCharacter.name || '角色';
     let userName = '用户';
     try {
-        const uds = localStorage.getItem('chatUserData');
-        if (uds) { const ud = JSON.parse(uds); if (ud.name) userName = ud.name; }
+        const ud = getUserDataForCharacter(currentChatCharacter.id);
+        if (ud.name) userName = ud.name;
     } catch (e) {}
 
     // 构建弹窗
@@ -5248,6 +5374,8 @@ async function openDiarySummaryModal() {
         else if (m.messageType === 'textImage') text = '(图文)';
         else if (m.messageType === 'transfer') text = '(转账)';
         else if (m.messageType === 'location') text = '(位置)';
+        else if (m.messageType === 'video-call') text = m.content;
+        else if (m.messageType === 'incoming-video-call') text = m.content;
         if (text.length > 30) text = text.substring(0, 30) + '...';
         
         const msgLine = document.createElement('div');
@@ -5325,11 +5453,8 @@ async function executeDiarySummary(overlay, card, allMsgs, lastIndex) {
         const charName = character.name || '角色';
         let userName = '对方';
         try {
-            const userDataStr = localStorage.getItem('chatUserData');
-            if (userDataStr) {
-                const userData = JSON.parse(userDataStr);
-                if (userData.name) userName = userData.name;
-            }
+            const userData = getUserDataForCharacter(characterId);
+            if (userData.name) userName = userData.name;
         } catch (e) {}
 
         // 构建对话文本（只包含新消息）
@@ -5346,6 +5471,8 @@ async function executeDiarySummary(overlay, card, allMsgs, lastIndex) {
                 content = `(转账 ¥${amount} ${status === 'accepted' ? '已收款' : status === 'rejected' ? '已退还' : '待处理'})`;
             }
             else if (msg.messageType === 'location') content = `(位置: ${msg.locationAddress || ''})`;
+            else if (msg.messageType === 'video-call') content = msg.content;
+            else if (msg.messageType === 'incoming-video-call') content = msg.content;
             const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : '';
             return `[${time}] ${role}: ${content}`;
         }).join('\n');
@@ -5489,11 +5616,8 @@ async function executeManualSummary(overlay, card, allMsgs) {
         const charName = character.name || '角色';
         let userName = '对方';
         try {
-            const userDataStr = localStorage.getItem('chatUserData');
-            if (userDataStr) {
-                const userData = JSON.parse(userDataStr);
-                if (userData.name) userName = userData.name;
-            }
+            const userData = getUserDataForCharacter(characterId);
+            if (userData.name) userName = userData.name;
         } catch (e) {}
 
         // 构建对话文本
@@ -5510,6 +5634,8 @@ async function executeManualSummary(overlay, card, allMsgs) {
                 content = `(转账 ¥${amount} ${status === 'accepted' ? '已收款' : status === 'rejected' ? '已退还' : '待处理'})`;
             }
             else if (msg.messageType === 'location') content = `(位置: ${msg.locationAddress || ''})`;
+            else if (msg.messageType === 'video-call') content = msg.content;
+            else if (msg.messageType === 'incoming-video-call') content = msg.content;
             const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString('zh-CN') : '';
             return `[${time}] ${role}: ${content}`;
         }).join('\n');
@@ -5780,11 +5906,8 @@ async function buildMountedChatPrompt(characterId) {
             // 获取用户名
             let userName = '用户';
             try {
-                const userDataStr = localStorage.getItem('chatUserData');
-                if (userDataStr) {
-                    const userData = JSON.parse(userDataStr);
-                    if (userData.name) userName = userData.name;
-                }
+                const userData = getUserDataForCharacter(currentChatCharacter.id);
+                if (userData.name) userName = userData.name;
             } catch (e) {}
 
             let chatLog = '';
@@ -5804,6 +5927,10 @@ async function buildMountedChatPrompt(characterId) {
                     content = `（转账 ¥${amt}）`;
                 } else if (msg.messageType === 'location') {
                     content = `（位置：${msg.locationAddress || ''}）`;
+                } else if (msg.messageType === 'video-call') {
+                    content = msg.content;
+                } else if (msg.messageType === 'incoming-video-call') {
+                    content = msg.content;
                 }
                 const sender = msg.type === 'user' ? userName : targetName;
                 chatLog += `${sender}: ${content}\n`;
@@ -7354,9 +7481,8 @@ function calculateHuabeiQuota() {
     let userDesc = '';
     let userName = '';
     try {
-        const userDataStr = localStorage.getItem('chatUserData');
-        if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
+        const userData = getUserDataForCharacter(currentChatCharacter.id);
+        if (userData) {
             userDesc = (userData.description || '').toLowerCase();
             userName = userData.name || '';
         }
@@ -7677,9 +7803,8 @@ async function getHuabeiQuotaFromAI() {
 
     // 也可以补充用户数据中的信息
     try {
-        const userDataStr = localStorage.getItem('chatUserData');
-        if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
+        const userData = getUserDataForCharacter(currentChatCharacter.id);
+        if (userData) {
             if (userData.description) {
                 userDesc += '\n' + userData.description;
             }

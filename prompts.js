@@ -474,30 +474,131 @@ const BLOCK_USER_ABILITY_PROMPT = `\n你可以拉黑对方。当你真的生气�
 // ========== 群聊提示词 ==========
 
 /**
- * 构建群聊提示词
+ * 构建群聊提示词（一次性生成所有成员回复）
  * @param {Object} groupData - 群聊数据
- * @param {Object} currentMember - 当前回复的成员
  * @param {Array} chatHistory - 聊天历史
  * @param {Array} allMembers - 所有成员信息
  * @param {Object} timeInfo - 时间信息
+ * @param {Array} availableStickers - 可用的表情包列表
  * @returns {string} 群聊提示词
  */
-function buildGroupChatPrompt(groupData, currentMember, chatHistory, allMembers, timeInfo) {
+function buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, availableStickers = []) {
     const membersWhoKnowUser = groupData.membersWhoKnowUser || [];
-    const knowsUser = membersWhoKnowUser.includes(currentMember.id);
     
-    // 构建成员列表
-    const memberListText = allMembers.map(m => {
-        const isOwner = m.id === groupData.owner;
-        const isAdmin = (groupData.admins || []).includes(m.id);
-        const role = isOwner ? '(群主)' : isAdmin ? '(管理员)' : '';
-        const desc = m.description ? m.description.substring(0, 100) : '暂无描述';
-        return `- ${m.remark || m.name} ${role}: ${desc}${desc.length > 100 ? '...' : ''}`;
-    }).join('\n');
+    // 从设置中读取消息数量范围，默认1-5条
+    const minMessages = groupData.settings?.minMessagesPerMember || 1;
+    const maxMessages = groupData.settings?.maxMessagesPerMember || 5;
+    
+    // 辅助函数：获取成员角色
+    const getMemberRoleLocal = (groupData, memberId) => {
+        if (groupData.owner === memberId) return 'owner';
+        if (groupData.admins?.includes(memberId)) return 'admin';
+        return 'member';
+    };
+    
+    const getRoleDisplayNameLocal = (role) => {
+        const names = { 'owner': '群主', 'admin': '管理员', 'member': '成员' };
+        return names[role] || '成员';
+    };
+    
+    const getRelationTypeLabelLocal = (type) => {
+        const types = {
+            'stranger': '陌生人',
+            'acquaintance': '认识',
+            'friend': '朋友',
+            'close_friend': '好友',
+            'family': '家人',
+            'lover': '恋人',
+            'colleague': '同事',
+            'enemy': '敌对'
+        };
+        return types[type] || '陌生人';
+    };
+    
+    // 检查成员是否被禁言
+    const isMemberMutedLocal = (groupData, memberId) => {
+        const status = groupData.memberStatus?.[memberId];
+        if (!status || !status.isMuted) return false;
+        
+        if (status.muteUntil) {
+            const now = new Date();
+            const until = new Date(status.muteUntil);
+            if (now >= until) {
+                return false;
+            }
+        }
+        
+        return true;
+    };
+    
+    // 过滤掉被禁言的成员
+    const activeMembersList = allMembers.filter(m => !isMemberMutedLocal(groupData, m.id));
+    const mutedMembers = allMembers.filter(m => isMemberMutedLocal(groupData, m.id));
+    
+    // 构建成员详细信息（包括角色、等级、头衔、与用户的关系）
+    const memberDetailsText = activeMembersList.map(m => {
+        const role = getMemberRoleLocal(groupData, m.id);
+        const roleText = getRoleDisplayNameLocal(role);
+        const status = groupData.memberStatus?.[m.id] || {};
+        const level = status.level || 1;
+        const title = status.title || '';
+        const knowsUser = membersWhoKnowUser.includes(m.id);
+        const relationship = knowsUser ? '认识用户，之前有过私聊' : '不认识用户，第一次在群里互动';
+        const desc = m.description || '暂无描述';
+        
+        let info = `- ${m.remark || m.name}（群昵称）/ ${m.name}（真名）
+  成员ID：${m.id}（使用权限指令时必须用这个ID）
+  角色：${roleText}`;
+        
+        if (level > 1) info += `，等级${level}`;
+        if (title) info += `，头衔"${title}"`;
+        
+        info += `
+  性格/描述：${desc}
+  与用户关系：${relationship}`;
+        
+        return info;
+    }).join('\n\n');
+    
+    // 构建禁言信息
+    let muteText = '';
+    if (mutedMembers.length > 0) {
+        muteText = '\n\n【被禁言的成员】\n';
+        mutedMembers.forEach(m => {
+            const status = groupData.memberStatus?.[m.id];
+            let muteInfo = `- ${m.remark || m.name}（ID: ${m.id}）`;
+            if (status.muteUntil) {
+                const until = new Date(status.muteUntil);
+                const now = new Date();
+                const remainMinutes = Math.ceil((until - now) / 60000);
+                muteInfo += ` (禁言中，还剩${remainMinutes}分钟)`;
+            } else {
+                muteInfo += ` (永久禁言)`;
+            }
+            muteText += muteInfo + '\n';
+        });
+        muteText += '\n重要：被禁言的成员不能发言，不要为他们生成任何消息！所有成员都知道谁被禁言了。';
+    }
+    
+    // 构建成员关系信息
+    let relationText = '';
+    if (groupData.memberRelations && Object.keys(groupData.memberRelations).length > 0) {
+        relationText = '\n\n【成员之间的关系】\n';
+        for (const [key, relation] of Object.entries(groupData.memberRelations)) {
+            const [id1, id2] = key.split('_');
+            const member1 = allMembers.find(m => m.id === id1);
+            const member2 = allMembers.find(m => m.id === id2);
+            if (member1 && member2) {
+                const intimacyPercent = Math.round(relation.intimacy * 100);
+                relationText += `- ${member1.remark || member1.name} 和 ${member2.remark || member2.name}：${relation.description || getRelationTypeLabelLocal(relation.type)}（亲密度${intimacyPercent}%）\n`;
+            }
+        }
+        relationText += '\n请根据这些关系自然地进行对话，关系好的成员互动更频繁亲密，关系差的成员可能有矛盾。';
+    }
     
     // 构建聊天历史
     const historyText = chatHistory.slice(-20).map(msg => {
-        const sender = msg.type === 'user' ? '用户' : (allMembers.find(m => m.id === msg.characterId)?.remark || '未知成员');
+        const sender = msg.type === 'user' ? '用户' : (allMembers.find(m => m.id === msg.groupMemberId)?.remark || '未知成员');
         const time = msg.timestamp ? formatMessageTime(msg.timestamp) : '';
         const quote = msg.quotedMessageId ? `（引用了${msg.quotedSender}的消息："${msg.quotedContent}"）` : '';
         const atMention = msg.atMembers && msg.atMembers.length > 0 ? `（@了${msg.atMembers.join(', ')}）` : '';
@@ -507,69 +608,410 @@ function buildGroupChatPrompt(groupData, currentMember, chatHistory, allMembers,
     // 用户人设
     const userPersonaText = groupData.settings?.userPersonaContent || '普通用户';
     
-    let prompt = MAIN_CHAT_PROMPT + FORMAT_REMINDER_PROMPT;
-    
-    // 添加群聊场景说明
-    prompt += `\n\n【群聊场景 - 重要】
-你是 ${currentMember.remark || currentMember.name}，正在一个有 ${allMembers.length + 1} 人的群聊中（包括用户）。
+    let prompt = `【重要：群聊输出格式要求】
+你需要为群里的每个成员生成回复。输出格式必须是一个 JSON 对象，键是成员名字，值是该成员的消息数组。
+
+格式：
+{
+  "成员A名字": ["消息1", "消息2"],
+  "成员B名字": ["消息1"],
+  "成员C名字": ["消息1", "消息2", "消息3"]
+}
+
+重要规则：
+1. 必须用双引号包裹键和字符串值
+2. 不要在 JSON 之外添加任何内容
+3. 不要使用 markdown 代码块标记
+4. 每个成员在每一轮都必须发言，至少发${minMessages}条消息，最多${maxMessages}条
+5. 所有成员都必须包含在JSON中，不能有人不发言
+6. 如果有人@了某个成员（无论是用户还是其他成员），被@的成员必须回复，且回复要针对@他的人说的话
+7. 成员之间的回复要有互动感，可以互相回应、调侃、@对方、引用对方的话
+8. 被禁言的成员不能发言，不要为他们生成任何消息！
+
+示例：
+正确：{"小明": ["哈哈哈"], "小红": ["你们在聊什么呢", "@小明 你又皮了"]}
+正确：{"小明": ["我也觉得"], "小红": ["同意"]}
+错误：\`\`\`json{...}\`\`\`（不要用代码块）
+错误：{"小明": ["你好"]} 这是群聊（不要在JSON外加文字）
+
+---
+
+【群聊场景 - 重要】
+这是一个有 ${allMembers.length + 1} 人的群聊（包括用户），其中 ${activeMembersList.length} 人可以发言${mutedMembers.length > 0 ? `，${mutedMembers.length} 人被禁言` : ''}。
 
 【群名称】
 ${groupData.groupName || '未命名群聊'}
 
-【群成员】
-${memberListText}
+【可以发言的群成员】
+所有成员都能看到彼此的群昵称（备注名）和真名。在对话中可以用群昵称或真名称呼对方。
+
+${memberDetailsText}
+${muteText}
+${relationText}
 
 【用户身份】
 ${userPersonaText}
-
-【你与用户的关系】
-${knowsUser ? 
-  `你认识用户，你们之前有过私聊。你可以参考你们之前的互动记忆和关系。` : 
-  `你不认识用户，这是你们第一次在群里互动。你只能根据群聊上下文了解用户，不要假装认识用户或提到不存在的私聊记忆。`}
 
 【群聊历史】（最近20条）
 ${historyText || '（暂无历史消息）'}
 
 【群聊规则 - 必须遵守】
-1. 这是真实的群聊，不是一对一对话，有多个人同时在线
-2. 你必须发言，但句数不固定（1-5句都可以），像真人一样自然
-3. 你可以：
-   - 回应用户的消息
-   - 回应其他成员的发言
-   - 引用其他人的消息 [quote:消息ID]
-   - @其他成员（格式：@成员名字）
-   - 发表情包、图片、语音等
-4. 你的发言要符合群聊氛围，自然互动，不要太正式
-5. 如果话题跟你关系不大，可以简短回应、调侃或旁观
-6. 成员之间可以互相调侃、开玩笑、争论，像真实朋友群一样
-7. 不要每次都回复很长，有时候一两句话就够了
-8. 可以偶尔冒泡、发表情、附和别人，不一定要说很多
+1. 这是真实的群聊，多个人同时在线，会有自然的互动
+2. 每个可以发言的成员在每一轮都必须发言，至少${minMessages}条，最多${maxMessages}条，根据性格和话题决定发几条
+3. 被禁言的成员不能发言，不要为他们生成任何消息！所有成员都知道谁被禁言了
+4. 如果有人@了某个成员（无论是用户还是其他成员@的），被@的成员必须回复@他的人
+5. 被@的成员回复时，可以用@回去，也可以用引用[quote:消息ID]，或者直接在消息中体现出是在回应谁
+6. 成员之间可以互相回应、调侃、开玩笑、争论、互相@
+7. 可以使用 @成员名字 来@其他人
+8. 可以引用消息 [quote:消息ID]
+9. 可以发表情包、图片、语音等特殊消息
+10. 即使话题不太相关，也要找到角度参与进来（比如插科打诨、旁观吐槽、转移话题等）
+11. 发言要符合群聊氛围，自然、真实、有互动感
+12. 认识用户的成员可以更亲密，不认识的要保持距离感
+13. 群主拥有最高权限，管理员拥有管理权限，请在对话中体现这些角色关系
+14. 等级高的成员可能在群里更有话语权或更活跃
+15. 有头衔的成员可以在对话中体现头衔特点
+16. 成员可以讨论谁被禁言了，可以对禁言事件发表看法
 
-【@功能说明】
-- 如果有人@了你，你要特别注意并针对性回应
-- 你也可以主动@其他成员，格式：@成员名字
-- 群主和管理员可以@全体成员`;
+【特殊消息类型】
+- 语音：[voice:说的话]
+- 图片：[image:图片描述]
+- 定位：[location:地址]
+- 引用：[quote:消息ID]
+- @功能：直接在消息中写 @成员名字 或 @全员（群主/管理员可用）
+  例如："@张三 你在哪呢"、"@全员 明天开会"
+
+【群聊权限指令 - 仅限有权限的成员使用】
+如果你是群主或管理员，可以在消息中使用以下权限指令来管理群聊：
+
+1. 设置/取消管理员（仅群主可用）
+   - [admin:成员ID] - 设置某人为管理员
+   - [unadmin:成员ID] - 取消某人的管理员身份
+   例如："[admin:char_123] 欢迎新管理员！"
+
+2. 禁言/解除禁言（群主和管理员可用）
+   - [mute:成员ID:时长] - 禁言某人（时长单位：分钟，或填"永久"）
+   - [unmute:成员ID] - 解除某人的禁言
+   例如："[mute:char_456:30] 先冷静30分钟"、"[mute:char_789:永久]"、"[unmute:char_456]"
+
+3. 设置头衔（仅群主可用）
+   - [title:成员ID:头衔名称] - 给某人设置头衔
+   例如："[title:char_123:活跃之星] 恭喜获得新头衔！"
+
+4. 踢出群聊（群主和管理员可用）
+   - [kick:成员ID] - 将某人移出群聊
+   例如："[kick:char_999] 违反群规，请离开"
+
+5. 转让群主（仅群主可用）
+   - [transfer:成员ID] - 将群主转让给某人
+   例如："[transfer:char_111] 以后这个群就交给你了"
+
+【权限指令使用规则】
+- 权限指令可以和普通消息混合使用，例如："你太过分了 [mute:char_123:10] 先冷静一下"
+- 系统会自动检查你的权限，如果没有权限，指令会被忽略
+- 执行权限操作后，系统会自动生成灰色提示消息，你不需要再重复说明
+- 管理员不能对其他管理员或群主使用禁言/踢出等操作
+- 只有在确实需要管理群聊时才使用这些指令，不要滥用权限
+- 使用权限指令时要符合你的角色性格和当前情境
+
+【@功能使用说明】
+- 用户在输入框输入@符号时，会自动弹出群成员列表
+- 可以通过输入成员名字进行搜索过滤
+- 群主和管理员可以使用@全员功能
+- @的成员会在消息中高亮显示
+- 被@的成员更容易看到消息并回复`;
+
+    // 添加表情包列表
+    if (availableStickers && availableStickers.length > 0) {
+        const stickerList = availableStickers.map(s => s.name).join('、');
+        prompt += `\n\n【可用表情包】
+你们有一些表情包可以用。什么时候发、发不发，完全看成员自己的心情和当时的聊天氛围，不用每次都发。
+
+可以用的表情包有：${stickerList}
+
+要发表情包的时候，用这个格式：[sticker:表情包名字]
+比如想发一个叫"开心"的表情包，就写 [sticker:开心]
+
+重要提醒：
+- 表情包名字必须是上面列表里有的，不能自己编造
+- 一条消息里只放表情包，不要把表情包和文字混在一条消息里
+- 如果列表里没有合适的表情包，就不要发，用文字表达就好`;
+    }
 
     // 添加时间感知
     if (timeInfo) {
         prompt += buildTimeAwarenessPrompt(timeInfo);
     }
     
-    // 如果认识用户，添加长期记忆
-    if (knowsUser) {
-        prompt += `\n\n【你与用户的私聊记忆】
-（这些是你们私聊时的记忆，不是群聊记忆）
+    // 添加长期记忆占位符（后续会替换）
+    prompt += `\n\n【成员与用户的私聊记忆】
 {longTermMemories}`;
-    }
-    
-    // 添加特殊功能提示
-    prompt += VOICE_ABILITY_PROMPT;
-    prompt += IMAGE_SEND_PROMPT;
-    prompt += LOCATION_SEND_PROMPT;
-    prompt += QUOTE_ABILITY_PROMPT;
     
     // 最终格式提醒
-    prompt += FINAL_FORMAT_REMINDER;
+    prompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【最后再次强调：输出格式】
+
+你的回复必须是一个有效的 JSON 对象：
+{
+  "成员名字": ["消息1", "消息2"],
+  "另一个成员": ["消息1"]
+}
+
+- 键是成员的名字（remark或name）
+- 值是该成员的消息数组
+- 只为可以发言的成员生成消息，被禁言的成员不要生成！
+- 所有可以发言的成员都必须包含在JSON中，每个人至少发${minMessages}条消息，最多${maxMessages}条
+- 如果有人@了某个成员，该成员必须在回复中体现出针对@他的人的回应
+- 不要在JSON之外添加任何内容
+- 不要使用代码块标记
+
+现在，生成群成员的回复：`;
+    
+    return prompt;
+}
+
+// 构建群聊提示词（新版本，支持禁言）
+function buildGroupChatPromptV2(groupData, chatHistory, availableStickers, timeInfo) {
+    const minMessages = groupData.settings?.minMessagesPerMember || 1;
+    const maxMessages = groupData.settings?.maxMessagesPerMember || 3;
+    
+    // 检查成员是否被禁言
+    const isGroupMemberMuted = (groupData, memberId) => {
+        const status = groupData.memberStatus?.[memberId];
+        if (!status || !status.isMuted) return false;
+        
+        if (status.muteUntil) {
+            const now = new Date();
+            const until = new Date(status.muteUntil);
+            if (now >= until) {
+                return false;
+            }
+        }
+        
+        return true;
+    };
+    
+    // 分离可以发言和被禁言的成员
+    const allMembers = groupData.members || [];
+    const activeMembersList = allMembers.filter(m => !isGroupMemberMuted(groupData, m.id));
+    const mutedMembers = allMembers.filter(m => isGroupMemberMuted(groupData, m.id));
+    
+    // 构建成员详细信息
+    const memberDetailsText = activeMembersList.map(m => {
+        const desc = m.description || '暂无描述';
+        const relationship = m.relationshipWithUser || '陌生人';
+        const roleText = m.role === 'owner' ? '群主' : (m.role === 'admin' ? '管理员' : '普通成员');
+        const level = m.level || 1;
+        const title = m.title || '';
+        
+        let info = `${m.remark || m.name}（真名：${m.name}）
+  成员ID：${m.id}（使用权限指令时必须用这个ID）
+  角色：${roleText}`;
+        
+        if (level > 1) info += `，等级${level}`;
+        if (title) info += `，头衔"${title}"`;
+        
+        info += `
+  性格/描述：${desc}
+  与用户关系：${relationship}`;
+        
+        return info;
+    }).join('\n\n');
+    
+    // 构建禁言信息
+    let muteText = '';
+    if (mutedMembers.length > 0) {
+        muteText = '\n\n【被禁言的成员】\n';
+        mutedMembers.forEach(m => {
+            const status = groupData.memberStatus?.[m.id];
+            let muteInfo = `- ${m.remark || m.name}（ID: ${m.id}）`;
+            if (status.muteUntil) {
+                const until = new Date(status.muteUntil);
+                const now = new Date();
+                const remainMinutes = Math.ceil((until - now) / 60000);
+                muteInfo += ` (禁言中，还剩${remainMinutes}分钟)`;
+            } else {
+                muteInfo += ` (永久禁言)`;
+            }
+            muteText += muteInfo + '\n';
+        });
+        muteText += '\n重要：被禁言的成员不能发言，不要为他们生成任何消息！所有成员都知道谁被禁言了。';
+    }
+    
+    // 构建成员关系信息
+    let relationText = '';
+    if (groupData.memberRelations && Object.keys(groupData.memberRelations).length > 0) {
+        relationText = '\n\n【成员之间的关系】\n';
+        for (const [key, relation] of Object.entries(groupData.memberRelations)) {
+            const [id1, id2] = key.split('_');
+            const member1 = allMembers.find(m => m.id === id1);
+            const member2 = allMembers.find(m => m.id === id2);
+            if (member1 && member2) {
+                const intimacyPercent = Math.round(relation.intimacy * 100);
+                relationText += `- ${member1.remark || member1.name} 和 ${member2.remark || member2.name}：${relation.description || getRelationTypeLabelLocal(relation.type)}（亲密度${intimacyPercent}%）\n`;
+            }
+        }
+        relationText += '\n请根据这些关系自然地进行对话，关系好的成员互动更频繁亲密，关系差的成员可能有矛盾。';
+    }
+    
+    // 构建聊天历史
+    const historyText = chatHistory.slice(-20).map(msg => {
+        const sender = msg.type === 'user' ? '用户' : (allMembers.find(m => m.id === msg.groupMemberId)?.remark || '未知成员');
+        const time = msg.timestamp ? formatMessageTime(msg.timestamp) : '';
+        const quote = msg.quotedMessageId ? `（引用了${msg.quotedSender}的消息："${msg.quotedContent}"）` : '';
+        const atMention = msg.atMembers && msg.atMembers.length > 0 ? `（@了${msg.atMembers.join(', ')}）` : '';
+        return `[${time}] ${sender}: ${msg.content} ${quote}${atMention}`;
+    }).join('\n');
+    
+    // 用户人设
+    const userPersonaText = groupData.settings?.userPersonaContent || '普通用户';
+    
+    let prompt = `【重要：群聊输出格式要求】
+你需要为群里的每个成员生成回复。输出格式必须是一个 JSON 对象，键是成员名字，值是该成员的消息数组。
+
+格式：
+{
+  "成员A名字": ["消息1", "消息2"],
+  "成员B名字": ["消息1"],
+  "成员C名字": ["消息1", "消息2", "消息3"]
+}
+
+重要规则：
+1. 必须用双引号包裹键和字符串值
+2. 不要在 JSON 之外添加任何内容
+3. 不要使用 markdown 代码块标记
+4. 每个成员在每一轮都必须发言，至少发${minMessages}条消息，最多${maxMessages}条
+5. 所有成员都必须包含在JSON中，不能有人不发言
+6. 如果有人@了某个成员（无论是用户还是其他成员），被@的成员必须回复，且回复要针对@他的人说的话
+7. 成员之间的回复要有互动感，可以互相回应、调侃、@对方、引用对方的话
+
+示例：
+正确：{"小明": ["哈哈哈"], "小红": ["你们在聊什么呢", "@小明 你又皮了"]}
+正确：{"小明": ["我也觉得"], "小红": ["同意"]}
+错误：\`\`\`json{...}\`\`\`（不要用代码块）
+错误：{"小明": ["你好"]} 这是群聊（不要在JSON外加文字）
+
+---
+
+【群聊场景 - 重要】
+这是一个有 ${allMembers.length + 1} 人的群聊（包括用户）。
+
+【群名称】
+${groupData.groupName || '未命名群聊'}
+
+【群成员详细信息】
+所有成员都能看到彼此的群昵称（备注名）和真名。在对话中可以用群昵称或真名称呼对方。
+
+${memberDetailsText}
+${relationText}
+
+【用户身份】
+${userPersonaText}
+
+【群聊历史】（最近20条）
+${historyText || '（暂无历史消息）'}
+
+【群聊规则 - 必须遵守】
+1. 这是真实的群聊，多个人同时在线，会有自然的互动
+2. 每个成员在每一轮都必须发言，至少${minMessages}条，最多${maxMessages}条，根据性格和话题决定发几条
+3. 如果有人@了某个成员（无论是用户还是其他成员@的），被@的成员必须回复@他的人
+4. 被@的成员回复时，可以用@回去，也可以用引用[quote:消息ID]，或者直接在消息中体现出是在回应谁
+5. 成员之间可以互相回应、调侃、开玩笑、争论、互相@
+6. 可以使用 @成员名字 来@其他人
+7. 可以引用消息 [quote:消息ID]
+8. 可以发表情包、图片、语音等特殊消息
+9. 即使话题不太相关，也要找到角度参与进来（比如插科打诨、旁观吐槽、转移话题等）
+10. 发言要符合群聊氛围，自然、真实、有互动感
+11. 认识用户的成员可以更亲密，不认识的要保持距离感
+12. 群主拥有最高权限，管理员拥有管理权限，请在对话中体现这些角色关系
+13. 等级高的成员可能在群里更有话语权或更活跃
+14. 有头衔的成员可以在对话中体现头衔特点
+
+【特殊消息类型】
+- 语音：[voice:说的话]
+- 图片：[image:图片描述]
+- 定位：[location:地址]
+- 引用：[quote:消息ID]
+- @功能：直接在消息中写 @成员名字 或 @全员（群主/管理员可用）
+  例如："@张三 你在哪呢"、"@全员 明天开会"
+
+【群聊权限指令 - 仅限有权限的成员使用】
+如果你是群主或管理员，可以在消息中使用以下权限指令来管理群聊：
+
+1. 设置/取消管理员（仅群主可用）
+   - [admin:成员ID] - 设置某人为管理员
+   - [unadmin:成员ID] - 取消某人的管理员身份
+
+2. 禁言/解除禁言（群主和管理员可用）
+   - [mute:成员ID:时长] - 禁言某人（时长单位：分钟，或填"永久"）
+   - [unmute:成员ID] - 解除某人的禁言
+
+3. 设置头衔（仅群主可用）
+   - [title:成员ID:头衔名称] - 给某人设置头衔
+
+4. 踢出群聊（群主和管理员可用）
+   - [kick:成员ID] - 将某人移出群聊
+
+5. 转让群主（仅群主可用）
+   - [transfer:成员ID] - 将群主转让给某人
+
+权限指令使用规则：
+- 权限指令可以和普通消息混合使用
+- 系统会自动检查你的权限，如果没有权限，指令会被忽略
+- 执行权限操作后，系统会自动生成灰色提示消息
+- 只有在确实需要管理群聊时才使用这些指令
+
+【@功能使用说明】
+- 用户在输入框输入@符号时，会自动弹出群成员列表
+- 可以通过输入成员名字进行搜索过滤
+- 群主和管理员可以使用@全员功能
+- @的成员会在消息中高亮显示
+- 被@的成员更容易看到消息并回复`;
+
+    // 添加表情包列表
+    if (availableStickers && availableStickers.length > 0) {
+        const stickerList = availableStickers.map(s => s.name).join('、');
+        prompt += `\n\n【可用表情包】
+你们有一些表情包可以用。什么时候发、发不发，完全看成员自己的心情和当时的聊天氛围，不用每次都发。
+
+可以用的表情包有：${stickerList}
+
+要发表情包的时候，用这个格式：[sticker:表情包名字]
+比如想发一个叫"开心"的表情包，就写 [sticker:开心]
+
+重要提醒：
+- 表情包名字必须是上面列表里有的，不能自己编造
+- 一条消息里只放表情包，不要把表情包和文字混在一条消息里
+- 如果列表里没有合适的表情包，就不要发，用文字表达就好`;
+    }
+
+    // 添加时间感知
+    if (timeInfo) {
+        prompt += buildTimeAwarenessPrompt(timeInfo);
+    }
+    
+    // 添加长期记忆占位符（后续会替换）
+    prompt += `\n\n【成员与用户的私聊记忆】
+{longTermMemories}`;
+    
+    // 最终格式提醒
+    prompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【最后再次强调：输出格式】
+
+你的回复必须是一个有效的 JSON 对象：
+{
+  "成员名字": ["消息1", "消息2"],
+  "另一个成员": ["消息1"]
+}
+
+- 键是成员的名字（remark或name）
+- 值是该成员的消息数组
+- 所有成员都必须包含在JSON中，每个人至少发${minMessages}条消息，最多${maxMessages}条
+- 如果有人@了某个成员，该成员必须在回复中体现出针对@他的人的回应
+- 不要在JSON之外添加任何内容
+- 不要使用代码块标记
+
+现在，生成群成员的回复：`;
     
     return prompt;
 }

@@ -624,6 +624,21 @@ async function compressImage(file, options = {}) {
     } = options;
     
     return new Promise((resolve, reject) => {
+        // 如果是GIF，直接保留原格式，不进行压缩
+        if (file.type === 'image/gif') {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                console.log('🎬 GIF图片保留原格式，跳过压缩');
+                resolve(e.target.result);
+            };
+            reader.onerror = () => {
+                reject(new Error('GIF文件读取失败'));
+            };
+            reader.readAsDataURL(file);
+            return;
+        }
+        
+        // 非GIF图片进行压缩处理
         const reader = new FileReader();
         
         reader.onload = (e) => {
@@ -691,14 +706,6 @@ async function compressImage(file, options = {}) {
         reader.onerror = () => {
             reject(new Error('文件读取失败'));
         };
-        
-        // 如果是GIF，保留原格式
-        if (file.type === 'image/gif') {
-            reader.onload = (e) => {
-                console.log('GIF图片保留原格式');
-                resolve(e.target.result);
-            };
-        }
         
         reader.readAsDataURL(file);
     });
@@ -1454,6 +1461,26 @@ function updateFontSizePreview() {
     previewFont();
 }
 
+// 保存字体设置
+async function saveFontSettings() {
+    const fontFamily = document.getElementById('globalFontSelect').value;
+    const fontSize = document.getElementById('fontSizeRange').value;
+    
+    try {
+        // 保存到 localStorage
+        localStorage.setItem('globalFont', fontFamily);
+        localStorage.setItem('globalFontSize', fontSize);
+        
+        // 立即应用字体设置
+        applyFontSettings(fontFamily, fontSize);
+        
+        await iosAlert('字体设置已保存！');
+    } catch (error) {
+        console.error('保存字体设置失败:', error);
+        await iosAlert('保存失败，请重试！');
+    }
+}
+
 // 应用字体设置到整个页面
 function applyFontSettings(fontFamily, fontSize) {
     // 创建或更新 style 标签
@@ -1464,12 +1491,43 @@ function applyFontSettings(fontFamily, fontSize) {
         document.head.appendChild(styleEl);
     }
     
+    // 增强的CSS规则，确保在移动端也能正确应用
     styleEl.textContent = `
-        body, input, textarea, select, button {
+        /* 全局字体设置 - 高优先级 */
+        html, body, 
+        body *, 
+        input, textarea, select, button,
+        .chat-message, .message-text,
+        .settings-card, .form-input,
+        .app-name, .widget-text,
+        div, span, p, a, label {
+            font-family: ${fontFamily} !important;
+            font-size: ${fontSize}px !important;
+        }
+        
+        /* 移动端特殊处理 */
+        @media (max-width: 768px) {
+            html, body, body * {
+                font-family: ${fontFamily} !important;
+                font-size: ${fontSize}px !important;
+                -webkit-text-size-adjust: 100% !important;
+                text-size-adjust: 100% !important;
+            }
+        }
+        
+        /* 确保输入框也应用字体 */
+        input[type="text"],
+        input[type="password"],
+        input[type="email"],
+        textarea {
             font-family: ${fontFamily} !important;
             font-size: ${fontSize}px !important;
         }
     `;
+    
+    // 额外保险：直接设置body样式
+    document.body.style.fontFamily = fontFamily;
+    document.body.style.fontSize = fontSize + 'px';
 }
 
 // 切换顶栏显示
@@ -3400,6 +3458,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         // 加载聊天角色
         await loadChatCharacters();
         renderChatList();
+        
+        // 迁移旧的用户数据到按角色存储的格式
+        migrateOldUserData();
         
         // 初始化角色后台活动系统
         if (typeof initAllBgActivities === 'function') {
@@ -6860,7 +6921,7 @@ async function renderChatList() {
                 <div class="chat-list-avatar">${avatarHtml}</div>
                 <div class="chat-list-info">
                     <div class="chat-list-name">${escapeHtml(char.remark)}${char.isPinned ? ' <span style="color: #999; font-size: 11px;">[置顶]</span>' : ''}${typeof getCharacterStatusDot === 'function' ? (() => { const dot = getCharacterStatusDot(char.id); return dot ? `<span class="chat-list-status-dot ${dot}"></span>` : ''; })() : ''}</div>
-                    <div class="chat-list-message">${escapeHtml(displayMessage)}</div>
+                    <div class="chat-list-message">${escapeHtml(replaceAtUserInPreview(displayMessage, char.id))}</div>
                 </div>
                 <div class="chat-list-right">
                     <div class="chat-list-time">${timeStr}</div>
@@ -7153,6 +7214,98 @@ function formatChatTime(timeStr) {
 let currentChatCharacter = null;
 let aiRespondingCharacterIds = new Set(); // 追踪正在AI调用中的角色ID（支持多个同时调用）
 
+// ========== 按角色存储用户数据的辅助函数 ==========
+
+/**
+ * 获取指定角色的用户数据
+ * @param {string} characterId - 角色ID
+ * @returns {object} 用户数据对象 {avatar, name, description}
+ */
+function getUserDataForCharacter(characterId) {
+    if (!characterId) {
+        return { avatar: '', name: '', description: '' };
+    }
+    
+    try {
+        const key = 'chatUserData_' + characterId;
+        const data = localStorage.getItem(key);
+        if (data) {
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        console.error('读取角色用户数据失败:', e);
+    }
+    
+    return { avatar: '', name: '', description: '' };
+}
+
+/**
+ * 保存指定角色的用户数据
+ * @param {string} characterId - 角色ID
+ * @param {object} userData - 用户数据对象 {avatar, name, description}
+ */
+function saveUserDataForCharacter(characterId, userData) {
+    if (!characterId) {
+        console.error('保存用户数据失败：角色ID为空');
+        return;
+    }
+    
+    try {
+        const key = 'chatUserData_' + characterId;
+        localStorage.setItem(key, JSON.stringify(userData));
+        console.log('✅ 已保存角色用户数据:', characterId, userData);
+    } catch (e) {
+        console.error('保存角色用户数据失败:', e);
+    }
+}
+
+/**
+ * 迁移旧的全局用户数据到按角色存储的格式
+ * 只在首次加载时执行一次
+ */
+function migrateOldUserData() {
+    try {
+        // 检查是否已经迁移过
+        const migrated = localStorage.getItem('userDataMigrated');
+        if (migrated === 'true') {
+            return; // 已经迁移过，跳过
+        }
+        
+        // 检查是否存在旧的全局用户数据
+        const oldUserData = localStorage.getItem('chatUserData');
+        if (!oldUserData) {
+            // 没有旧数据，标记为已迁移
+            localStorage.setItem('userDataMigrated', 'true');
+            return;
+        }
+        
+        console.log('🔄 检测到旧的用户数据，开始迁移...');
+        
+        // 解析旧数据
+        const userData = JSON.parse(oldUserData);
+        
+        // 如果有角色，将数据应用到所有现有角色
+        if (chatCharacters && chatCharacters.length > 0) {
+            chatCharacters.forEach(char => {
+                saveUserDataForCharacter(char.id, userData);
+            });
+            console.log(`✅ 已将用户数据迁移到 ${chatCharacters.length} 个角色`);
+        }
+        
+        // 删除旧的全局数据
+        localStorage.removeItem('chatUserData');
+        
+        // 标记为已迁移
+        localStorage.setItem('userDataMigrated', 'true');
+        
+        console.log('✅ 用户数据迁移完成');
+    } catch (e) {
+        console.error('❌ 用户数据迁移失败:', e);
+        // 即使失败也标记为已迁移，避免重复尝试
+        localStorage.setItem('userDataMigrated', 'true');
+    }
+}
+
 // 判断用户是否正在查看某个角色的聊天界面
 function isUserInChatDetail(characterId) {
     const page = document.getElementById('chatDetailPage');
@@ -7181,15 +7334,14 @@ async function openChatDetail(characterId) {
         updateBgActivityStatusUI(characterId);
     }
     
-    // 初始化用户头像（从 localStorage 加载）
-    const savedUserData = localStorage.getItem('chatUserData');
-    if (savedUserData) {
+    // 初始化用户头像（按角色加载）
+    const userData = getUserDataForCharacter(characterId);
+    if (userData.avatar) {
         try {
-            const userData = JSON.parse(savedUserData);
             const userAvatarImg = document.getElementById('userAvatarImage');
             const userAvatarPlaceholder = document.getElementById('userAvatarPlaceholder');
             
-            if (userData.avatar && userAvatarImg && userAvatarPlaceholder) {
+            if (userAvatarImg && userAvatarPlaceholder) {
                 userAvatarImg.src = userData.avatar;
                 userAvatarImg.style.display = 'block';
                 userAvatarPlaceholder.style.display = 'none';
@@ -7296,49 +7448,195 @@ function showChatCharacterInfo() {
 function openChatSettings() {
     if (!currentChatCharacter) return;
     
-    // 加载角色信息
-    const charAvatarImg = document.getElementById('charAvatarImage');
-    const charAvatarPlaceholder = document.getElementById('charAvatarPlaceholder');
+    // 检查是否是群聊
+    const isGroup = currentChatCharacter.groupType === 'group';
     
-    if (currentChatCharacter.avatar) {
-        charAvatarImg.src = currentChatCharacter.avatar;
-        charAvatarImg.style.display = 'block';
-        charAvatarPlaceholder.style.display = 'none';
+    const charTab = document.getElementById('charTab');
+    if (!charTab) {
+        console.error('找不到角色标签页');
+        return;
+    }
+    
+    // 查找或创建群聊专属容器
+    let groupContainer = document.getElementById('groupChatContainer');
+    const originalContent = charTab.querySelector('.settings-card');
+    
+    if (isGroup) {
+        // 群聊模式
+        console.log('打开群聊设置，群聊ID:', currentChatCharacter.id);
+        console.log('群聊成员:', currentChatCharacter.members);
+        
+        // 隐藏原始单聊内容
+        if (originalContent) {
+            originalContent.style.display = 'none';
+        }
+        
+        // 如果群聊容器不存在，创建它
+        if (!groupContainer) {
+            groupContainer = document.createElement('div');
+            groupContainer.id = 'groupChatContainer';
+            charTab.appendChild(groupContainer);
+        }
+        
+        // 获取成员列表
+        const memberIds = currentChatCharacter.members || [];
+        const members = memberIds.map(id => {
+            const member = chatCharacters.find(c => c.id === id);
+            if (!member) {
+                console.warn(`找不到成员 ID=${id}`);
+            }
+            return member;
+        }).filter(Boolean);
+        
+        console.log('找到的成员对象:', members);
+        
+        // 创建成员列表HTML
+        let membersHTML = '';
+        if (members.length > 0) {
+            membersHTML = members.map(member => `
+                <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #f8f8f8; border-radius: 12px; margin-bottom: 10px;">
+                    <div style="width: 45px; height: 45px; border-radius: 50%; background: #e0e0e0; overflow: hidden; flex-shrink: 0;">
+                        ${member.avatar ? `<img src="${member.avatar}" style="width: 100%; height: 100%; object-fit: cover;">` : '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #999;">头像</div>'}
+                    </div>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 15px; font-weight: 500; color: #333; margin-bottom: 4px;">${escapeHtml(member.remark || member.name || '未知')}</div>
+                        <div style="font-size: 12px; color: #999;">ID: ${member.id.substring(0, 8)}...</div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            membersHTML = '<div style="text-align: center; color: #999; padding: 20px;">找不到群成员</div>';
+        }
+        
+        // 填充群聊内容
+        groupContainer.innerHTML = `
+            <div class="settings-card">
+                <div class="section-title">
+                    <span class="section-title-text">群聊信息</span>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">群头像</label>
+                    <div style="width: 80px; height: 80px; border-radius: 50%; background: #e0e0e0; overflow: hidden; margin: 0 auto;">
+                        ${currentChatCharacter.avatar ? `<img src="${currentChatCharacter.avatar}" style="width: 100%; height: 100%; object-fit: cover;">` : '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #999;">群头像</div>'}
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">群名称</label>
+                    <div style="padding: 12px; background: #f5f5f5; border-radius: 8px; color: #333; text-align: center;">
+                        ${escapeHtml(currentChatCharacter.groupName || currentChatCharacter.name || '未命名群聊')}
+                    </div>
+                </div>
+                
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="section-title-text">群成员 (${members.length}人)</span>
+                </div>
+                
+                <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                    ${membersHTML}
+                </div>
+                
+                <!-- 成员消息数量设置 -->
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="section-title-text">成员发言设置</span>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">每轮最少消息数</label>
+                    <input type="number" class="form-input" id="groupMinMessages" value="${currentChatCharacter.settings?.minMessagesPerMember || 1}" min="0" onchange="updateGroupMessageRange()">
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        每个成员每轮至少发几条消息
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">每轮最多消息数</label>
+                    <input type="number" class="form-input" id="groupMaxMessages" value="${currentChatCharacter.settings?.maxMessagesPerMember || 5}" min="0" onchange="updateGroupMessageRange()">
+                    <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                        每个成员每轮最多发几条消息
+                    </div>
+                </div>
+                
+                <div class="section-title" style="margin-top: 30px;">
+                    <span class="section-title-text">群聊设置</span>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn-primary" onclick="openGroupMemberManagement()" style="width: 100%;">
+                        成员管理
+                    </button>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn-primary" onclick="openGroupRelationManagement()" style="width: 100%;">
+                        成员关系设置
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        groupContainer.style.display = 'block';
+        
     } else {
-        charAvatarImg.style.display = 'none';
-        charAvatarPlaceholder.style.display = 'block';
+        // 单人聊天模式
+        
+        // 隐藏群聊容器
+        if (groupContainer) {
+            groupContainer.style.display = 'none';
+        }
+        
+        // 显示原始单聊内容
+        if (originalContent) {
+            originalContent.style.display = 'block';
+        }
+        
+        // 加载角色信息
+        const charAvatarImg = document.getElementById('charAvatarImage');
+        const charAvatarPlaceholder = document.getElementById('charAvatarPlaceholder');
+        
+        if (charAvatarImg && charAvatarPlaceholder) {
+            if (currentChatCharacter.avatar) {
+                charAvatarImg.src = currentChatCharacter.avatar;
+                charAvatarImg.style.display = 'block';
+                charAvatarPlaceholder.style.display = 'none';
+            } else {
+                charAvatarImg.style.display = 'none';
+                charAvatarPlaceholder.style.display = 'block';
+            }
+        }
+        
+        const charNameInput = document.getElementById('charNameInput');
+        const charRemarkInput = document.getElementById('charRemarkInput');
+        const charDescInput = document.getElementById('charDescInput');
+        
+        if (charNameInput) charNameInput.value = currentChatCharacter.name || '';
+        if (charRemarkInput) charRemarkInput.value = currentChatCharacter.remark || '';
+        if (charDescInput) charDescInput.value = currentChatCharacter.description || '';
     }
     
-    document.getElementById('charNameInput').value = currentChatCharacter.name || '';
-    document.getElementById('charRemarkInput').value = currentChatCharacter.remark || '';
-    document.getElementById('charDescInput').value = currentChatCharacter.description || '';
-    
-    // 加载用户信息
-    const savedUserData = localStorage.getItem('chatUserData');
-    let userData = {
-        avatar: '',
-        name: '',
-        description: ''
-    };
-    
-    if (savedUserData) {
-        userData = JSON.parse(savedUserData);
-    }
+    // 加载用户信息（按角色分开存储）
+    const userData = getUserDataForCharacter(currentChatCharacter.id);
     
     const userAvatarImg = document.getElementById('userAvatarImage');
     const userAvatarPlaceholder = document.getElementById('userAvatarPlaceholder');
     
-    if (userData.avatar) {
-        userAvatarImg.src = userData.avatar;
-        userAvatarImg.style.display = 'block';
-        userAvatarPlaceholder.style.display = 'none';
-    } else {
-        userAvatarImg.style.display = 'none';
-        userAvatarPlaceholder.style.display = 'block';
+    if (userAvatarImg && userAvatarPlaceholder) {
+        if (userData.avatar) {
+            userAvatarImg.src = userData.avatar;
+            userAvatarImg.style.display = 'block';
+            userAvatarPlaceholder.style.display = 'none';
+        } else {
+            userAvatarImg.style.display = 'none';
+            userAvatarPlaceholder.style.display = 'block';
+        }
     }
     
-    document.getElementById('userNameInput').value = userData.name || '';
-    document.getElementById('userDescInput').value = userData.description || '';
+    const userNameInput = document.getElementById('userNameInput');
+    const userDescInput = document.getElementById('userDescInput');
+    
+    if (userNameInput) userNameInput.value = userData.name || '';
+    if (userDescInput) userDescInput.value = userData.description || '';
     
     // 初始化银行卡转账设置
     if (typeof initBankTransferSettings === 'function') {
@@ -7351,7 +7649,8 @@ function openChatSettings() {
     
     // 加载短期记忆设置
     const shortTermMemory = currentChatCharacter.shortTermMemory || 10; // 默认10条
-    document.getElementById('shortTermMemoryInput').value = shortTermMemory;
+    const shortTermMemoryInput = document.getElementById('shortTermMemoryInput');
+    if (shortTermMemoryInput) shortTermMemoryInput.value = shortTermMemory;
     
     // 加载长期记忆设置
     if (typeof initLongTermMemorySettings === 'function') {
@@ -7365,11 +7664,13 @@ function openChatSettings() {
     
     // 加载时间感知设置（默认开启）
     const timeAwareness = currentChatCharacter.timeAwareness !== undefined ? currentChatCharacter.timeAwareness : true;
-    document.getElementById('timeAwarenessToggle').checked = timeAwareness;
+    const timeAwarenessToggle = document.getElementById('timeAwarenessToggle');
+    if (timeAwarenessToggle) timeAwarenessToggle.checked = timeAwareness;
     
     // 加载角色主动来电设置（默认开启）
     const incomingCallEnabled = currentChatCharacter.incomingCallEnabled !== undefined ? currentChatCharacter.incomingCallEnabled : true;
-    document.getElementById('incomingCallToggle').checked = incomingCallEnabled;
+    const incomingCallToggle = document.getElementById('incomingCallToggle');
+    if (incomingCallToggle) incomingCallToggle.checked = incomingCallEnabled;
     
     // 加载自定义时间设置
     if (typeof loadCustomTimeSettings === 'function') {
@@ -7378,12 +7679,14 @@ function openChatSettings() {
     
     // 加载系统卡片显示设置（默认开启）
     const showSystemCardBubbles = localStorage.getItem('showSystemCardBubbles') !== 'false';
-    document.getElementById('showSystemCardBubblesToggle').checked = showSystemCardBubbles;
+    const showSystemCardBubblesToggle = document.getElementById('showSystemCardBubblesToggle');
+    if (showSystemCardBubblesToggle) showSystemCardBubblesToggle.checked = showSystemCardBubbles;
     
     // 加载情头模式设置（默认关闭）
     if (typeof getCoupleMode === 'function') {
         const coupleModeEnabled = getCoupleMode();
-        document.getElementById('coupleModeToggle').checked = coupleModeEnabled;
+        const coupleModeToggle = document.getElementById('coupleModeToggle');
+        if (coupleModeToggle) coupleModeToggle.checked = coupleModeEnabled;
     }
     
     // 加载记忆库存档列表
@@ -7425,11 +7728,6 @@ function openChatSettings() {
     // 更新拉黑按钮状态
     if (typeof updateBlockButtonInSettings === 'function') {
         updateBlockButtonInSettings();
-    }
-    
-    // 如果是群聊，添加群聊专属设置
-    if (typeof addGroupChatSettingsUI === 'function') {
-        addGroupChatSettingsUI();
     }
 }
 
@@ -7711,8 +8009,8 @@ async function openManualSummaryModal() {
     const charName = currentChatCharacter.name || '角色';
     let userName = '用户';
     try {
-        const uds = localStorage.getItem('chatUserData');
-        if (uds) { const ud = JSON.parse(uds); if (ud.name) userName = ud.name; }
+        const ud = getUserDataForCharacter(currentChatCharacter.id);
+        if (ud.name) userName = ud.name;
     } catch (e) {}
 
     // 构建弹窗
@@ -8532,6 +8830,16 @@ async function saveChatSettings() {
         if (bgActivityInterval) {
             currentChatCharacter.settings.bgActivityInterval = parseInt(bgActivityInterval.value) || 60;
         }
+        
+        // 保存消息数量范围设置
+        const minMessages = document.getElementById('groupMinMessages');
+        const maxMessages = document.getElementById('groupMaxMessages');
+        if (minMessages) {
+            currentChatCharacter.settings.minMessagesPerMember = parseInt(minMessages.value) || 1;
+        }
+        if (maxMessages) {
+            currentChatCharacter.settings.maxMessagesPerMember = parseInt(maxMessages.value) || 5;
+        }
     }
     
     // 保存到chatCharacters数组
@@ -8545,13 +8853,13 @@ async function saveChatSettings() {
     // 更新聊天详情界面显示
     document.getElementById('chatDetailName').textContent = currentChatCharacter.remark;
     
-    // 保存用户信息到localStorage
+    // 保存用户信息到localStorage（按角色分开存储）
     const userData = {
         avatar: userAvatar,
         name: userName,
         description: userDesc
     };
-    localStorage.setItem('chatUserData', JSON.stringify(userData));
+    saveUserDataForCharacter(currentChatCharacter.id, userData);
     
     // 实时更新聊天界面的用户头像
     if (userAvatar) {
@@ -8581,6 +8889,43 @@ async function saveChatSettings() {
     showIosAlert('成功', '设置已保存');
 }
 
+/**
+ * 更新群聊消息数量范围设置
+ */
+function updateGroupMessageRange() {
+    if (!currentChatCharacter || currentChatCharacter.groupType !== 'group') return;
+    
+    const minInput = document.getElementById('groupMinMessages');
+    const maxInput = document.getElementById('groupMaxMessages');
+    
+    if (!minInput || !maxInput) return;
+    
+    let minMessages = parseInt(minInput.value) || 1;
+    let maxMessages = parseInt(maxInput.value) || 5;
+    
+    // 确保最小值不超过最大值
+    if (minMessages > maxMessages) {
+        minMessages = maxMessages;
+        minInput.value = minMessages;
+    }
+    
+    // 确保范围合理
+    minMessages = Math.max(1, Math.min(10, minMessages));
+    maxMessages = Math.max(1, Math.min(20, maxMessages));
+    
+    minInput.value = minMessages;
+    maxInput.value = maxMessages;
+    
+    // 保存设置
+    if (!currentChatCharacter.settings) {
+        currentChatCharacter.settings = {};
+    }
+    currentChatCharacter.settings.minMessagesPerMember = minMessages;
+    currentChatCharacter.settings.maxMessagesPerMember = maxMessages;
+    
+    console.log('群聊消息数量范围已更新:', minMessages, '-', maxMessages);
+}
+
 // CHAR头像库（已废弃，使用角色专属头像库管理）
 function showCharAvatarLibrary() {
     // 直接跳转到角色专属头像库管理
@@ -8608,6 +8953,26 @@ async function showEmojiPicker() {
         return;
     }
     
+    // 如果是群聊，调用群聊处理函数
+    if (currentChatCharacter.groupType === 'group' && typeof handleGroupChatMessage === 'function') {
+        console.log('检测到群聊，调用群聊处理函数');
+        // 获取最后一条用户消息
+        const allChats = await getAllChatsFromDB();
+        const characterMessages = allChats
+            .filter(chat => chat.characterId === currentChatCharacter.id && chat.type === 'user')
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
+        if (characterMessages.length === 0) {
+            showToast('没有找到用户消息');
+            return;
+        }
+        
+        const lastUserMessage = characterMessages[characterMessages.length - 1];
+        await handleGroupChatMessage(lastUserMessage.content);
+        return;
+    }
+    
+    // 单聊逻辑
     // 检查角色后台活动状态 - 如果角色不在线则拦截AI回复
     if (typeof shouldBlockAIReply === 'function' && shouldBlockAIReply(currentChatCharacter.id)) {
         const statusText = typeof getCharacterStatusText === 'function' ? getCharacterStatusText(currentChatCharacter.id) : '不在线';
@@ -8716,6 +9081,23 @@ async function showEmojiPicker() {
                 const quoteMatch = msg.match(/^\[quote:([^\]]+)\]$/);
                 // 检查是否是角色主动来电指令 [video-call:原因]
                 const videoCallMatch = msg.match(/^\[video-call:(.+)\]$/);
+                
+                // ========== 群聊权限指令匹配 ==========
+                // 检查是否是设置管理员指令 [admin:成员ID]
+                const adminMatch = msg.match(/^\[admin:([^\]]+)\]$/);
+                // 检查是否是取消管理员指令 [unadmin:成员ID]
+                const unadminMatch = msg.match(/^\[unadmin:([^\]]+)\]$/);
+                // 检查是否是禁言指令 [mute:成员ID:时长]
+                const muteMatch = msg.match(/^\[mute:([^:]+):([^\]]+)\]$/);
+                // 检查是否是解除禁言指令 [unmute:成员ID]
+                const unmuteMatch = msg.match(/^\[unmute:([^\]]+)\]$/);
+                // 检查是否是设置头衔指令 [title:成员ID:头衔]
+                const titleMatch = msg.match(/^\[title:([^:]+):([^\]]+)\]$/);
+                // 检查是否是踢出群聊指令 [kick:成员ID]
+                const kickMatch = msg.match(/^\[kick:([^\]]+)\]$/);
+                // 检查是否是转让群主指令 [transfer:成员ID]（注意：这个要放在转账匹配之后检查）
+                const transferOwnerMatch = !transferSendMatch && msg.match(/^\[transfer:([^\]]+)\]$/);
+                
                 let messageObj;
                 
                 if (stickerMatch && stickerMap[stickerMatch[1]]) {
@@ -8912,15 +9294,10 @@ async function showEmojiPicker() {
                         // 获取被引用消息的发送者名称
                         let quotedSender = '';
                         if (quotedMsg.type === 'user') {
-                            // 从 localStorage 读取用户真名
+                            // 读取该角色的用户真名
                             try {
-                                const userDataStr = localStorage.getItem('chatUserData');
-                                if (userDataStr) {
-                                    const userData = JSON.parse(userDataStr);
-                                    quotedSender = userData.name || 'User';
-                                } else {
-                                    quotedSender = 'User';
-                                }
+                                const userData = getUserDataForCharacter(targetCharacterId);
+                                quotedSender = userData.name || 'User';
                             } catch (e) {
                                 quotedSender = 'User';
                             }
@@ -8991,12 +9368,85 @@ async function showEmojiPicker() {
                     }
                     // 跳过这条指令，不显示为普通消息
                     continue;
+                } else if (targetCharacter.groupType === 'group' && adminMatch) {
+                    // ========== 群聊权限指令：设置管理员 ==========
+                    const targetId = adminMatch[1].trim();
+                    console.log('🔧 执行设置管理员指令:', targetId);
+                    
+                    if (typeof executeGroupAdminCommand === 'function') {
+                        await executeGroupAdminCommand(targetCharacterId, targetId, targetCharacter, true);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
+                } else if (targetCharacter.groupType === 'group' && unadminMatch) {
+                    // ========== 群聊权限指令：取消管理员 ==========
+                    const targetId = unadminMatch[1].trim();
+                    console.log('🔧 执行取消管理员指令:', targetId);
+                    
+                    if (typeof executeGroupAdminCommand === 'function') {
+                        await executeGroupAdminCommand(targetCharacterId, targetId, targetCharacter, false);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
+                } else if (targetCharacter.groupType === 'group' && muteMatch) {
+                    // ========== 群聊权限指令：禁言 ==========
+                    const targetId = muteMatch[1].trim();
+                    const duration = muteMatch[2].trim();
+                    console.log('🔇 执行禁言指令:', targetId, duration);
+                    
+                    if (typeof executeGroupMuteCommand === 'function') {
+                        await executeGroupMuteCommand(targetCharacterId, targetId, duration, targetCharacter);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
+                } else if (targetCharacter.groupType === 'group' && unmuteMatch) {
+                    // ========== 群聊权限指令：解除禁言 ==========
+                    const targetId = unmuteMatch[1].trim();
+                    console.log('🔊 执行解除禁言指令:', targetId);
+                    
+                    if (typeof executeGroupUnmuteCommand === 'function') {
+                        await executeGroupUnmuteCommand(targetCharacterId, targetId, targetCharacter);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
+                } else if (targetCharacter.groupType === 'group' && titleMatch) {
+                    // ========== 群聊权限指令：设置头衔 ==========
+                    const targetId = titleMatch[1].trim();
+                    const title = titleMatch[2].trim();
+                    console.log('👑 执行设置头衔指令:', targetId, title);
+                    
+                    if (typeof executeGroupTitleCommand === 'function') {
+                        await executeGroupTitleCommand(targetCharacterId, targetId, title, targetCharacter);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
+                } else if (targetCharacter.groupType === 'group' && kickMatch) {
+                    // ========== 群聊权限指令：踢出群聊 ==========
+                    const targetId = kickMatch[1].trim();
+                    console.log('👢 执行踢出群聊指令:', targetId);
+                    
+                    if (typeof executeGroupKickCommand === 'function') {
+                        await executeGroupKickCommand(targetCharacterId, targetId, targetCharacter);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
+                } else if (targetCharacter.groupType === 'group' && transferOwnerMatch) {
+                    // ========== 群聊权限指令：转让群主 ==========
+                    const targetId = transferOwnerMatch[1].trim();
+                    console.log('👑 执行转让群主指令:', targetId);
+                    
+                    if (typeof executeGroupTransferOwnerCommand === 'function') {
+                        await executeGroupTransferOwnerCommand(targetCharacterId, targetId, targetCharacter);
+                    }
+                    // 跳过这条指令，不显示为普通消息
+                    continue;
                 } else {
-                    // 普通文本消息 - 清洗未被处理的指令标记
+                    // 普通文本消息
                     let cleanMsg = msg
                         .replace(/\[sticker:[^\]]*\]/g, '')
                         .replace(/\[voice:[^\]]*\]/g, '')
-                        .replace(/\[transfer[^\]]*\]/g, '')
+                        .replace(/\[transfer-(?:accept|reject)\]/g, '')
+                        .replace(/\[transfer:[\d.]+(?::[^\]]+)?\]/g, '')
                         .replace(/\[银行转账:[^\]]*\]/g, '')
                         .replace(/\[image:[^\]]*\]/g, '')
                         .replace(/\[location:[^\]]*\]/g, '')
@@ -9018,10 +9468,12 @@ async function showEmojiPicker() {
                 }
                 
                 // 只有当用户仍在查看目标角色的聊天界面时才渲染消息到界面
-                if (currentChatCharacter && currentChatCharacter.id === targetCharacterId) {
-                    appendMessageToChat(messageObj);
+                if (messageObj) {
+                    if (currentChatCharacter && currentChatCharacter.id === targetCharacterId) {
+                        appendMessageToChat(messageObj);
+                    }
+                    await saveMessageToDB(messageObj);
                 }
-                await saveMessageToDB(messageObj);
                 
                 // 更新角色最后消息时间
                 targetCharacter.lastMessageTime = new Date().toISOString();
@@ -9161,14 +9613,11 @@ ${character.description ? `\n${character.description}` : ''}
 这些就是你，不需要刻意表演，因为你本来就是这样的人。`);
     }
     
-    // 3. 用户人设
+    // 3. 用户人设（按角色获取）
     try {
-        const userDataStr = localStorage.getItem('chatUserData');
-        if (userDataStr) {
-            const userData = JSON.parse(userDataStr);
-            if (userData.name || userData.description) {
-                parts.push(`\n你正在跟${userData.name || '对方'}聊天。${userData.description ? `关于对方：${userData.description}` : ''}`);
-            }
+        const userData = getUserDataForCharacter(character.id);
+        if (userData.name || userData.description) {
+            parts.push(`\n你正在跟${userData.name || '对方'}聊天。${userData.description ? `关于对方：${userData.description}` : ''}`);
         }
     } catch (e) {
         console.error('读取用户数据失败:', e);
@@ -10869,25 +11318,44 @@ function confirmStickerNaming() {
 // 全部命名完毕，批量保存 - 见下方增强版
 // (旧版已移至角色分类功能区域)
 
-// 加载URL图片为DataURL
+// 加载URL图片为DataURL（保留GIF动画）
 function loadImageUrlAsDataURL(url) {
     return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            try {
-                resolve(canvas.toDataURL('image/png'));
-            } catch (e) {
-                reject(e);
-            }
-        };
-        img.onerror = () => reject(new Error('图片加载失败'));
-        img.src = url;
+        // 使用fetch获取图片，保留原始格式
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error('图片加载失败');
+                return response.blob();
+            })
+            .then(blob => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    console.log('🌐 URL图片已加载，保留原始格式');
+                    resolve(e.target.result);
+                };
+                reader.onerror = () => reject(new Error('文件读取失败'));
+                reader.readAsDataURL(blob);
+            })
+            .catch(err => {
+                // 如果fetch失败（可能是CORS问题），回退到Canvas方法
+                console.warn('Fetch失败，尝试Canvas方法:', err);
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    try {
+                        resolve(canvas.toDataURL('image/png'));
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                img.onerror = () => reject(new Error('图片加载失败'));
+                img.src = url;
+            });
     });
 }
 
@@ -12558,10 +13026,11 @@ async function sendMessage() {
     // 滚动到底部
     scrollChatToBottom();
     
+    // 群聊不自动调用API，需要手动点击"调用API"按钮
     // 如果是群聊，触发群成员回复
-    if (currentChatCharacter.groupType === 'group' && typeof handleGroupChatMessage === 'function') {
-        await handleGroupChatMessage(message);
-    }
+    // if (currentChatCharacter.groupType === 'group' && typeof handleGroupChatMessage === 'function') {
+    //     await handleGroupChatMessage(message);
+    // }
 }
 
 // 保存消息到数据库
@@ -13369,6 +13838,17 @@ function cleanMessageContent(content) {
         } catch (e) { /* 不是合法JSON，保留原样 */ }
     }
     
+    // 清理权限指令标记（这些是给AI用的，用户消息中不应该显示）
+    text = text
+        .replace(/\[admin:[^\]]+\]/g, '')
+        .replace(/\[unadmin:[^\]]+\]/g, '')
+        .replace(/\[mute:[^\]]+\]/g, '')
+        .replace(/\[unmute:[^\]]+\]/g, '')
+        .replace(/\[title:[^\]]+\]/g, '')
+        .replace(/\[kick:[^\]]+\]/g, '')
+        .replace(/\[transfer:[^\]]+\]/g, '')
+        .trim();
+    
     return text;
 }
 
@@ -13444,6 +13924,16 @@ function appendMessageToChat(messageObj) {
     // 如果是视频通话消息，用专门的渲染函数
     if (messageObj.messageType === 'video-call') {
         appendVideoCallMessageToChat(messageObj);
+        return;
+    }
+    
+    // 如果是来电消息，用专门的渲染函数
+    if (messageObj.messageType === 'incoming-video-call') {
+        if (typeof appendIncomingCallMessageToChat === 'function') {
+            appendIncomingCallMessageToChat(messageObj);
+        } else {
+            console.warn('appendIncomingCallMessageToChat 函数未定义');
+        }
         return;
     }
     
@@ -13526,7 +14016,7 @@ function appendMessageToChat(messageObj) {
         <div class="chat-message-content">
             ${isGroupMessage && messageObj.type === 'char' ? `<div class="chat-message-name" style="font-size: 12px; color: #999; margin-bottom: 4px;">${escapeHtml(senderName)}</div>` : ''}
             <div class="chat-message-bubble">
-                ${escapeHtml(cleanMessageContent(messageObj.content))}
+                ${escapeHtml(replaceAtUserWithRealName(cleanMessageContent(messageObj.content)))}
             </div>
             ${quoteHtml}
             <div class="chat-message-time">${time}${blockIndicator}</div>
@@ -13580,6 +14070,60 @@ function scrollChatToBottom() {
     }
 }
 
+/**
+ * 替换消息中的@用户为真实用户名，并处理群聊中的@成员
+ * @param {string} content - 消息内容
+ * @returns {string} - 替换后的内容
+ */
+function replaceAtUserWithRealName(content) {
+    if (!content || !currentChatCharacter) return content;
+    
+    // 获取当前角色的用户数据
+    const userData = getUserDataForCharacter(currentChatCharacter.id);
+    const realUserName = userData.name || '用户';
+    
+    // 替换所有的 @用户 为真实用户名
+    // 使用正则表达式匹配 @用户，但要确保后面是空格、标点或结尾
+    let result = content.replace(/@用户(?=\s|$|[，。！？、：；""''（）《》【】])/g, '@' + realUserName);
+    
+    // 如果是群聊，处理 @数字 和 @成员名
+    if (currentChatCharacter.groupType === 'group') {
+        // 处理 @数字 格式（如 @2, @3）
+        result = result.replace(/@(\d+)/g, (match, memberId) => {
+            // 查找对应的成员
+            const member = chatCharacters.find(c => c.id === memberId || c.id === `char_${memberId}`);
+            if (member) {
+                return '@' + (member.remark || member.name);
+            }
+            // 如果找不到，保持原样
+            return match;
+        });
+        
+        // 处理 @成员名 格式（已经是名字的情况，保持原样即可）
+        // 不需要额外处理，因为已经是可读的名字了
+    }
+    
+    return result;
+}
+
+/**
+ * 替换聊天列表预览中的@用户为真实用户名
+ * @param {string} content - 消息内容
+ * @param {string} characterId - 角色ID
+ * @returns {string} - 替换后的内容
+ */
+function replaceAtUserInPreview(content, characterId) {
+    if (!content || !characterId) return content;
+    
+    // 获取指定角色的用户数据
+    const userData = getUserDataForCharacter(characterId);
+    const realUserName = userData.name || '用户';
+    
+    // 替换所有的 @用户 为真实用户名
+    // 使用正则表达式匹配 @用户，但要确保后面是空格、标点或结尾
+    return content.replace(/@用户(?=\s|$|[，。！？、：；""''（）《》【】])/g, '@' + realUserName);
+}
+
 // 监听输入框回车事件
 document.addEventListener('DOMContentLoaded', function() {
     const chatInput = document.getElementById('chatInputField');
@@ -13619,3 +14163,404 @@ function openChatProfileSettings() {
     alert('个人资料设置功能待开发');
 }
 
+
+
+// ========== 群聊权限指令执行函数 ==========
+
+/**
+ * 执行设置/取消管理员指令
+ */
+async function executeGroupAdminCommand(operatorId, targetId, groupData, setAdmin) {
+    console.log('🔧 executeGroupAdminCommand 被调用', { operatorId, targetId, setAdmin });
+    
+    // 权限检查
+    if (groupData.owner !== operatorId) {
+        console.warn(`❌ 角色 ${operatorId} 不是群主，无法设置管理员`);
+        return;
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`❌ 找不到成员: ${targetId}`);
+        return;
+    }
+    
+    // 不能对群主操作
+    if (targetId === groupData.owner) {
+        console.warn(`❌ 不能对群主操作`);
+        return;
+    }
+    
+    // 检查是否已经是管理员
+    if (!groupData.admins) groupData.admins = [];
+    const isAdmin = groupData.admins.includes(targetId);
+    
+    if (setAdmin && isAdmin) {
+        console.warn(`⚠️ ${targetId} 已经是管理员`);
+        return;
+    }
+    
+    if (!setAdmin && !isAdmin) {
+        console.warn(`⚠️ ${targetId} 不是管理员`);
+        return;
+    }
+    
+    // 执行操作
+    if (setAdmin) {
+        groupData.admins.push(targetId);
+    } else {
+        groupData.admins = groupData.admins.filter(id => id !== targetId);
+    }
+    
+    await saveChatCharacters();
+    await saveChatCharacterToDB(groupData);
+    
+    console.log('✅ 管理员状态已更新');
+    
+    // 生成系统消息
+    const operatorName = groupData.remark || groupData.name;
+    const targetName = targetMember.remark || targetMember.name;
+    const systemContent = setAdmin
+        ? `群主"${operatorName}"设置"${targetName}"为管理员`
+        : `群主"${operatorName}"取消了"${targetName}"的管理员`;
+    
+    await addGroupSystemMessageDirect(systemContent, groupData.id);
+}
+
+/**
+ * 执行禁言指令
+ */
+async function executeGroupMuteCommand(operatorId, targetId, duration, groupData) {
+    console.log('🔇 executeGroupMuteCommand 被调用', { operatorId, targetId, duration });
+    
+    // 权限检查：群主和管理员可以禁言
+    const isOwner = groupData.owner === operatorId;
+    const isAdmin = groupData.admins && groupData.admins.includes(operatorId);
+    
+    if (!isOwner && !isAdmin) {
+        console.warn(`❌ 角色 ${operatorId} 没有禁言权限`);
+        return;
+    }
+    
+    // 不能禁言群主
+    if (targetId === groupData.owner) {
+        console.warn(`❌ 不能禁言群主`);
+        return;
+    }
+    
+    // 管理员不能禁言其他管理员
+    if (isAdmin && !isOwner && groupData.admins && groupData.admins.includes(targetId)) {
+        console.warn(`❌ 管理员不能禁言其他管理员`);
+        return;
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`❌ 找不到成员: ${targetId}`);
+        return;
+    }
+    
+    // 初始化成员状态
+    if (!groupData.memberStatus) groupData.memberStatus = {};
+    if (!groupData.memberStatus[targetId]) {
+        groupData.memberStatus[targetId] = {
+            isMuted: false,
+            muteUntil: null,
+            joinTime: new Date().toISOString(),
+            title: '',
+            level: 1,
+            messageCount: 0,
+            lastActiveTime: null
+        };
+    }
+    
+    const status = groupData.memberStatus[targetId];
+    
+    // 解析禁言时长
+    let minutes = 0;
+    let durationText = '';
+    
+    if (duration === '永久' || duration === 'permanent' || duration === '0') {
+        minutes = 0;
+        durationText = '永久';
+    } else {
+        minutes = parseInt(duration);
+        if (isNaN(minutes) || minutes < 0) {
+            console.warn(`❌ 无效的禁言时长: ${duration}`);
+            return;
+        }
+        durationText = `${minutes}分钟`;
+    }
+    
+    // 执行禁言
+    status.isMuted = true;
+    if (minutes > 0) {
+        status.muteUntil = new Date(Date.now() + minutes * 60000).toISOString();
+    } else {
+        status.muteUntil = null;
+    }
+    
+    await saveChatCharacters();
+    await saveChatCharacterToDB(groupData);
+    
+    console.log('✅ 禁言状态已更新:', status);
+    
+    // 生成系统消息
+    const operatorName = groupData.remark || groupData.name;
+    const operatorRole = isOwner ? '群主' : '管理员';
+    const targetName = targetMember.remark || targetMember.name;
+    const systemContent = `${operatorRole}"${operatorName}"将成员"${targetName}"禁言 ${durationText}`;
+    
+    await addGroupSystemMessageDirect(systemContent, groupData.id);
+}
+
+/**
+ * 执行解除禁言指令
+ */
+async function executeGroupUnmuteCommand(operatorId, targetId, groupData) {
+    console.log('🔊 executeGroupUnmuteCommand 被调用', { operatorId, targetId });
+    
+    // 权限检查
+    const isOwner = groupData.owner === operatorId;
+    const isAdmin = groupData.admins && groupData.admins.includes(operatorId);
+    
+    if (!isOwner && !isAdmin) {
+        console.warn(`❌ 角色 ${operatorId} 没有解除禁言权限`);
+        return;
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`❌ 找不到成员: ${targetId}`);
+        return;
+    }
+    
+    // 检查是否被禁言
+    if (!groupData.memberStatus?.[targetId]?.isMuted) {
+        console.warn(`⚠️ 该成员未被禁言`);
+        return;
+    }
+    
+    const status = groupData.memberStatus[targetId];
+    status.isMuted = false;
+    status.muteUntil = null;
+    
+    await saveChatCharacters();
+    await saveChatCharacterToDB(groupData);
+    
+    console.log('✅ 已解除禁言');
+    
+    // 生成系统消息
+    const operatorName = groupData.remark || groupData.name;
+    const operatorRole = isOwner ? '群主' : '管理员';
+    const targetName = targetMember.remark || targetMember.name;
+    const systemContent = `${operatorRole}"${operatorName}"解除了成员"${targetName}"的禁言`;
+    
+    await addGroupSystemMessageDirect(systemContent, groupData.id);
+}
+
+/**
+ * 执行设置头衔指令
+ */
+async function executeGroupTitleCommand(operatorId, targetId, title, groupData) {
+    console.log('👑 executeGroupTitleCommand 被调用', { operatorId, targetId, title });
+    
+    // 权限检查：只有群主可以设置头衔
+    if (groupData.owner !== operatorId) {
+        console.warn(`❌ 角色 ${operatorId} 不是群主，无法设置头衔`);
+        return;
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`❌ 找不到成员: ${targetId}`);
+        return;
+    }
+    
+    // 初始化成员状态
+    if (!groupData.memberStatus) groupData.memberStatus = {};
+    if (!groupData.memberStatus[targetId]) {
+        groupData.memberStatus[targetId] = {
+            isMuted: false,
+            muteUntil: null,
+            joinTime: new Date().toISOString(),
+            title: '',
+            level: 1,
+            messageCount: 0,
+            lastActiveTime: null
+        };
+    }
+    
+    // 设置头衔
+    groupData.memberStatus[targetId].title = title;
+    
+    await saveChatCharacters();
+    await saveChatCharacterToDB(groupData);
+    
+    console.log('✅ 头衔已设置');
+    
+    // 生成系统消息
+    const operatorName = groupData.remark || groupData.name;
+    const targetName = targetMember.remark || targetMember.name;
+    const systemContent = title
+        ? `群主"${operatorName}"将"${targetName}"的头衔设置为"${title}"`
+        : `群主"${operatorName}"清除了"${targetName}"的头衔`;
+    
+    await addGroupSystemMessageDirect(systemContent, groupData.id);
+}
+
+/**
+ * 执行踢出群聊指令
+ */
+async function executeGroupKickCommand(operatorId, targetId, groupData) {
+    console.log('👢 executeGroupKickCommand 被调用', { operatorId, targetId });
+    
+    // 权限检查
+    const isOwner = groupData.owner === operatorId;
+    const isAdmin = groupData.admins && groupData.admins.includes(operatorId);
+    
+    if (!isOwner && !isAdmin) {
+        console.warn(`❌ 角色 ${operatorId} 没有踢人权限`);
+        return;
+    }
+    
+    // 不能踢群主
+    if (targetId === groupData.owner) {
+        console.warn(`❌ 不能踢出群主`);
+        return;
+    }
+    
+    // 管理员不能踢其他管理员
+    if (isAdmin && !isOwner && groupData.admins && groupData.admins.includes(targetId)) {
+        console.warn(`❌ 管理员不能踢出其他管理员`);
+        return;
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`❌ 找不到成员: ${targetId}`);
+        return;
+    }
+    
+    const targetName = targetMember.remark || targetMember.name;
+    
+    // 执行踢出
+    groupData.members = groupData.members.filter(id => id !== targetId);
+    
+    if (groupData.membersWhoKnowUser) {
+        groupData.membersWhoKnowUser = groupData.membersWhoKnowUser.filter(id => id !== targetId);
+    }
+    
+    if (groupData.memberStatus?.[targetId]) {
+        delete groupData.memberStatus[targetId];
+    }
+    
+    if (groupData.settings?.memberActivity?.[targetId]) {
+        delete groupData.settings.memberActivity[targetId];
+    }
+    
+    await saveChatCharacters();
+    await saveChatCharacterToDB(groupData);
+    
+    console.log('✅ 成员已被踢出');
+    
+    // 生成系统消息
+    const operatorName = groupData.remark || groupData.name;
+    const operatorRole = isOwner ? '群主' : '管理员';
+    const systemContent = `${operatorRole}"${operatorName}"将成员"${targetName}"移出了群聊`;
+    
+    await addGroupSystemMessageDirect(systemContent, groupData.id);
+}
+
+/**
+ * 执行转让群主指令
+ */
+async function executeGroupTransferOwnerCommand(operatorId, targetId, groupData) {
+    console.log('👑 executeGroupTransferOwnerCommand 被调用', { operatorId, targetId });
+    
+    // 权限检查：只有群主可以转让
+    if (groupData.owner !== operatorId) {
+        console.warn(`❌ 角色 ${operatorId} 不是群主，无法转让群主`);
+        return;
+    }
+    
+    // 查找目标成员
+    const targetMember = chatCharacters.find(c => c.id === targetId);
+    if (!targetMember) {
+        console.warn(`❌ 找不到成员: ${targetId}`);
+        return;
+    }
+    
+    // 不能转让给自己
+    if (targetId === operatorId) {
+        console.warn(`❌ 不能转让给自己`);
+        return;
+    }
+    
+    const operatorName = groupData.remark || groupData.name;
+    const targetName = targetMember.remark || targetMember.name;
+    
+    // 执行转让
+    const oldOwnerId = groupData.owner;
+    groupData.owner = targetId;
+    
+    // 将旧群主设为管理员
+    if (!groupData.admins) groupData.admins = [];
+    if (!groupData.admins.includes(oldOwnerId)) {
+        groupData.admins.push(oldOwnerId);
+    }
+    
+    // 移除新群主的管理员身份（如果有）
+    groupData.admins = groupData.admins.filter(id => id !== targetId);
+    
+    await saveChatCharacters();
+    await saveChatCharacterToDB(groupData);
+    
+    console.log('✅ 群主已转让');
+    
+    // 生成系统消息
+    const systemContent = `"${operatorName}"将群主转让给"${targetName}"`;
+    
+    await addGroupSystemMessageDirect(systemContent, groupData.id);
+}
+
+/**
+ * 直接添加群聊系统消息（不依赖script3.js）
+ */
+async function addGroupSystemMessageDirect(content, characterId) {
+    console.log('📢 addGroupSystemMessageDirect 被调用:', content);
+    
+    const systemMessageObj = {
+        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
+        type: 'system',
+        messageType: 'systemNotice',
+        content: content,
+        timestamp: new Date().toISOString(),
+        characterId: characterId,
+        sender: 'system'
+    };
+    
+    // 渲染到聊天界面
+    if (currentChatCharacter && currentChatCharacter.id === characterId) {
+        if (typeof appendSystemMessageToChat === 'function') {
+            appendSystemMessageToChat(systemMessageObj);
+            console.log('✅ 系统消息已渲染到界面');
+        } else {
+            console.error('❌ appendSystemMessageToChat 函数不存在');
+        }
+    }
+    
+    // 保存到数据库
+    await saveMessageToDB(systemMessageObj);
+    console.log('💾 系统消息已保存到数据库');
+    
+    // 滚动到底部
+    if (typeof scrollChatToBottom === 'function') {
+        scrollChatToBottom();
+    }
+}
