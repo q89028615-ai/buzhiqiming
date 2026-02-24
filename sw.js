@@ -1,7 +1,8 @@
 // Service Worker - 网络优先策略 + 自动更新检测
 // 确保仓库更新时始终获取最新版本
 
-const CACHE_NAME = 'phone-ui-v' + Date.now(); // 使用时间戳作为缓存版本
+const VERSION = '1.0.0'; // 手动版本号，每次更新时修改
+const CACHE_NAME = 'phone-ui-v' + VERSION;
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -52,10 +53,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
-  // 添加时间戳参数，强制绕过浏览器缓存
-  const shouldBypassCache = url.pathname.endsWith('.html') || 
-                           url.pathname.endsWith('.css') || 
-                           url.pathname.endsWith('.js');
+  // 只对本地文件添加时间戳，不要对外部 CDN 文件加时间戳
+  const isLocalFile = url.hostname === self.location.hostname;
+  const shouldBypassCache = isLocalFile && (
+    url.pathname.endsWith('.html') || 
+    url.pathname.endsWith('.css') || 
+    url.pathname.endsWith('.js')
+  );
   
   if (shouldBypassCache) {
     // 为关键资源添加时间戳，确保获取最新版本

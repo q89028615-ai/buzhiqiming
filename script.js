@@ -1491,43 +1491,12 @@ function applyFontSettings(fontFamily, fontSize) {
         document.head.appendChild(styleEl);
     }
     
-    // 增强的CSS规则，确保在移动端也能正确应用
     styleEl.textContent = `
-        /* 全局字体设置 - 高优先级 */
-        html, body, 
-        body *, 
-        input, textarea, select, button,
-        .chat-message, .message-text,
-        .settings-card, .form-input,
-        .app-name, .widget-text,
-        div, span, p, a, label {
-            font-family: ${fontFamily} !important;
-            font-size: ${fontSize}px !important;
-        }
-        
-        /* 移动端特殊处理 */
-        @media (max-width: 768px) {
-            html, body, body * {
-                font-family: ${fontFamily} !important;
-                font-size: ${fontSize}px !important;
-                -webkit-text-size-adjust: 100% !important;
-                text-size-adjust: 100% !important;
-            }
-        }
-        
-        /* 确保输入框也应用字体 */
-        input[type="text"],
-        input[type="password"],
-        input[type="email"],
-        textarea {
+        body, input, textarea, select, button {
             font-family: ${fontFamily} !important;
             font-size: ${fontSize}px !important;
         }
     `;
-    
-    // 额外保险：直接设置body样式
-    document.body.style.fontFamily = fontFamily;
-    document.body.style.fontSize = fontSize + 'px';
 }
 
 // 切换顶栏显示
