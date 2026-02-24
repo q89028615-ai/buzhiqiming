@@ -196,6 +196,93 @@ function showIosAlert(title, message) {
     return iosAlert(message, title);
 }
 
+// API 错误弹窗（显示友好提示 + 原始错误信息）
+function showApiErrorAlert(title, friendlyMessage, error) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'ios-dialog-overlay';
+        
+        const dialog = document.createElement('div');
+        dialog.className = 'ios-dialog';
+        dialog.style.width = '320px';
+        dialog.style.maxWidth = '90%';
+        
+        const titleEl = document.createElement('div');
+        titleEl.className = 'ios-dialog-title';
+        titleEl.textContent = title;
+        
+        const messageEl = document.createElement('div');
+        messageEl.className = 'ios-dialog-message';
+        messageEl.textContent = friendlyMessage;
+        messageEl.style.marginBottom = '12px';
+        
+        // 原始错误信息（可折叠显示）
+        const errorDetailEl = document.createElement('div');
+        errorDetailEl.style.cssText = `
+            font-size: 11px;
+            color: #666;
+            background: rgba(0,0,0,0.05);
+            padding: 8px;
+            border-radius: 6px;
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+        `;
+        
+        // 提取错误信息
+        let errorText = '';
+        if (error) {
+            if (typeof error === 'string') {
+                errorText = error;
+            } else if (error.message) {
+                errorText = error.message;
+                if (error.stack) {
+                    errorText += '\n\n' + error.stack;
+                }
+            } else {
+                errorText = JSON.stringify(error, null, 2);
+            }
+        }
+        
+        errorDetailEl.textContent = '原始错误信息：\n' + (errorText || '未知错误');
+        
+        const buttonsEl = document.createElement('div');
+        buttonsEl.className = 'ios-dialog-buttons';
+        
+        const okBtn = document.createElement('button');
+        okBtn.className = 'ios-dialog-button primary';
+        okBtn.textContent = '好';
+        okBtn.onclick = () => {
+            if (typeof triggerHapticFeedback === 'function') {
+                triggerHapticFeedback();
+            }
+            closeDialog();
+        };
+        
+        buttonsEl.appendChild(okBtn);
+        dialog.appendChild(titleEl);
+        dialog.appendChild(messageEl);
+        dialog.appendChild(errorDetailEl);
+        dialog.appendChild(buttonsEl);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        
+        setTimeout(() => {
+            overlay.classList.add('show');
+        }, 10);
+        
+        function closeDialog() {
+            overlay.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+                resolve();
+            }, 300);
+        }
+    });
+}
+
 // 轻量 toast 提示（几秒自动消失）
 function showToast(message, duration = 2500) {
     const existing = document.querySelector('.auto-toast');
@@ -1483,20 +1570,9 @@ async function saveFontSettings() {
 
 // 应用字体设置到整个页面
 function applyFontSettings(fontFamily, fontSize) {
-    // 创建或更新 style 标签
-    let styleEl = document.getElementById('globalFontStyle');
-    if (!styleEl) {
-        styleEl = document.createElement('style');
-        styleEl.id = 'globalFontStyle';
-        document.head.appendChild(styleEl);
-    }
-    
-    styleEl.textContent = `
-        body, input, textarea, select, button {
-            font-family: ${fontFamily} !important;
-            font-size: ${fontSize}px !important;
-        }
-    `;
+    // 使用 CSS 变量方式，直接设置到 :root
+    document.documentElement.style.setProperty('--global-font-family', fontFamily);
+    document.documentElement.style.setProperty('--global-font-size', fontSize + 'px');
 }
 
 // 切换顶栏显示
@@ -7331,7 +7407,16 @@ async function openChatDetail(characterId) {
     
     // 如果这个角色正在AI调用中，重新显示typing indicator
     if (aiRespondingCharacterIds.has(characterId)) {
-        showTypingIndicator();
+        // 检查是否是群聊
+        if (character.groupType === 'group') {
+            // 群聊：显示通用的"群成员"加载动画
+            if (typeof showTypingIndicator === 'function') {
+                showTypingIndicator({ remark: '群成员', name: '群成员', avatar: '' });
+            }
+        } else {
+            // 单聊：显示角色的加载动画
+            showTypingIndicator();
+        }
         disableSendButton();
     }
     
@@ -7349,6 +7434,13 @@ async function openChatDetail(characterId) {
             await loadBlockConfigFromDB(characterId);
         }
         updateBlockUI(characterId);
+    }
+    
+    // 如果是群聊，检查并显示最新公告
+    if (character.groupType === 'group' && typeof checkAndShowLatestAnnouncement === 'function') {
+        setTimeout(() => {
+            checkAndShowLatestAnnouncement(characterId);
+        }, 500);
     }
 }
 
@@ -7512,18 +7604,18 @@ function openChatSettings() {
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">每轮最少消息数</label>
-                    <input type="number" class="form-input" id="groupMinMessages" value="${currentChatCharacter.settings?.minMessagesPerMember || 1}" min="0" onchange="updateGroupMessageRange()">
+                    <label class="form-label">每轮最少消息数（总体）</label>
+                    <input type="number" class="form-input" id="groupMinMessages" value="${currentChatCharacter.settings?.minTotalMessages || 10}" min="1" onchange="updateGroupMessageRange()">
                     <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                        每个成员每轮至少发几条消息
+                        这一轮所有成员加起来至少发几条消息
                     </div>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">每轮最多消息数</label>
-                    <input type="number" class="form-input" id="groupMaxMessages" value="${currentChatCharacter.settings?.maxMessagesPerMember || 5}" min="0" onchange="updateGroupMessageRange()">
+                    <label class="form-label">每轮最多消息数（总体）</label>
+                    <input type="number" class="form-input" id="groupMaxMessages" value="${currentChatCharacter.settings?.maxTotalMessages || 30}" min="1" onchange="updateGroupMessageRange()">
                     <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                        每个成员每轮最多发几条消息
+                        这一轮所有成员加起来最多发几条消息
                     </div>
                 </div>
                 
@@ -7540,6 +7632,12 @@ function openChatSettings() {
                 <div class="form-group">
                     <button class="btn-primary" onclick="openGroupRelationManagement()" style="width: 100%;">
                         成员关系设置
+                    </button>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn-primary" onclick="openCoTSettings()" style="width: 100%;">
+                        💭 CoT 思维链设置
                     </button>
                 </div>
             </div>
@@ -8804,10 +8902,10 @@ async function saveChatSettings() {
         const minMessages = document.getElementById('groupMinMessages');
         const maxMessages = document.getElementById('groupMaxMessages');
         if (minMessages) {
-            currentChatCharacter.settings.minMessagesPerMember = parseInt(minMessages.value) || 1;
+            currentChatCharacter.settings.minTotalMessages = parseInt(minMessages.value) || 10;
         }
         if (maxMessages) {
-            currentChatCharacter.settings.maxMessagesPerMember = parseInt(maxMessages.value) || 5;
+            currentChatCharacter.settings.maxTotalMessages = parseInt(maxMessages.value) || 30;
         }
     }
     
@@ -8889,10 +8987,10 @@ function updateGroupMessageRange() {
     if (!currentChatCharacter.settings) {
         currentChatCharacter.settings = {};
     }
-    currentChatCharacter.settings.minMessagesPerMember = minMessages;
-    currentChatCharacter.settings.maxMessagesPerMember = maxMessages;
+    currentChatCharacter.settings.minTotalMessages = minMessages;
+    currentChatCharacter.settings.maxTotalMessages = maxMessages;
     
-    console.log('群聊消息数量范围已更新:', minMessages, '-', maxMessages);
+    console.log('群聊消息数量范围已更新（总体）:', minMessages, '-', maxMessages);
 }
 
 // CHAR头像库（已废弃，使用角色专属头像库管理）
@@ -9494,8 +9592,15 @@ async function showEmojiPicker() {
         // AI调用失败，清除该角色的调用状态
         aiRespondingCharacterIds.delete(targetCharacterId);
         
+        // 检查是否是用户中断
+        if (error.message && error.message.includes('用户中断')) {
+            console.log('用户已中断AI调用');
+            return; // 静默返回
+        }
+        
         console.error('AI调用失败:', error);
-        showIosAlert('错误', error.message || 'AI调用失败，请检查API设置');
+        // 显示带详细错误信息的弹窗
+        await showApiErrorAlert('AI调用失败', '请检查API设置或稍后重试', error);
     }
 }
 
@@ -10655,6 +10760,21 @@ function extendAction(type) {
             break;
         case 'voiceCall':
             showIosAlert('提示', '语音通话功能开发中');
+            break;
+        case 'groupAnnouncement':
+            openGroupAnnouncement();
+            break;
+        case 'groupRedPacket':
+            openSendRedPacket();
+            break;
+        case 'groupPoll':
+            openCreatePoll();
+            break;
+        case 'groupAlbum':
+            showIosAlert('提示', '群相册功能开发中，敬请期待');
+            break;
+        case 'groupFiles':
+            showIosAlert('提示', '群文件功能开发中，敬请期待');
             break;
         default:
             showIosAlert('提示', '功能开发中');
@@ -13105,6 +13225,30 @@ async function clearAllChatMessages() {
             }
         }
 
+        // 清空该角色的所有红包数据
+        try {
+            const tx = db.transaction(['chatCharacters'], 'readwrite');
+            const store = tx.objectStore('chatCharacters');
+            const groupData = await new Promise((resolve, reject) => {
+                const request = store.get(characterId);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            
+            if (groupData && groupData.redPackets && groupData.redPackets.length > 0) {
+                const redPacketCount = groupData.redPackets.length;
+                groupData.redPackets = [];
+                await new Promise((resolve, reject) => {
+                    const request = store.put(groupData);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+                console.log(`✅ 已清空 ${redPacketCount} 个红包数据`);
+            }
+        } catch (error) {
+            console.error('清空红包数据失败:', error);
+        }
+
         // 清空聊天界面
         const container = document.getElementById('chatMessagesContainer');
         container.innerHTML = `
@@ -13903,6 +14047,18 @@ function appendMessageToChat(messageObj) {
         } else {
             console.warn('appendIncomingCallMessageToChat 函数未定义');
         }
+        return;
+    }
+    
+    // 如果是红包消息，用专门的渲染函数
+    if (messageObj.messageType === 'redpacket' && messageObj.redPacketData) {
+        appendRedPacketMessageToChat(messageObj);
+        return;
+    }
+    
+    // 如果是投票消息，用专门的渲染函数
+    if (messageObj.messageType === 'poll' && messageObj.pollData) {
+        appendPollMessageToChat(messageObj);
         return;
     }
     

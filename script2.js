@@ -3716,25 +3716,97 @@ async function deleteSingleMsg(msgId, msgEl) {
 }
 
 // 从数据库删除单条消息
-function deleteMsgFromDB(msgId) {
-    return new Promise((resolve) => {
-        const tx = db.transaction(['chats'], 'readwrite');
-        const s = tx.objectStore('chats');
-        const req = s.openCursor();
-        req.onsuccess = (e) => {
+async function deleteMsgFromDB(msgId) {
+    return new Promise(async (resolve) => {
+        // 先查找消息，看是否是红包消息
+        const chatTx = db.transaction(['chats'], 'readonly');
+        const chatStore = chatTx.objectStore('chats');
+        const chatReq = chatStore.openCursor();
+        let messageData = null;
+        
+        chatReq.onsuccess = async (e) => {
             const cursor = e.target.result;
             if (cursor) {
                 if (cursor.value.id === msgId) {
-                    cursor.delete();
-                    resolve();
+                    messageData = cursor.value;
                 } else {
                     cursor.continue();
+                    return;
                 }
-            } else {
-                resolve();
             }
+            
+            // 如果是红包消息，删除对应的红包数据
+            if (messageData && messageData.redPacketId && currentChatCharacter) {
+                console.log('🗑️ 检测到红包消息，同时删除红包数据，红包ID:', messageData.redPacketId);
+                try {
+                    const charTx = db.transaction(['chatCharacters'], 'readwrite');
+                    const charStore = charTx.objectStore('chatCharacters');
+                    const groupData = await new Promise((res, rej) => {
+                        const req = charStore.get(currentChatCharacter.id);
+                        req.onsuccess = () => res(req.result);
+                        req.onerror = () => rej(req.error);
+                    });
+                    
+                    if (groupData && groupData.redPackets) {
+                        const beforeCount = groupData.redPackets.length;
+                        groupData.redPackets = groupData.redPackets.filter(rp => rp.id !== messageData.redPacketId);
+                        const afterCount = groupData.redPackets.length;
+                        
+                        if (beforeCount !== afterCount) {
+                            await new Promise((res, rej) => {
+                                const req = charStore.put(groupData);
+                                req.onsuccess = () => {
+                                    console.log('✅ 红包数据已删除，剩余红包数:', afterCount);
+                                    res();
+                                };
+                                req.onerror = () => rej(req.error);
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ 删除红包数据失败:', error);
+                }
+            }
+            
+            // 删除消息
+            const tx = db.transaction(['chats'], 'readwrite');
+            const s = tx.objectStore('chats');
+            const req = s.openCursor();
+            req.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    if (cursor.value.id === msgId) {
+                        cursor.delete();
+                        resolve();
+                    } else {
+                        cursor.continue();
+                    }
+                } else {
+                    resolve();
+                }
+            };
+            req.onerror = () => resolve();
         };
-        req.onerror = () => resolve();
+        chatReq.onerror = () => {
+            // 如果查找失败，仍然尝试删除消息
+            const tx = db.transaction(['chats'], 'readwrite');
+            const s = tx.objectStore('chats');
+            const req = s.openCursor();
+            req.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    if (cursor.value.id === msgId) {
+                        cursor.delete();
+                        resolve();
+                    } else {
+                        cursor.continue();
+                    }
+                } else {
+                    resolve();
+                }
+            };
+            req.onerror = () => resolve();
+        };
     });
 }
 

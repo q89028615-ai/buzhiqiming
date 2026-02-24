@@ -9564,8 +9564,8 @@ async function finishCreateGroup() {
             timeAwareness: true,
             
             // 群聊特有设置
-            minMessagesPerMember: 1,
-            maxMessagesPerMember: 5,
+            minTotalMessages: 10,
+            maxTotalMessages: 30,
             bgActivityEnabled: false,
             bgActivityMode: 'scheduled',
             bgActivityInterval: 60,
@@ -9625,8 +9625,70 @@ async function handleGroupChatMessage(userMessage) {
     
     if (members.length === 0) {
         console.warn('群聊没有成员');
+        showToast('群聊没有成员，无法发送消息');
         return;
     }
+    
+    // ========== 自动解除禁言检查 ==========
+    const now = new Date();
+    let hasUnmuted = false;
+    const unmuteMessages = [];
+    
+    if (groupData.memberStatus) {
+        for (const [memberId, status] of Object.entries(groupData.memberStatus)) {
+            if (status.isMuted && status.muteUntil) {
+                const until = new Date(status.muteUntil);
+                if (now >= until) {
+                    // 禁言时间到，自动解除
+                    status.isMuted = false;
+                    status.muteUntil = null;
+                    hasUnmuted = true;
+                    
+                    const member = chatCharacters.find(c => c.id === memberId);
+                    const memberName = member ? (member.remark || member.name) : '未知成员';
+                    unmuteMessages.push(`${memberName} 的禁言时间已到，已自动解除禁言`);
+                    
+                    console.log(`✅ 自动解除禁言: ${memberName} (${memberId})`);
+                }
+            }
+        }
+    }
+    
+    // 如果有成员被自动解除禁言，保存到数据库并显示系统消息
+    if (hasUnmuted) {
+        try {
+            // 保存更新后的群聊数据
+            const tx = db.transaction(['chatCharacters'], 'readwrite');
+            const store = tx.objectStore('chatCharacters');
+            await new Promise((resolve, reject) => {
+                const request = store.put(groupData);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+            
+            console.log('✅ 已保存自动解除禁言的状态');
+            
+            // 显示系统消息
+            for (const msg of unmuteMessages) {
+                const systemMessageObj = {
+                    id: Date.now().toString() + '_unmute_' + Math.random().toString(36).substr(2, 6),
+                    characterId: groupData.id,
+                    content: msg,
+                    type: 'system',
+                    timestamp: new Date().toISOString(),
+                    sender: 'system',
+                    messageType: 'systemNotice'
+                };
+                await saveMessageToDB(systemMessageObj);
+                appendMessageToChat(systemMessageObj);
+            }
+            
+            scrollChatToBottom();
+        } catch (error) {
+            console.error('保存自动解除禁言状态失败:', error);
+        }
+    }
+    // ========== 自动解除禁言检查结束 ==========
     
     // 获取聊天历史
     const allChats = await getAllChatsFromDB();
@@ -9666,8 +9728,16 @@ async function handleGroupChatMessage(userMessage) {
             return;
         }
         
-        // 构建群聊提示词（一次性为所有成员）
-        const prompt = buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, availableStickerObjects);
+        // 先获取 CoT 设置
+        const cotSettings = await getGroupCoTSettings(groupData.id);
+        console.log('📋 CoT设置:', {
+            enabled: cotSettings.enabled,
+            saveThinking: cotSettings.saveThinking,
+            modulesEnabled: Object.keys(cotSettings.modules || {}).filter(k => cotSettings.modules[k]?.enabled)
+        });
+        
+        // 构建群聊提示词（一次性为所有成员），传入 CoT 启用状态
+        const prompt = buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, availableStickerObjects, cotSettings.enabled);
         
         // 替换长期记忆占位符
         let finalPrompt = prompt;
@@ -9687,6 +9757,23 @@ async function handleGroupChatMessage(userMessage) {
         }
         finalPrompt = finalPrompt.replace('{longTermMemories}', memoriesText || '（暂无记忆）');
         
+        // 替换 CoT 提示词
+        const cotPrompt = buildCoTPrompt(cotSettings, groupData, allMembers);
+        console.log('📝 CoT提示词长度:', cotPrompt.length, '字符');
+        console.log('📝 CoT提示词包含<thinking>:', cotPrompt.includes('<thinking>'));
+        console.log('📝 替换前finalPrompt包含{cotPrompt}:', finalPrompt.includes('{cotPrompt}'));
+        finalPrompt = finalPrompt.replace('{cotPrompt}', cotPrompt);
+        console.log('📝 替换后finalPrompt长度:', finalPrompt.length);
+        console.log('✅ 最终提示词包含<thinking>标签:', finalPrompt.includes('<thinking>'));
+        console.log('✅ 最终提示词包含<response>标签:', finalPrompt.includes('<response>'));
+        console.log('✅ 最终提示词包含{cotPrompt}占位符:', finalPrompt.includes('{cotPrompt}'));
+        console.log('📄 最终提示词末尾1000字符:\n' + finalPrompt.slice(-1000));
+        
+        // 记录正在调用AI的群聊ID
+        if (typeof aiRespondingCharacterIds !== 'undefined') {
+            aiRespondingCharacterIds.add(groupData.id);
+        }
+        
         // 显示输入中状态（通用）
         showTypingIndicator({ remark: '群成员', name: '群成员', avatar: '' });
         
@@ -9696,50 +9783,106 @@ async function handleGroupChatMessage(userMessage) {
         // 隐藏输入中状态
         hideTypingIndicator();
         
+        // AI调用完成，清除群聊的调用状态
+        if (typeof aiRespondingCharacterIds !== 'undefined') {
+            aiRespondingCharacterIds.delete(groupData.id);
+        }
+        
+        // 检查是否被用户中断
+        if (response && response.aborted) {
+            console.log('用户已中断群聊AI调用，静默返回');
+            return; // 用户主动中断，静默返回，不显示任何提示
+        }
+        
         if (!response) {
-            console.warn('群聊AI回复失败');
+            console.error('群聊AI回复失败');
+            // 显示全屏弹窗（带详细错误）
+            await showApiErrorAlert('群聊AI调用失败', '请检查API设置或稍后重试', new Error('API返回了空响应'));
             return;
         }
         
-        // 解析回复（JSON对象格式：{"成员名": ["消息1", "消息2"], ...}）
-        let memberReplies = {};
+        // 解析 CoT 响应
+        const parsedResponse = parseCoTResponse(response);
+        console.log('CoT 解析结果:', parsedResponse.hasCoT ? '包含思维链' : '无思维链');
+        console.log('原始响应前200字符:', response.substring(0, 200));
+        
+        // 如果启用了保存思维过程，保存到数据库
+        if (parsedResponse.hasCoT && cotSettings.saveThinking && parsedResponse.thinking) {
+            console.log('✅ 保存思维过程:', parsedResponse.thinking.substring(0, 100) + '...');
+            // 保存思维链到数据库
+            await saveThinkingRecord(groupData.id, parsedResponse.thinking, userMessage);
+        } else {
+            console.log('❌ 未保存思维链 - hasCoT:', parsedResponse.hasCoT, 'saveThinking:', cotSettings.saveThinking, 'thinking存在:', !!parsedResponse.thinking);
+        }
+        
+        // 如果启用了显示思维摘要，在聊天中显示
+        if (parsedResponse.hasCoT && cotSettings.showThinkingSummary && parsedResponse.thinking) {
+            appendThinkingSummaryToChat(parsedResponse.thinking);
+        }
+        
+        // 解析回复（对话流数组格式：[{"member": "成员名", "message": "消息内容"}, ...]）
+        let messageFlow = [];
         try {
-            // 尝试提取JSON对象（可能包裹在markdown代码块中）
-            let jsonStr = response.trim();
+            // 使用清理后的响应内容
+            let jsonStr = parsedResponse.response.trim();
             
             // 移除可能的markdown代码块标记
             jsonStr = jsonStr.replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
             
             // 解析JSON
-            memberReplies = JSON.parse(jsonStr);
+            messageFlow = JSON.parse(jsonStr);
             
-            if (typeof memberReplies !== 'object' || Array.isArray(memberReplies)) {
-                throw new Error('返回的不是有效的对象格式');
+            if (!Array.isArray(messageFlow)) {
+                throw new Error('返回的不是有效的数组格式');
+            }
+            
+            // 验证每个元素的格式
+            for (const item of messageFlow) {
+                if (!item.member || !item.message) {
+                    throw new Error('消息格式错误：缺少member或message字段');
+                }
             }
         } catch (e) {
             console.warn('解析群聊回复失败，尝试清洗格式:', e);
-            console.log('原始响应:', response);
+            console.log('原始响应:', parsedResponse.response);
+            showToast('群聊回复格式异常，正在尝试修复...');
             
             // 尝试使用cleanAIResponse清洗
             if (typeof cleanAIResponse === 'function') {
-                const cleaned = cleanAIResponse(response);
-                // 如果清洗后是数组，给第一个成员
+                const cleaned = cleanAIResponse(parsedResponse.response);
+                // 如果清洗后是数组，尝试转换为对话流格式
                 if (Array.isArray(cleaned) && allMembers.length > 0) {
-                    memberReplies = {
-                        [allMembers[0].remark || allMembers[0].name]: cleaned
-                    };
+                    messageFlow = cleaned.map(msg => ({
+                        member: allMembers[0].remark || allMembers[0].name,
+                        message: msg
+                    }));
                 } else {
                     console.error('无法解析群聊回复');
+                    showToast('无法解析群聊回复，请检查AI配置');
                     return;
                 }
             } else {
                 console.error('无法解析群聊回复');
+                showToast('无法解析群聊回复，请检查AI配置');
                 return;
             }
         }
         
-        // 按成员处理回复（所有回复已经生成好了，只需要依次显示）
-        for (const [memberName, messages] of Object.entries(memberReplies)) {
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📋 对话流执行开始');
+        console.log('📋 总消息数:', messageFlow.length);
+        console.log('📋 对话流预览:');
+        messageFlow.forEach((item, idx) => {
+            const preview = item.message.substring(0, 50) + (item.message.length > 50 ? '...' : '');
+            console.log(`   ${idx + 1}. ${item.member}: ${preview}`);
+        });
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        
+        // 按对话流顺序处理每条消息
+        for (const flowItem of messageFlow) {
+            const memberName = flowItem.member;
+            const msgContent = flowItem.message;
+            
             // 查找对应的成员
             const member = allMembers.find(m => 
                 (m.remark || m.name) === memberName || 
@@ -9763,83 +9906,85 @@ async function handleGroupChatMessage(userMessage) {
                 continue;
             }
             
-            if (!Array.isArray(messages) || messages.length === 0) {
-                console.warn(`成员 ${memberName} 的消息格式错误`);
+            const charMsg = {
+                id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
+                characterId: groupData.id,
+                groupMemberId: member.id, // 标记是哪个成员发的
+                content: msgContent,
+                type: 'char',
+                sender: member.remark || member.name,
+                timestamp: new Date().toISOString()
+            };
+            
+            // ========== 🔧 修复：先处理权限指令 ==========
+            console.log(`🔍 检查权限指令: ${member.remark || member.name} - ${msgContent}`);
+            const permissionResult = await parseAndExecutePermissionCommands(
+                charMsg.content, 
+                member.id,  // 发送者ID（角色ID）
+                groupData
+            );
+            
+            // 更新消息内容（移除权限指令标记）
+            charMsg.content = permissionResult.cleanContent;
+            console.log(`   - 清理后内容: ${charMsg.content}`);
+            console.log(`   - 执行的操作数: ${permissionResult.executedActions.length}`);
+            console.log(`   - 系统消息数: ${permissionResult.systemMessages.length}`);
+            
+            // 添加系统消息（权限操作的提示）
+            for (const sysMsg of permissionResult.systemMessages) {
+                const systemMessageObj = {
+                    id: Date.now().toString() + '_sys_' + Math.random().toString(36).substr(2, 6),
+                    characterId: groupData.id,
+                    content: sysMsg,
+                    type: 'system',
+                    timestamp: new Date().toISOString(),
+                    sender: 'system',
+                    messageType: 'systemNotice'
+                };
+                await saveMessageToDB(systemMessageObj);
+                appendMessageToChat(systemMessageObj);
+                console.log(`   ✅ 添加系统消息: ${sysMsg}`);
+            }
+            
+            // 处理特殊消息类型（引用、@、表情包验证等）
+            const isValid = await processGroupSpecialMessage(charMsg, groupData, availableStickers);
+            
+            // 如果消息被过滤掉了（比如只有无效表情包，没有其他内容），跳过
+            if (!isValid) {
+                console.log(`过滤掉无效消息: ${msgContent}`);
                 continue;
             }
             
-            // 保存并显示每条消息
-            for (const msgContent of messages) {
-                const charMsg = {
-                    id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
-                    characterId: groupData.id,
-                    groupMemberId: member.id, // 标记是哪个成员发的
-                    content: msgContent,
-                    type: 'char',
-                    sender: member.remark || member.name,
-                    timestamp: new Date().toISOString()
-                };
-                
-                // ========== 🔧 修复：先处理权限指令 ==========
-                console.log(`🔍 检查权限指令: ${member.remark || member.name} - ${msgContent}`);
-                const permissionResult = await parseAndExecutePermissionCommands(
-                    charMsg.content, 
-                    member.id,  // 发送者ID（角色ID）
-                    groupData
-                );
-                
-                // 更新消息内容（移除权限指令标记）
-                charMsg.content = permissionResult.cleanContent;
-                console.log(`   - 清理后内容: ${charMsg.content}`);
-                console.log(`   - 执行的操作数: ${permissionResult.executedActions.length}`);
-                console.log(`   - 系统消息数: ${permissionResult.systemMessages.length}`);
-                
-                // 添加系统消息（权限操作的提示）
-                for (const sysMsg of permissionResult.systemMessages) {
-                    const systemMessageObj = {
-                        id: Date.now().toString() + '_sys_' + Math.random().toString(36).substr(2, 6),
-                        characterId: groupData.id,
-                        content: sysMsg,
-                        type: 'system',
-                        timestamp: new Date().toISOString(),
-                        sender: 'system',
-                        messageType: 'systemNotice'
-                    };
-                    await saveMessageToDB(systemMessageObj);
-                    appendMessageToChat(systemMessageObj);
-                    console.log(`   ✅ 添加系统消息: ${sysMsg}`);
-                }
-                
-                // 处理特殊消息类型（引用、@、表情包验证等）
-                const isValid = await processGroupSpecialMessage(charMsg, groupData, availableStickers);
-                
-                // 如果消息被过滤掉了（比如只有无效表情包，没有其他内容），跳过
-                if (!isValid) {
-                    console.log(`过滤掉无效消息: ${msgContent}`);
-                    continue;
-                }
-                
-                // 保存到数据库
-                await saveMessageToDB(charMsg);
-                
-                // 显示消息
-                appendMessageToChat(charMsg);
-                
-                // 滚动到底部
-                scrollChatToBottom();
-                
-                // 模拟真实发送延迟（消息之间的间隔）
-                await sleep(Math.random() * 800 + 300);
-            }
+            // 保存到数据库
+            await saveMessageToDB(charMsg);
             
-            // 成员之间的间隔（稍微长一点，模拟不同人发消息的节奏）
-            await sleep(Math.random() * 1000 + 500);
+            // 显示消息
+            appendMessageToChat(charMsg);
+            
+            // 滚动到底部
+            scrollChatToBottom();
+            
+            // 模拟真实发送延迟（消息之间的间隔）
+            await sleep(Math.random() * 800 + 300);
         }
         
     } catch (error) {
         console.error('群聊处理出错:', error);
         hideTypingIndicator();
-        await iosAlert('群聊消息处理失败: ' + error.message, '错误');
+        
+        // AI调用失败，清除群聊的调用状态
+        if (typeof aiRespondingCharacterIds !== 'undefined') {
+            aiRespondingCharacterIds.delete(groupData.id);
+        }
+        
+        // 检查是否是用户中断（虽然理论上不应该到这里，但以防万一）
+        if (error.message && error.message.includes('用户中断')) {
+            console.log('用户已中断群聊AI调用（catch块）');
+            return; // 静默返回
+        }
+        
+        // 显示全屏弹窗（带详细错误）
+        await showApiErrorAlert('群聊消息处理失败', '请检查API设置或稍后重试', error);
     }
     
     // 更新聊天列表
@@ -9857,6 +10002,12 @@ async function callAIForGroupChat(prompt, groupData) {
         throw new Error('请先在设置中配置API');
     }
     
+    // 创建新的AbortController
+    if (typeof currentAbortController !== 'undefined') {
+        currentAbortController = new AbortController();
+    }
+    const signal = (typeof currentAbortController !== 'undefined') ? currentAbortController.signal : undefined;
+    
     try {
         let response;
         
@@ -9872,7 +10023,8 @@ async function callAIForGroupChat(prompt, groupData) {
                         topP: settings.topP !== undefined ? settings.topP : 0.95,
                         maxOutputTokens: settings.maxTokens || 2048
                     }
-                })
+                }),
+                signal: signal
             });
             
             if (!response.ok) {
@@ -9898,7 +10050,8 @@ async function callAIForGroupChat(prompt, groupData) {
                     max_tokens: settings.maxTokens || 2048,
                     temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
                     messages: [{ role: 'user', content: prompt }]
-                })
+                }),
+                signal: signal
             });
             
             if (!response.ok) {
@@ -9923,7 +10076,8 @@ async function callAIForGroupChat(prompt, groupData) {
                     messages: [{ role: 'user', content: prompt }],
                     temperature: settings.temperature !== undefined ? settings.temperature : 0.9,
                     max_tokens: settings.maxTokens || 2048
-                })
+                }),
+                signal: signal
             });
             
             if (!response.ok) {
@@ -9939,8 +10093,24 @@ async function callAIForGroupChat(prompt, groupData) {
         
         throw new Error('API返回了空响应');
     } catch (error) {
+        // 清除AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = null;
+        }
+        
+        // 如果是用户主动中断（AbortError），静默返回特殊标记
+        if (error.name === 'AbortError') {
+            console.log('群聊AI调用已被用户中断');
+            return { aborted: true }; // 返回特殊对象表示被用户中断
+        }
+        
         console.error('群聊AI调用失败:', error);
         throw error;
+    } finally {
+        // 清除AbortController
+        if (typeof currentAbortController !== 'undefined') {
+            currentAbortController = null;
+        }
     }
 }
 
@@ -10255,18 +10425,18 @@ function addGroupChatSettingsUI() {
         </div>
         
         <div class="form-group">
-            <label class="form-label">每轮最少消息数</label>
-            <input type="number" class="form-input" id="groupMinMessages" value="${currentChatCharacter.settings?.minMessagesPerMember || 1}" min="0" onchange="updateGroupMessageRange()">
+            <label class="form-label">每轮最少消息数（总体）</label>
+            <input type="number" class="form-input" id="groupMinMessages" value="${currentChatCharacter.settings?.minTotalMessages || 10}" min="1" onchange="updateGroupMessageRange()">
             <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                每个成员每轮至少发几条消息
+                这一轮所有成员加起来至少发几条消息
             </div>
         </div>
         
         <div class="form-group">
-            <label class="form-label">每轮最多消息数</label>
-            <input type="number" class="form-input" id="groupMaxMessages" value="${currentChatCharacter.settings?.maxMessagesPerMember || 5}" min="0" onchange="updateGroupMessageRange()">
+            <label class="form-label">每轮最多消息数（总体）</label>
+            <input type="number" class="form-input" id="groupMaxMessages" value="${currentChatCharacter.settings?.maxTotalMessages || 30}" min="1" onchange="updateGroupMessageRange()">
             <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                每个成员每轮最多发几条消息
+                这一轮所有成员加起来最多发几条消息
             </div>
         </div>
         
@@ -10285,6 +10455,20 @@ function addGroupChatSettingsUI() {
         <div class="form-group">
             <button class="btn-primary" onclick="openGroupRelationManagement()" style="width: 100%;">
                 成员关系设置
+            </button>
+        </div>
+        
+        <!-- CoT 思维链设置 -->
+        <div class="form-group">
+            <button class="btn-primary" onclick="openCoTSettings()" style="width: 100%;">
+                CoT 思维链设置
+            </button>
+        </div>
+        
+        <!-- 查看思维链记录 -->
+        <div class="form-group">
+            <button class="btn-primary" onclick="openThinkingViewer()" style="width: 100%; background: #5856D6;">
+                查看思维链记录
             </button>
         </div>
         
@@ -10378,10 +10562,10 @@ function updateGroupMessageRange() {
     if (!currentChatCharacter.settings) {
         currentChatCharacter.settings = {};
     }
-    currentChatCharacter.settings.minMessagesPerMember = minMessages;
-    currentChatCharacter.settings.maxMessagesPerMember = maxMessages;
+    currentChatCharacter.settings.minTotalMessages = minMessages;
+    currentChatCharacter.settings.maxTotalMessages = maxMessages;
     
-    console.log('群聊消息数量范围已更新:', minMessages, '-', maxMessages);
+    console.log('群聊消息数量范围已更新（总体）:', minMessages, '-', maxMessages);
 }
 
 
@@ -12372,6 +12556,27 @@ async function parseAndExecutePermissionCommands(content, senderId, groupData) {
                 if (result.success) {
                     executedActions.push(result);
                     systemMessages.push(result.systemMessage);
+                }
+                return result.success;
+            }
+        },
+        {
+            // [grab_redpacket:memberId] 或 [grab_redpacket:memberId:redPacketId] - 抢红包
+            regex: /\[grab_redpacket:([^\]:]+)(?::([^\]]+))?\]/g,
+            handler: async (match, memberId, redPacketId) => {
+                const result = await executeGrabRedPacketCommand(
+                    memberId.trim(), 
+                    groupData, 
+                    redPacketId ? redPacketId.trim() : null
+                );
+                if (result.success) {
+                    executedActions.push(result);
+                    // 支持多条系统消息（例如：抢红包消息 + 手气王消息）
+                    if (result.systemMessages && Array.isArray(result.systemMessages)) {
+                        systemMessages.push(...result.systemMessages);
+                    } else if (result.systemMessage) {
+                        systemMessages.push(result.systemMessage);
+                    }
                 }
                 return result.success;
             }

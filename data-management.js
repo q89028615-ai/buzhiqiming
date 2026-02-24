@@ -1798,3 +1798,199 @@ function initVersionInfo() {
 document.addEventListener('DOMContentLoaded', function() {
     initVersionInfo();
 });
+
+// ========== 应用更新功能 ==========
+
+// 应用配置
+const APP_CONFIG = {
+    currentVersion: '1.0.0',
+    repoUrl: 'https://q89028615-ai.github.io/buzhiqiming',
+    versionCheckUrl: 'https://q89028615-ai.github.io/buzhiqiming/CHANGELOG.md',
+    filesToUpdate: [
+        'index.html',
+        'script.js',
+        'script2.js',
+        'script3.js',
+        'style.css',
+        'data-management.js',
+        'appearance.js',
+        'couple-avatar.js',
+        'couple-avatar.css',
+        'music-search.js',
+        'persona.js',
+        'prompts.js',
+        'showcase.js',
+        'video-call.js',
+        'video-call.css',
+        'worldbook.js',
+        'sw.js',
+        'manifest.json'
+    ]
+};
+
+// 检查更新
+async function checkForUpdates() {
+    try {
+        await iosAlert('正在检查更新...', '提示');
+        
+        // 获取远程CHANGELOG.md
+        const response = await fetch(APP_CONFIG.versionCheckUrl + '?t=' + Date.now(), {
+            cache: 'no-cache'
+        });
+        
+        if (!response.ok) {
+            throw new Error('无法连接到更新服务器');
+        }
+        
+        const changelogText = await response.text();
+        
+        // 解析最新版本号
+        const versionMatch = changelogText.match(/##\s*\[(\d+\.\d+\.\d+)\]/);
+        
+        if (!versionMatch) {
+            await iosAlert('无法解析版本信息', '错误');
+            return;
+        }
+        
+        const latestVersion = versionMatch[1];
+        
+        // 比较版本
+        if (compareVersions(latestVersion, APP_CONFIG.currentVersion) > 0) {
+            // 有新版本
+            const confirmed = await iosConfirm(
+                `发现新版本 v${latestVersion}\n当前版本 v${APP_CONFIG.currentVersion}\n\n是否立即更新？\n\n注意：更新不会影响您的聊天记录和设置`,
+                '发现新版本'
+            );
+            
+            if (confirmed) {
+                await performUpdate(latestVersion);
+            }
+        } else {
+            await iosAlert(`当前已是最新版本 v${APP_CONFIG.currentVersion}`, '提示');
+        }
+        
+    } catch (error) {
+        console.error('检查更新失败:', error);
+        await iosAlert('检查更新失败：' + error.message, '错误');
+    }
+}
+
+// 执行更新
+async function performUpdate(newVersion) {
+    try {
+        await iosAlert('正在下载更新文件，请稍候...', '更新中');
+        
+        let successCount = 0;
+        let failCount = 0;
+        const failedFiles = [];
+        
+        // 下载并缓存所有文件
+        for (const file of APP_CONFIG.filesToUpdate) {
+            try {
+                const fileUrl = `${APP_CONFIG.repoUrl}/${file}?t=${Date.now()}`;
+                const response = await fetch(fileUrl, { cache: 'no-cache' });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                // 获取文件内容
+                const content = await response.text();
+                
+                // 存储到localStorage作为临时缓存
+                localStorage.setItem(`update_cache_${file}`, content);
+                
+                successCount++;
+                console.log(`下载成功: ${file}`);
+                
+            } catch (error) {
+                console.error(`下载失败: ${file}`, error);
+                failCount++;
+                failedFiles.push(file);
+            }
+        }
+        
+        if (failCount > 0) {
+            const retry = await iosConfirm(
+                `部分文件下载失败 (${failCount}/${APP_CONFIG.filesToUpdate.length})\n\n失败文件：\n${failedFiles.join('\n')}\n\n是否继续更新？`,
+                '下载警告'
+            );
+            
+            if (!retry) {
+                // 清理缓存
+                APP_CONFIG.filesToUpdate.forEach(file => {
+                    localStorage.removeItem(`update_cache_${file}`);
+                });
+                return;
+            }
+        }
+        
+        // 更新版本号
+        APP_CONFIG.currentVersion = newVersion;
+        localStorage.setItem('app_version', newVersion);
+        
+        // 清除Service Worker缓存
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const registration of registrations) {
+                await registration.unregister();
+            }
+            
+            // 清除所有缓存
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(
+                    cacheNames.map(cacheName => caches.delete(cacheName))
+                );
+            }
+        }
+        
+        // 提示用户刷新
+        const confirmed = await iosConfirm(
+            `更新下载完成！\n\n成功：${successCount} 个文件\n失败：${failCount} 个文件\n\n需要刷新页面以应用更新\n\n您的聊天记录和设置不会受影响`,
+            '更新完成'
+        );
+        
+        if (confirmed) {
+            // 清理更新缓存
+            APP_CONFIG.filesToUpdate.forEach(file => {
+                localStorage.removeItem(`update_cache_${file}`);
+            });
+            
+            // 强制刷新页面
+            window.location.reload(true);
+        }
+        
+    } catch (error) {
+        console.error('更新失败:', error);
+        await iosAlert('更新失败：' + error.message, '错误');
+    }
+}
+
+// 比较版本号
+function compareVersions(v1, v2) {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    
+    for (let i = 0; i < 3; i++) {
+        const part1 = parts1[i] || 0;
+        const part2 = parts2[i] || 0;
+        
+        if (part1 > part2) return 1;
+        if (part1 < part2) return -1;
+    }
+    
+    return 0;
+}
+
+// 页面加载时检查是否有缓存的版本号
+document.addEventListener('DOMContentLoaded', function() {
+    const savedVersion = localStorage.getItem('app_version');
+    if (savedVersion) {
+        APP_CONFIG.currentVersion = savedVersion;
+        const versionElement = document.getElementById('appVersion');
+        if (versionElement) {
+            versionElement.textContent = 'v' + savedVersion;
+        }
+    }
+});

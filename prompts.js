@@ -480,14 +480,15 @@ const BLOCK_USER_ABILITY_PROMPT = `\n你可以拉黑对方。当你真的生气�
  * @param {Array} allMembers - 所有成员信息
  * @param {Object} timeInfo - 时间信息
  * @param {Array} availableStickers - 可用的表情包列表
+ * @param {boolean} cotEnabled - 是否启用 CoT
  * @returns {string} 群聊提示词
  */
-function buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, availableStickers = []) {
+function buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, availableStickers = [], cotEnabled = false) {
     const membersWhoKnowUser = groupData.membersWhoKnowUser || [];
     
-    // 从设置中读取消息数量范围，默认1-5条
-    const minMessages = groupData.settings?.minMessagesPerMember || 1;
-    const maxMessages = groupData.settings?.maxMessagesPerMember || 5;
+    // 从设置中读取总体消息数量范围，默认10-30条
+    const minTotalMessages = groupData.settings?.minTotalMessages || 10;
+    const maxTotalMessages = groupData.settings?.maxTotalMessages || 30;
     
     // 辅助函数：获取成员角色
     const getMemberRoleLocal = (groupData, memberId) => {
@@ -608,31 +609,41 @@ function buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, avai
     // 用户人设
     const userPersonaText = groupData.settings?.userPersonaContent || '普通用户';
     
-    let prompt = `【重要：群聊输出格式要求】
-你需要为群里的每个成员生成回复。输出格式必须是一个 JSON 对象，键是成员名字，值是该成员的消息数组。
+    let prompt = `【重要：群聊输出格式要求 - 对话流模式】
+你需要生成一个真实的群聊对话流。输出格式是一个 JSON 数组，每个元素包含成员名和消息内容。
 
 格式：
-{
-  "成员A名字": ["消息1", "消息2"],
-  "成员B名字": ["消息1"],
-  "成员C名字": ["消息1", "消息2", "消息3"]
-}
+[
+  {"member": "成员A名字", "message": "消息内容"},
+  {"member": "成员B名字", "message": "回应的内容"},
+  {"member": "成员A名字", "message": "继续说"},
+  {"member": "成员C名字", "message": "插话"}
+]
 
 重要规则：
 1. 必须用双引号包裹键和字符串值
 2. 不要在 JSON 之外添加任何内容
 3. 不要使用 markdown 代码块标记
-4. 每个成员在每一轮都必须发言，至少发${minMessages}条消息，最多${maxMessages}条
-5. 所有成员都必须包含在JSON中，不能有人不发言
-6. 如果有人@了某个成员（无论是用户还是其他成员），被@的成员必须回复，且回复要针对@他的人说的话
-7. 成员之间的回复要有互动感，可以互相回应、调侃、@对方、引用对方的话
+4. 这一轮所有成员加起来总共要发 ${minTotalMessages}-${maxTotalMessages} 条消息
+5. 成员可以多次出现，模拟真实的接话和互动
+6. 被@的成员必须在后续回复中回应
+7. 成员之间要有自然的对话流：A说→B回应→A继续→C插话→B回C...
 8. 被禁言的成员不能发言，不要为他们生成任何消息！
+9. 不是每个成员都必须发言，根据话题和性格决定谁参与
 
-示例：
-正确：{"小明": ["哈哈哈"], "小红": ["你们在聊什么呢", "@小明 你又皮了"]}
-正确：{"小明": ["我也觉得"], "小红": ["同意"]}
-错误：\`\`\`json{...}\`\`\`（不要用代码块）
-错误：{"小明": ["你好"]} 这是群聊（不要在JSON外加文字）
+示例（对话流）：
+正确：[
+  {"member": "小明", "message": "哈哈哈"},
+  {"member": "小明", "message": "我今天吃了榨菜"},
+  {"member": "小红", "message": "什么榨菜呀"},
+  {"member": "小明", "message": "就普通的榨菜啊"},
+  {"member": "小红", "message": "好吃吗"},
+  {"member": "小刚", "message": "我也想吃"},
+  {"member": "小明", "message": "还行吧"}
+]
+
+错误：\`\`\`json[...]\`\`\`（不要用代码块）
+错误：[...] 这是群聊（不要在JSON外加文字）
 
 ---
 
@@ -641,6 +652,17 @@ function buildGroupChatPrompt(groupData, chatHistory, allMembers, timeInfo, avai
 
 【群名称】
 ${groupData.groupName || '未命名群聊'}
+
+【群公告】
+${groupData.announcements && groupData.announcements.length > 0 ? 
+    groupData.announcements.slice(0, 3).map(ann => {
+        const date = new Date(ann.timestamp);
+        const timeStr = `${date.getMonth()+1}月${date.getDate()}日 ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+        return `- [${timeStr}] ${ann.content}`;
+    }).join('\n') 
+    : '（暂无群公告）'}
+
+所有成员都能看到群公告，可以在对话中提及或讨论公告内容。
 
 【可以发言的群成员】
 所有成员都能看到彼此的群昵称（备注名）和真名。在对话中可以用群昵称或真名称呼对方。
@@ -655,71 +677,141 @@ ${userPersonaText}
 【群聊历史】（最近20条）
 ${historyText || '（暂无历史消息）'}
 
-【群聊规则 - 必须遵守】
-1. 这是真实的群聊，多个人同时在线，会有自然的互动
-2. 每个可以发言的成员在每一轮都必须发言，至少${minMessages}条，最多${maxMessages}条，根据性格和话题决定发几条
-3. 被禁言的成员不能发言，不要为他们生成任何消息！所有成员都知道谁被禁言了
-4. 如果有人@了某个成员（无论是用户还是其他成员@的），被@的成员必须回复@他的人
-5. 被@的成员回复时，可以用@回去，也可以用引用[quote:消息ID]，或者直接在消息中体现出是在回应谁
-6. 成员之间可以互相回应、调侃、开玩笑、争论、互相@
-7. 可以使用 @成员名字 来@其他人
-8. 可以引用消息 [quote:消息ID]
-9. 可以发表情包、图片、语音等特殊消息
-10. 即使话题不太相关，也要找到角度参与进来（比如插科打诨、旁观吐槽、转移话题等）
-11. 发言要符合群聊氛围，自然、真实、有互动感
-12. 认识用户的成员可以更亲密，不认识的要保持距离感
-13. 群主拥有最高权限，管理员拥有管理权限，请在对话中体现这些角色关系
-14. 等级高的成员可能在群里更有话语权或更活跃
-15. 有头衔的成员可以在对话中体现头衔特点
-16. 成员可以讨论谁被禁言了，可以对禁言事件发表看法
+【群聊规则 - 对话流模式】
+1. 这是真实的群聊，成员之间会自然地接话、互动、插话
+2. 这一轮总共要生成 ${minTotalMessages}-${maxTotalMessages} 条消息（所有成员加起来）
+3. 成员可以多次发言，不是一次性发完就结束
+4. 模拟真实对话：A说一句→B回应→A继续→C插话→B回C→A再说...
+5. 被@的成员必须在后续的消息中回应
+6. 不是每个成员都必须发言，根据话题相关性和性格决定
+7. 有的成员可能只说1-2句，有的可能说很多句，完全看话题和性格
+8. 被禁言的成员不能发言
+9. 可以使用@、引用、表情包、图片、语音等功能
+10. 群主和管理员的权限要在对话中体现
+
+对话流的特点：
+- 像真实微信群一样，有人说话→有人回应→继续讨论→有人插话
+- 不是轮流发言，而是自然的对话流动
+- 话题可以延续、转移、被打断
+- 有时候某人连发几条，有时候几个人快速互动
+
+【对话流生成 - 极其重要】
+⚠️ 这不是轮流发言，而是模拟真实的群聊对话流！
+
+核心要点：
+1. 按时间顺序生成消息，每条消息都是对前面消息的自然反应
+2. 成员可以多次出现，就像真实群聊中的接话
+3. 谁先说、谁后说，完全取决于：
+   - 谁被@了（被@的人会优先回应）
+   - 谁对话题感兴趣（相关的人会主动参与）
+   - 谁的性格更活跃（外向的人发言更频繁）
+   - 谁在回应谁（被回应的人可能继续说）
+
+真实群聊的对话流：
+- 小明："我今天吃了榨菜"
+- 小红："什么榨菜？"（对话题感兴趣）
+- 小明："就普通的榨菜啊"（被问到了，继续回答）
+- 小红："好吃吗"（继续追问）
+- 小刚："我也想吃"（插话）
+- 小明："还行吧"（回答小红的问题）
+- 小红："下次带我吃"（继续话题）
+
+不要这样（僵硬的轮流）：
+- 小明："消息1" "消息2" "消息3"
+- 小红："消息1" "消息2"
+- 小刚："消息1"
+- （然后就结束了，没有互动）
 
 【特殊消息类型】
 - 语音：[voice:说的话]
 - 图片：[image:图片描述]
 - 定位：[location:地址]
 - 引用：[quote:消息ID]
-- @功能：直接在消息中写 @成员名字 或 @全员（群主/管理员可用）
-  例如："@张三 你在哪呢"、"@全员 明天开会"
+- @功能：@成员名字 或 @全员
 
-【群聊权限指令 - 仅限有权限的成员使用】
-如果你是群主或管理员，可以在消息中使用以下权限指令来管理群聊：
+【权限指令】
+群主和管理员可以使用：
+- [admin:成员ID] / [unadmin:成员ID] - 设置/取消管理员（仅群主）
+- [mute:成员ID:时长] / [unmute:成员ID] - 禁言/解除禁言
+- [title:成员ID:头衔] - 设置头衔（仅群主）
+- [kick:成员ID] - 踢出群聊
+- [transfer:成员ID] - 转让群主（仅群主）
 
-1. 设置/取消管理员（仅群主可用）
-   - [admin:成员ID] - 设置某人为管理员
-   - [unadmin:成员ID] - 取消某人的管理员身份
-   例如："[admin:char_123] 欢迎新管理员！"
+权限指令可以和普通消息混合使用。
 
-2. 禁言/解除禁言（群主和管理员可用）
-   - [mute:成员ID:时长] - 禁言某人（时长单位：分钟，或填"永久"）
-   - [unmute:成员ID] - 解除某人的禁言
-   例如："[mute:char_456:30] 先冷静30分钟"、"[mute:char_789:永久]"、"[unmute:char_456]"
+【红包功能】
+如果群里有未抢完的红包，你们可以抢！
 
-3. 设置头衔（仅群主可用）
-   - [title:成员ID:头衔名称] - 给某人设置头衔
-   例如："[title:char_123:活跃之星] 恭喜获得新头衔！"
+抢红包指令：[grab_redpacket:你的成员ID:红包ID]
 
-4. 踢出群聊（群主和管理员可用）
-   - [kick:成员ID] - 将某人移出群聊
-   例如："[kick:char_999] 违反群规，请离开"
+使用方法：
+- 看到红包后，可以先说话表达反应（如"哇！红包！"）
+- 然后在消息中加上抢红包指令，必须包含红包ID
+- 也可以只说话不抢，看心情
 
-5. 转让群主（仅群主可用）
-   - [transfer:成员ID] - 将群主转让给某人
-   例如："[transfer:char_111] 以后这个群就交给你了"
+示例：
+{"member": "小明", "message": "哇！110块的红包！[grab_redpacket:char_001:rp_123456]"}
+{"member": "小红", "message": "我也要！[grab_redpacket:char_002:rp_123456]"}
+{"member": "小刚", "message": "手慢了..."}（没抢）
 
-【权限指令使用规则】
-- 权限指令可以和普通消息混合使用，例如："你太过分了 [mute:char_123:10] 先冷静一下"
-- 系统会自动检查你的权限，如果没有权限，指令会被忽略
-- 执行权限操作后，系统会自动生成灰色提示消息，你不需要再重复说明
-- 管理员不能对其他管理员或群主使用禁言/踢出等操作
-- 只有在确实需要管理群聊时才使用这些指令，不要滥用权限
-- 使用权限指令时要符合你的角色性格和当前情境
+重要：
+- 必须使用你自己的成员ID（在上面的成员列表中）
+- 必须包含红包ID，确保抢的是正确的红包
+- 已经抢过的不能再抢
+- 普通红包有人数限制，手慢无
+- 运气红包所有人都能抢，金额随机
+- 抢到多少钱是系统随机分配的，不要提前说"我抢了多少钱"`;
 
-【@功能使用说明】
-- 用户在输入框输入@符号时，会自动弹出群成员列表
-- 可以通过输入成员名字进行搜索过滤
-- 群主和管理员可以使用@全员功能
-- @的成员会在消息中高亮显示
-- 被@的成员更容易看到消息并回复`;
+    // 检查是否有未抢完的红包
+    let redPacketInfo = '';
+    if (groupData.redPackets && groupData.redPackets.length > 0) {
+        // 获取最新的未抢完的红包
+        const activeRedPackets = groupData.redPackets.filter(rp => 
+            rp.remainingCount > 0 && rp.remaining > 0
+        );
+        
+        if (activeRedPackets.length > 0) {
+            const latestRedPacket = activeRedPackets[activeRedPackets.length - 1];
+            const senderName = latestRedPacket.sender === 'user' ? '用户' : latestRedPacket.senderName;
+            const typeText = latestRedPacket.type === 'lucky' ? '拼手气红包' : '普通红包';
+            
+            redPacketInfo = `\n\n【🧧 当前有红包可以抢！】
+- 红包ID：${latestRedPacket.id}
+- 类型：${typeText}
+- 总金额：¥${latestRedPacket.amount.toFixed(2)}
+- 祝福语：${latestRedPacket.message}
+- 发送者：${senderName}
+- 剩余：${latestRedPacket.remainingCount}/${latestRedPacket.count}个
+
+已抢的人：
+${latestRedPacket.grabbed.length > 0 ? 
+    latestRedPacket.grabbed.map(g => `- ${g.memberName}: ¥${g.amount.toFixed(2)}`).join('\n') : 
+    '（还没有人抢）'}
+
+${latestRedPacket.type === 'lucky' && latestRedPacket.remainingCount === 0 && latestRedPacket.grabbed.length > 0 ? 
+    (() => {
+        const luckyKing = latestRedPacket.grabbed.reduce((max, current) => 
+            current.amount > max.amount ? current : max
+        );
+        return `\n红包已被抢完！手气王：${luckyKing.memberName} (¥${luckyKing.amount.toFixed(2)})\n`;
+    })() : ''}
+
+还没抢的成员：
+${allMembers.filter(m => !latestRedPacket.grabbed.some(g => g.memberId === m.id)).map(m => `- ${m.remark || m.name} (ID: ${m.id})`).join('\n')}
+
+${latestRedPacket.type === 'lucky' ? 
+    `这是拼手气红包，所有人都能抢，金额随机分配！总金额¥${latestRedPacket.amount.toFixed(2)}会随机分给${latestRedPacket.count}个人。` : 
+    `这是普通红包，只有${latestRedPacket.count}个人能抢到，先抢先得！`}
+
+⚠️ 重要提醒：
+- 看到总金额¥${latestRedPacket.amount.toFixed(2)}，不要说"才抢了几毛钱"这种话
+- 你们现在还不知道能抢到多少，金额是随机的
+- 想抢就在消息里加上 [grab_redpacket:你的ID:${latestRedPacket.id}]
+- 不想抢也可以只说话不抢`;
+        }
+    }
+    
+    prompt += redPacketInfo;
 
     // 添加表情包列表
     if (availableStickers && availableStickers.length > 0) {
@@ -747,33 +839,52 @@ ${historyText || '（暂无历史消息）'}
     prompt += `\n\n【成员与用户的私聊记忆】
 {longTermMemories}`;
     
-    // 最终格式提醒
-    prompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-【最后再次强调：输出格式】
+    // 最终格式提醒（根据是否启用 CoT 调整）
+    if (cotEnabled) {
+        // CoT 启用时，格式说明由 CoT 提示词提供
+        prompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【基本要求】
 
-你的回复必须是一个有效的 JSON 对象：
-{
-  "成员名字": ["消息1", "消息2"],
-  "另一个成员": ["消息1"]
-}
+- 生成 ${minTotalMessages}-${maxTotalMessages} 条消息（所有成员加起来）
+- 使用对话流格式，成员可以多次出现
+- 被@的成员必须在后续回复
+- 不是每个成员都必须发言
+${mutedMembers.length > 0 ? `- ⚠️ 被禁言的成员不能出现在输出中：${mutedMembers.map(m => m.remark || m.name).join('、')}
+` : ''}
+{cotPrompt}`;
+    } else {
+        // CoT 未启用时，使用原有的格式说明
+        prompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【最终输出格式 - 对话流】
 
-- 键是成员的名字（remark或name）
-- 值是该成员的消息数组
-- 只为可以发言的成员生成消息，被禁言的成员不要生成！
-- 所有可以发言的成员都必须包含在JSON中，每个人至少发${minMessages}条消息，最多${maxMessages}条
-- 如果有人@了某个成员，该成员必须在回复中体现出针对@他的人的回应
+[
+  {"member": "成员名", "message": "消息内容"},
+  {"member": "另一个成员", "message": "回应"},
+  {"member": "成员名", "message": "继续说"}
+]
+
+要求：
+- 数组格式，每个元素包含 member 和 message
+- 按对话流的时间顺序排列
+- 成员可以多次出现
+- 总共 ${minTotalMessages}-${maxTotalMessages} 条消息
+- 被@的成员必须在后续回复
 - 不要在JSON之外添加任何内容
-- 不要使用代码块标记
 
-现在，生成群成员的回复：`;
+${mutedMembers.length > 0 ? `⚠️ 被禁言的成员不能出现在对话流中：${mutedMembers.map(m => m.remark || m.name).join('、')}
+` : ''}
+{cotPrompt}
+
+现在，生成群聊对话流：`;
+    }
     
     return prompt;
 }
 
 // 构建群聊提示词（新版本，支持禁言）
 function buildGroupChatPromptV2(groupData, chatHistory, availableStickers, timeInfo) {
-    const minMessages = groupData.settings?.minMessagesPerMember || 1;
-    const maxMessages = groupData.settings?.maxMessagesPerMember || 3;
+    const minTotalMessages = groupData.settings?.minTotalMessages || 10;
+    const maxTotalMessages = groupData.settings?.maxTotalMessages || 30;
     
     // 检查成员是否被禁言
     const isGroupMemberMuted = (groupData, memberId) => {
@@ -927,6 +1038,33 @@ ${historyText || '（暂无历史消息）'}
 13. 等级高的成员可能在群里更有话语权或更活跃
 14. 有头衔的成员可以在对话中体现头衔特点
 
+【对话流生成 - 极其重要】
+⚠️ 这不是轮流发言，而是模拟真实的群聊对话流！
+
+核心要点：
+1. 按时间顺序生成消息，每条消息都是对前面消息的自然反应
+2. 成员可以多次出现，就像真实群聊中的接话
+3. 谁先说、谁后说，完全取决于：
+   - 谁被@了（被@的人会优先回应）
+   - 谁对话题感兴趣（相关的人会主动参与）
+   - 谁的性格更活跃（外向的人发言更频繁）
+   - 谁在回应谁（被回应的人可能继续说）
+
+真实群聊的对话流：
+- 小明："我今天吃了榨菜"
+- 小红："什么榨菜？"（对话题感兴趣）
+- 小明："就普通的榨菜啊"（被问到了，继续回答）
+- 小红："好吃吗"（继续追问）
+- 小刚："我也想吃"（插话）
+- 小明："还行吧"（回答小红的问题）
+- 小红："下次带我吃"（继续话题）
+
+不要这样（僵硬的轮流）：
+- 小明："消息1" "消息2" "消息3"
+- 小红："消息1" "消息2"
+- 小刚："消息1"
+- （然后就结束了，没有互动）
+
 【特殊消息类型】
 - 语音：[voice:说的话]
 - 图片：[image:图片描述]
@@ -994,6 +1132,9 @@ ${historyText || '（暂无历史消息）'}
     prompt += `\n\n【成员与用户的私聊记忆】
 {longTermMemories}`;
     
+    // 添加 CoT 思维链提示词占位符（后续会替换）
+    prompt += `\n\n{cotPrompt}`;
+    
     // 最终格式提醒
     prompt += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【最后再次强调：输出格式】
@@ -1028,3 +1169,281 @@ function formatMessageTime(timestamp) {
     const seconds = String(date.getSeconds()).padStart(2, '0');
     return `${month}月${day}日 ${hours}:${minutes}:${seconds}`;
 }
+
+/**
+ * 获取 CoT 模块提示词映射
+ */
+function getCoTModulePrompts() {
+    return {
+        situationAnalysis: `第一步：理解当前情况
+分析用户的消息内容、语气、情绪，判断话题性质和聊天氛围。注意用户是否@了某人，是否有特殊事件发生。`,
+        
+        memberAnalysis: `第二步：分析成员反应
+
+根据每个成员的性格、与用户的关系、对话题的兴趣，判断：
+- 谁会主动发言，谁会保持沉默
+- 谁的发言积极性高，谁比较被动
+- 这一轮总共要生成多少条消息（${minTotalMessages}-${maxTotalMessages}条）
+- 每个成员可能发1-10条不等，完全取决于性格、话题相关性和互动情况
+- 谁和谁之间可能产生互动和对话`,
+        
+        interactionPlanning: `第三步：规划对话流时间线
+
+模拟真实群聊的动态过程：成员看到消息的先后顺序、互相回应的逻辑。
+
+思考要点：
+- 谁会最先反应（被@的人、话题相关者、性格活跃者）
+- 后续成员看到前面的消息后会如何回应
+- 成员之间的对话如何自然展开（A说→B回应→A继续→C插话）
+- 对话何时自然结束
+- 总共要生成${minTotalMessages}-${maxTotalMessages}条消息
+
+规划出一条时间线，标注每个时间点是谁在说话、说什么、为什么这么说。
+成员可以多次出现，就像真实群聊中的接话和互动。
+
+⚠️ 被禁言的成员不能出现在时间线中！`,
+        
+        permissionJudgment: `第四步：权限操作判断
+
+如果需要使用管理权限（禁言、踢人、设置管理员等），判断：
+- 是否有必要使用权限
+- 谁有权限执行这个操作
+- 在哪条消息中自然地执行`,
+        
+        contentGeneration: `第五步：生成具体内容
+
+按照时间线，为每个时间点生成真实的消息内容。
+
+注意：
+- 每条消息要符合成员性格和当时的情境
+- 后面的消息可以引用、回应前面的消息
+- 使用@、引用、表情包等功能让互动更真实
+- 总共生成${minTotalMessages}-${maxTotalMessages}条消息
+- 成员可以多次出现，模拟真实的接话和互动
+- 权限指令要自然融入对话`,
+        
+        orderRandomization: `第六步：转换为对话流格式
+
+将时间线转换为JSON数组格式：
+[
+  {"member": "成员名", "message": "消息内容"},
+  {"member": "另一个成员", "message": "回应"},
+  {"member": "成员名", "message": "继续说"}
+]
+
+最终检查：
+✓ 总共${minTotalMessages}-${maxTotalMessages}条消息
+✓ 成员可以多次出现
+✓ 顺序符合对话流的时间逻辑
+✓ 有自然的互动和接话`
+    };
+}
+
+/**
+ * 构建 CoT 思维链提示词
+ */
+function buildCoTPrompt(cotSettings, groupData, allMembers) {
+    if (!cotSettings || !cotSettings.enabled) {
+        return '';
+    }
+
+    const modules = cotSettings.modules || {};
+
+    // 获取动态数据
+    const totalMembers = allMembers ? allMembers.length : 0;
+    const minTotalMessages = groupData?.settings?.minTotalMessages || 10;
+    const maxTotalMessages = groupData?.settings?.maxTotalMessages || 30;
+
+    // 检查成员是否被禁言
+    const isMemberMutedLocal = (groupData, memberId) => {
+        if (!groupData) return false;
+        const status = groupData.memberStatus?.[memberId];
+        if (!status || !status.isMuted) return false;
+
+        if (status.muteUntil) {
+            const now = new Date();
+            const until = new Date(status.muteUntil);
+            if (now >= until) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    // 分离可以发言和被禁言的成员
+    const activeMembersList = allMembers ? allMembers.filter(m => !isMemberMutedLocal(groupData, m.id)) : [];
+    const mutedMembers = allMembers ? allMembers.filter(m => isMemberMutedLocal(groupData, m.id)) : [];
+
+    // 构建成员列表文本
+    const memberListText = activeMembersList.map(m => {
+        const role = groupData?.owner === m.id ? '群主' : (groupData?.admins?.includes(m.id) ? '管理员' : '成员');
+        const desc = m.description || '暂无描述';
+        return `  - ${m.remark || m.name}（ID: ${m.id}，角色：${role}）
+    性格：${desc}`;
+    }).join('\n');
+
+    // 构建禁言成员列表
+    const mutedListText = mutedMembers.map(m => {
+        const status = groupData?.memberStatus?.[m.id];
+        let muteInfo = `  - ${m.remark || m.name}（ID: ${m.id}）`;
+        if (status?.muteUntil) {
+            const until = new Date(status.muteUntil);
+            const now = new Date();
+            const remainMinutes = Math.ceil((until - now) / 60000);
+            muteInfo += ` - 还剩${remainMinutes}分钟`;
+        } else {
+            muteInfo += ` - 永久禁言`;
+        }
+        return muteInfo;
+    }).join('\n');
+
+    let cotPrompt = '\n\n【群聊回复生成 - 思维链分析】\n\n';
+    cotPrompt += '在生成回复前，请先进行深入思考分析。\n\n';
+    
+    // 获取默认提示词
+    const defaultPrompts = typeof getCoTModulePrompts === 'function' ? getCoTModulePrompts() : {};
+
+    // 第一步：情况分析
+    if (modules.situationAnalysis && modules.situationAnalysis.enabled) {
+        const defaultPrompt = defaultPrompts.situationAnalysis || `第一步：理解当前情况
+分析用户的消息内容、语气、情绪，判断话题性质和聊天氛围。注意用户是否@了某人，是否有特殊事件发生。`;
+        const prompt = modules.situationAnalysis.customPrompt || defaultPrompt;
+        cotPrompt += prompt + '\n\n';
+    }
+
+    // 第二步：成员反应分析
+    if (modules.memberAnalysis && modules.memberAnalysis.enabled) {
+        let defaultPrompt = defaultPrompts.memberAnalysis || `第二步：分析成员反应
+
+根据每个成员的性格、与用户的关系、对话题的兴趣，判断：
+- 谁会主动发言，谁会保持沉默
+- 谁的发言积极性高，谁比较被动
+- 每个人可能发${minMessages}-${maxMessages}条消息，具体几条取决于性格和话题
+- 谁和谁之间可能产生互动`;
+        
+        // 添加动态成员信息
+        const memberInfo = `
+
+当前群聊共有 ${totalMembers} 名成员，其中 ${activeMembersList.length} 人可以发言${mutedMembers.length > 0 ? `，${mutedMembers.length} 人被禁言` : ''}。
+
+【可以发言的成员】
+${memberListText}
+
+${mutedMembers.length > 0 ? `【被禁言的成员（不能发言）】
+${mutedListText}
+
+⚠️ 被禁言的成员绝对不能出现在最终的JSON输出中！
+` : ''}`;
+        
+        const prompt = modules.memberAnalysis.customPrompt || (defaultPrompt + memberInfo);
+        cotPrompt += prompt + '\n\n';
+    }
+
+    // 第三步：虚拟时间线规划
+    if (modules.interactionPlanning && modules.interactionPlanning.enabled) {
+        let defaultPrompt = defaultPrompts.interactionPlanning || `第三步：规划虚拟时间线
+
+模拟真实群聊的动态过程：成员看到消息的先后顺序、互相回应的逻辑。
+
+思考要点：
+- 谁会最先反应（被@的人、话题相关者、性格活跃者）
+- 后续成员看到前面的消息后会如何回应
+- 成员之间的对话如何自然展开
+- 对话何时自然结束
+
+规划出一条时间线，标注每个时间点是谁在说话、说什么、为什么这么说。
+
+⚠️ 被禁言的成员不能出现在时间线中！`;
+        const prompt = modules.interactionPlanning.customPrompt || defaultPrompt;
+        cotPrompt += prompt + '\n\n';
+    }
+
+    // 第四步：权限操作判断
+    if (modules.permissionJudgment && modules.permissionJudgment.enabled) {
+        const defaultPrompt = defaultPrompts.permissionJudgment || `第四步：权限操作判断
+
+如果需要使用管理权限（禁言、踢人、设置管理员等），判断：
+- 是否有必要使用权限
+- 谁有权限执行这个操作
+- 在哪条消息中自然地执行`;
+        const prompt = modules.permissionJudgment.customPrompt || defaultPrompt;
+        cotPrompt += prompt + '\n\n';
+    }
+
+    // 第五步：内容生成
+    if (modules.contentGeneration && modules.contentGeneration.enabled) {
+        let defaultPrompt = defaultPrompts.contentGeneration || `第五步：生成具体内容
+
+按照时间线，为每个时间点生成真实的消息内容。
+
+注意：
+- 每条消息要符合成员性格和当时的情境
+- 后面的消息可以引用、回应前面的消息
+- 使用@、引用、表情包等功能让互动更真实
+- 每个成员至少${minMessages}条，最多${maxMessages}条
+- 权限指令要自然融入对话`;
+        const prompt = modules.contentGeneration.customPrompt || defaultPrompt;
+        cotPrompt += prompt + '\n\n';
+    }
+
+    // 第六步：最终顺序确认
+    if (modules.orderRandomization && modules.orderRandomization.enabled) {
+        let defaultPrompt = defaultPrompts.orderRandomization || `第六步：最终确认
+
+将时间线转换为JSON格式：
+- JSON的键顺序 = 成员首次发言的时间顺序
+- 每个成员的消息数组 = 该成员在时间线中的所有消息（按时间顺序）
+
+最终检查：
+✓ 可以发言的成员
+✓ 每人${minMessages}-${maxMessages}条消息
+✓ 顺序是否符合时间线逻辑
+✓ 是否避免了固定模式`;
+        
+        // 添加动态检查信息
+        const checkInfo = `
+
+${mutedMembers.length > 0 ? `⚠️ 被禁言的成员：${mutedMembers.map(m => m.remark || m.name).join('、')} - 不能出现在JSON中！
+` : ''}✓ 可以发言的成员（${activeMembersList.length}人）：${activeMembersList.map(m => m.remark || m.name).join('、')}`;
+        
+        const prompt = modules.orderRandomization.customPrompt || (defaultPrompt + checkInfo);
+        cotPrompt += prompt + '\n\n';
+    }
+
+    cotPrompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【⚠️ 重要：必须严格遵守的输出格式 ⚠️】
+
+你的回复必须包含两个部分，使用XML标签包裹：
+
+第一部分 - 思考过程（必须）：
+<thinking>
+在这里写下你的完整思考过程，包括：
+- 分析当前情况和每个成员的状态
+- 规划对话流时间线（谁先说、谁回应、谁插话）
+- 说明为什么这样安排对话流
+- 被禁言的成员不能出现在时间线中
+- 总共要生成${minTotalMessages}-${maxTotalMessages}条消息
+</thinking>
+
+第二部分 - JSON回复（必须）：
+<response>
+[
+  {"member": "成员名", "message": "消息内容"},
+  {"member": "另一个成员", "message": "回应"},
+  {"member": "成员名", "message": "继续说"}
+]
+</response>
+
+⚠️ 注意：
+- 必须同时包含 <thinking> 和 <response> 两个标签
+- JSON 必须放在 <response> 标签内
+- 不要在标签外添加任何其他内容
+- 使用对话流格式，成员可以多次出现
+- 总共${minTotalMessages}-${maxTotalMessages}条消息
+- 被禁言的成员不能出现在JSON中
+`;
+
+    return cotPrompt;
+}
+
